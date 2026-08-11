@@ -45,7 +45,7 @@ export const escape = (v: unknown): string =>
  * #8 elevates #7's "keep this auditable" advice to contract: a second call site
  * is a hole in the provenance stamp, because raw HTML carries no `data-ev`. The
  * one permitted call site is the Graphviz SVG in `sections.ts`, and
- * `test/raw-lint.test.ts` fails the build if another appears. Syntax
+ * `test/render/raw-lint.test.ts` fails the build if another appears. Syntax
  * highlighting deliberately does NOT use this - it goes through `codeToTokens`
  * and is re-emitted through this same escaping template.
  */

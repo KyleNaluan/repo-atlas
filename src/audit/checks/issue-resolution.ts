@@ -25,8 +25,16 @@ import {
 import type { Evidence, IssueEvidence } from "../../schema/types.js";
 import type { HarvestedIssue } from "../../harvest/types.js";
 import { resolveComment, resolveIssue } from "../../harvest/cache.js";
+import { nodeEvidence } from "./evidence.js";
 
-/** Every issue citation in the graph, with the element that carries it. */
+/**
+ * Every issue citation in the graph, with the element that carries it.
+ *
+ * A node's evidence is `nodeEvidence(n)` - the one traversal that folds in
+ * implemented_by, code_excerpt and steps (evidence.ts, the I1 ruling) - rather
+ * than a second hand-walk that could drift from it. A decision whose resolution
+ * comment is cited via implemented_by is thereby checked here too.
+ */
 export const issueCitations = (
   atlas: AuditContext["atlas"],
 ): { owner: string; e: IssueEvidence }[] => {
@@ -36,12 +44,7 @@ export const issueCitations = (
   };
   add("synopsis", atlas.synopsis.evidence);
   add("shape", atlas.shape.evidence);
-  for (const n of atlas.nodes) {
-    add(n.id, n.evidence);
-    if (n.type === "decision") add(n.id, n.implemented_by);
-    if (n.type === "mechanism" && n.code_excerpt) add(n.id, [n.code_excerpt.evidence]);
-    if (n.type === "flow") for (const s of n.steps) if (s.evidence) add(n.id, [s.evidence]);
-  }
+  for (const n of atlas.nodes) add(n.id, nodeEvidence(n));
   return out;
 };
 

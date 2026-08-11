@@ -144,6 +144,41 @@ describe("pass C resolves issue citations, cache first", () => {
     expect(result.count).toBe(24);
   });
 
+  it("finds an issue citation carried in a decision's implemented_by", async () => {
+    // issueCitations walks nodeEvidence, the one definition of a node's evidence,
+    // so a decision whose resolution comment is cited via implemented_by is
+    // checked by pass C exactly like one cited in base evidence.
+    const decision: AtlasNode = {
+      type: "decision",
+      id: "d-issue-implemented",
+      title: "t",
+      question: "q",
+      decision: "d",
+      why: "w",
+      rejected: [],
+      status: "decided_and_built",
+      implemented_by: [{ kind: "issue", number: 42, comment_id: 7 }],
+      soundbite: "s",
+      evidence: [],
+      confidence: "attested",
+      interview_value: 5,
+    };
+    const withDecision = {
+      ...ctx,
+      atlas: {
+        ...atlas,
+        nodes: [decision],
+        synopsis: { ...atlas.synopsis, evidence: [] },
+        shape: { ...atlas.shape, evidence: [] },
+      },
+    } as AuditContext;
+    const cited = issueCitations(withDecision.atlas);
+    expect(cited).toEqual([{ owner: "d-issue-implemented", e: { kind: "issue", number: 42, comment_id: 7 } }]);
+    const { result } = await resolveIssueCitations(withDecision, { cached: [cachedIssue(42, [7])] });
+    expect(result.outcome).toBe("passed");
+    expect(result.count).toBe(1);
+  });
+
   it("is not applicable when the graph cites no issues", async () => {
     const noIssues = {
       ...ctx,
@@ -315,6 +350,52 @@ describe("pass D judges each node alone", () => {
     expect(result.count).toBe(0);
     expect(result.reason).toMatch(/named but not weighed/);
     expect(result.reason).toContain(withEvidence.id);
+  });
+
+  it("weighs a decision's implemented_by, not just its base evidence", async () => {
+    // nodeEvidence is the one definition of a node's evidence: a decision whose
+    // provenance lives entirely in implemented_by is evidenced by that, and its
+    // prose must be judged against it - dropping it would read the support as an
+    // overclaim, the same evidence-fidelity gap as the line-range and issue fixes.
+    const decision: AtlasNode = {
+      type: "decision",
+      id: "d-only-implemented",
+      title: "t",
+      question: "q",
+      decision: "d",
+      why: "w",
+      rejected: [],
+      status: "decided_and_built",
+      implemented_by: [{ kind: "file", path: "Foo.java", line_start: 1, line_end: 3, sha: "x" }],
+      soundbite: "s",
+      evidence: [],
+      confidence: "attested",
+      interview_value: 5,
+    };
+    // With the implemented_by file resolving, the node is judged and its evidence
+    // reaches the model - not caught by the no-resolvable-evidence guard.
+    let seen = -1;
+    const judge: Judge = async (request) => {
+      seen = request.evidence.length;
+      return { supported: true, note: "n" };
+    };
+    const judged = await proseSupport([decision], { judge, ...resolveText });
+    expect(seen).toBe(1);
+    expect(judged.count).toBe(1);
+    expect(judged.reason).toBeUndefined();
+
+    // With nothing resolving, the same node is named but not weighed - it is NOT
+    // treated as "genuinely no evidence", because implemented_by is evidence.
+    let calls = 0;
+    const counting: Judge = async () => {
+      calls += 1;
+      return { supported: true, note: "n" };
+    };
+    const withheld = await proseSupport([decision], { judge: counting, ...resolveNothing });
+    expect(calls).toBe(0);
+    expect(withheld.count).toBe(0);
+    expect(withheld.reason).toMatch(/named but not weighed/);
+    expect(withheld.reason).toContain("d-only-implemented");
   });
 
   it("still judges a node that genuinely cites no evidence", async () => {

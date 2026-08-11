@@ -27,6 +27,7 @@
  */
 import { spec } from "../register.js";
 import { failed, notRun, passed, type CheckResult } from "../types.js";
+import { nodeEvidence } from "./evidence.js";
 import type { AtlasNode, Evidence } from "../../schema/types.js";
 
 export interface JudgeRequest {
@@ -129,14 +130,27 @@ const runJudgements = async (
   // would hand it to the run's boundary, which quarantines a throw as a
   // precondition failure - and pass D must never fail an artifact. So a resolve
   // failure is caught here and reported not_run, by name, with the git cause.
-  let judgements: { node: AtlasNode; evidence: { citation: string; text: string }[] }[];
+  let judgements: {
+    node: AtlasNode;
+    cited: number;
+    evidence: { citation: string; text: string }[];
+  }[];
   try {
-    judgements = nodes.map((node) => ({
-      node,
-      evidence: node.evidence
-        .map((e) => ({ citation: citationOf(e), text: options.resolve(e) }))
-        .filter((e): e is { citation: string; text: string } => e.text !== undefined),
-    }));
+    judgements = nodes.map((node) => {
+      // nodeEvidence is the one definition of a node's evidence (evidence.ts):
+      // node.evidence plus the type-specific slots (a decision's implemented_by,
+      // a mechanism's code_excerpt, a flow's steps). Judging against node.evidence
+      // alone would weigh a decision's prose against a strict subset of its
+      // provenance and read implemented_by support as an overclaim.
+      const cited = nodeEvidence(node);
+      return {
+        node,
+        cited: cited.length,
+        evidence: cited
+          .map((e) => ({ citation: citationOf(e), text: options.resolve(e) }))
+          .filter((e): e is { citation: string; text: string } => e.text !== undefined),
+      };
+    });
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause);
     return notRun(
@@ -153,12 +167,8 @@ const runJudgements = async (
   // witnessed at all - either way a spurious warning shown to a human as real. A
   // node with genuinely no evidence at all is a different case and is still
   // judged, because "this node cites nothing" is itself a thing the model weighs.
-  const unresolved = judgements.filter(
-    (j) => j.node.evidence.length > 0 && j.evidence.length === 0,
-  );
-  const toJudge = judgements.filter(
-    (j) => j.node.evidence.length === 0 || j.evidence.length > 0,
-  );
+  const unresolved = judgements.filter((j) => j.cited > 0 && j.evidence.length === 0);
+  const toJudge = judgements.filter((j) => j.cited === 0 || j.evidence.length > 0);
 
   const judge = options.judge;
   const findings: string[] = [];

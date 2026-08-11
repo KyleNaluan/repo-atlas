@@ -122,8 +122,35 @@ const toDivergence = (candidate: Candidate, claim: ExistenceClaim, where: string
   };
 };
 
+/**
+ * A decision the gate FOUND is a decision the artifact may say was built.
+ *
+ * The write stage never sets this, and must not: a resolution comment states what
+ * was decided, never that it was built, and treating the record as evidence of
+ * implementation is the exact failure #7 point 7 wrote a bidirectional gate to
+ * prevent. So the promotion happens here, on the strength of the gate's own
+ * reading of the tree, and `implemented_by` carries the paths the gate actually
+ * located rather than anything a model proposed. Verification recorded, not
+ * assertion trusted.
+ *
+ * A decision with no confirmed present-claim is left alone. `decided` is the
+ * honest state for a decision nothing in the tree was asked to confirm, and
+ * promoting one on the strength of a claim nobody checked would be the thing this
+ * function exists to avoid.
+ */
+const promoteIfBuilt = (node: AtlasNode, confirmedAt: string[], sha: string): AtlasNode => {
+  if (node.type !== "decision" || confirmedAt.length === 0) return node;
+  const seen = new Set<string>();
+  const implemented_by: Evidence[] = confirmedAt
+    .filter((path) => !seen.has(path) && seen.add(path))
+    .map((path) => ({ kind: "file" as const, path, sha }));
+  return { ...node, status: "decided_and_built", implemented_by };
+};
+
 export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCandidate => {
   const claims = candidate.claims ?? [];
+  /** Where a confirmed present-claim was found, for the promotion below. */
+  const confirmedAt: string[] = [];
   if (claims.length === 0) {
     return {
       probe_id: candidate.probe_id,
@@ -161,6 +188,11 @@ export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCan
       };
     }
     const agrees = claim.expect === "present" ? found : !found;
+    if (agrees && claim.expect === "present") {
+      // Remembered so a confirmed decision can record WHERE the gate found it.
+      // Discarding these would throw away a verification the gate performed.
+      confirmedAt.push(...where);
+    }
     if (!agrees) {
       const divergence = toDivergence(candidate, claim, where);
       const evidence = divergence.evidence.map((e) =>
@@ -177,9 +209,12 @@ export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCan
 
   return {
     probe_id: candidate.probe_id,
-    node: candidate.node,
+    node: promoteIfBuilt(candidate.node, confirmedAt, ctx.sha),
     verdict: "confirmed",
-    finding: "the tree agrees with the record",
+    finding:
+      confirmedAt.length === 0
+        ? "the tree agrees with the record"
+        : `the tree agrees with the record, and carries it at ${confirmedAt.slice(0, 3).join(", ")}`,
   };
 };
 

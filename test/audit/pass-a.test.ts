@@ -381,7 +381,7 @@ describe("P1 cannot pass on an incomplete corpus", () => {
     const result = byId({ ...clean, atlas, privateClone: corpusRoot }).get("P1");
     expect(result?.outcome).not.toBe("passed");
     expect(result?.outcome).toBe("not_applicable");
-    expect(result?.reason).toMatch(/could not be read in full/);
+    expect(result?.reason).toMatch(/could not be folded into the corpus/);
     expect(result?.reason).toContain("too-big.txt");
   });
 
@@ -406,8 +406,57 @@ describe("P1 cannot pass on an incomplete corpus", () => {
     const result = byId(ctx).get("P1");
     expect(result?.outcome).not.toBe("passed");
     expect(result?.outcome).toBe("not_applicable");
-    expect(result?.reason).toMatch(/could not be read in full/);
+    expect(result?.reason).toMatch(/could not be folded into the corpus/);
     expect(result?.reason).toContain("broken-link");
+  });
+
+  it("does not follow a directory symlink cycle, and does not skip a link covered inside the root", () => {
+    // A private clone is an arbitrary git repo and can contain a directory
+    // symlink pointing at an ancestor (link -> .). statSync follows it, so a
+    // stat-driven walk recurses forever and dies with a stack overflow: a crash,
+    // not a skip. The walk must terminate. A cycle-to-self points inside the
+    // root, so it loses no coverage and must NOT force a skip on its own: a
+    // benign internal link can still leave P1 passable when there is no leak.
+    const corpusRoot = mkdtempSync(join(tmpdir(), "repo-atlas-private-cycle-"));
+    writeFileSync(join(corpusRoot, "readable.txt"), "some harmless words in here\n", "utf8");
+    symlinkSync(corpusRoot, join(corpusRoot, "self"));
+
+    const atlas = structuredClone(clean.atlas);
+    atlas.record.private_source = {
+      declared: true,
+      repo: "KyleNaluan/swe-prep-content",
+      readable_at_harvest: true,
+    };
+    const ctx: AuditContext = { ...clean, atlas, privateClone: corpusRoot };
+    expect(() => audit(ctx)).not.toThrow();
+    const result = byId(ctx).get("P1");
+    expect(result?.outcome).toBe("passed");
+  });
+
+  it("records a symlink leaving the corpus root as a skip", () => {
+    // A symlink whose target is outside the root is uncovered private content:
+    // the walk never reaches it, so following it is the only way it would be
+    // shingled. Not following it must therefore be a skip, which per the
+    // incomplete-corpus rule makes a passing P1 unreachable.
+    const corpusRoot = mkdtempSync(join(tmpdir(), "repo-atlas-private-outlink-"));
+    const outsideRoot = mkdtempSync(join(tmpdir(), "repo-atlas-private-outside-"));
+    writeFileSync(join(corpusRoot, "readable.txt"), "some harmless words in here\n", "utf8");
+    writeFileSync(join(outsideRoot, "leak.txt"), "content that lives outside the corpus\n", "utf8");
+    symlinkSync(outsideRoot, join(corpusRoot, "escape"));
+
+    const atlas = structuredClone(clean.atlas);
+    atlas.record.private_source = {
+      declared: true,
+      repo: "KyleNaluan/swe-prep-content",
+      readable_at_harvest: true,
+    };
+    const ctx: AuditContext = { ...clean, atlas, privateClone: corpusRoot };
+    expect(() => audit(ctx)).not.toThrow();
+    const result = byId(ctx).get("P1");
+    expect(result?.outcome).not.toBe("passed");
+    expect(result?.outcome).toBe("not_applicable");
+    expect(result?.reason).toMatch(/could not be folded into the corpus/);
+    expect(result?.reason).toContain("escape");
   });
 });
 

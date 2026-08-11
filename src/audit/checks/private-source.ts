@@ -18,8 +18,8 @@
  * clone present, it must not inherit a "passed" reputation earned by a run that
  * never had it.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { type Dirent, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, join, relative } from "node:path";
 import { spec } from "../register.js";
 import { failed, notApplicable, passed, type AuditContext, type CheckResult } from "../types.js";
 
@@ -53,14 +53,26 @@ export const shingles = (words: string[], k = SHINGLE_K): Set<string> => {
 };
 
 /**
- * A path the walk could not fold into the corpus even though it wanted to: too
- * large for the cap, unreadable, an unlistable directory, or a stat that threw
- * (a broken symlink, a vanished entry). Tracked rather than dropped, because a
- * corpus missing a file is a partial corpus, and a partial corpus can never
- * clear a truth gate - a leaked passage living in a skipped file would never be
- * shingled, and passing on it would be absence communicated by silence. A throw
- * out of the walk is the same hollow-coverage failure arriving as a crash, so
- * every filesystem call the walk makes records a skip instead of propagating.
+ * A path the walk could not fold into the corpus even though it should have: too
+ * large for the cap, unreadable, an unlistable directory, a stat that threw (a
+ * vanished entry), or a symlink that leaves the corpus root (or resolves
+ * nowhere). Tracked rather than dropped, because a corpus missing content is a
+ * partial corpus, and a partial corpus can never clear a truth gate - a leaked
+ * passage living in a skipped file would never be shingled, and passing on it
+ * would be absence communicated by silence. A throw out of the walk is the same
+ * hollow-coverage failure arriving as a crash, so every filesystem call the walk
+ * makes records a skip instead of propagating.
+ *
+ * Recursion is decided by an entry's OWN type (readdir withFileTypes), never by
+ * a stat that follows symlinks: a private clone is an arbitrary git repo and can
+ * contain a directory symlink pointing at an ancestor (`link -> .`), which
+ * statSync would report as a real directory and walk() would descend forever
+ * until the process died with a stack overflow - a crash, not a skip. Symlinks
+ * are therefore never followed, and a visited-realpath set is a backstop so no
+ * arrangement of links can revisit a directory. Not following a symlink is only
+ * lossless when its target is already inside the root (the real path is walked
+ * anyway); a symlink whose target leaves the root, or will not resolve, is
+ * uncovered private content and is recorded as a skip.
  *
  * SKIP_DIRS and binaries are not skips in this sense: they are deliberate
  * exclusions of things that cannot carry shingleable prose, not text the walk
@@ -73,26 +85,62 @@ const readCorpus = (
   const skipped: string[] = [];
   let files = 0;
   let bytes = 0;
+  let rootReal: string;
+  try {
+    rootReal = realpathSync(root);
+  } catch {
+    rootReal = root;
+  }
+  const insideRoot = (real: string): boolean => {
+    const rel = relative(rootReal, real);
+    return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+  };
+  const visited = new Set<string>();
   const walk = (dir: string) => {
-    let entries: string[];
+    let dirReal: string;
     try {
-      entries = readdirSync(dir);
+      dirReal = realpathSync(dir);
+    } catch {
+      skipped.push(dir);
+      return;
+    }
+    if (visited.has(dirReal)) return;
+    visited.add(dirReal);
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
     } catch {
       skipped.push(dir);
       return;
     }
     for (const entry of entries) {
-      if (SKIP_DIRS.has(entry)) continue;
-      const path = join(dir, entry);
+      if (SKIP_DIRS.has(entry.name)) continue;
+      const path = join(dir, entry.name);
+      if (entry.isSymbolicLink()) {
+        // Never followed. Lossless only if the target is inside the root, where
+        // the real path is walked anyway; otherwise it is uncovered content.
+        let target: string;
+        try {
+          target = realpathSync(path);
+        } catch {
+          skipped.push(path);
+          continue;
+        }
+        if (!insideRoot(target)) skipped.push(path);
+        continue;
+      }
+      if (entry.isDirectory()) {
+        walk(path);
+        continue;
+      }
+      // Sockets, fifos and devices carry no shingleable prose and reading one
+      // could block; they are excluded like binaries, not skips.
+      if (!entry.isFile()) continue;
       let stat: ReturnType<typeof statSync>;
       try {
         stat = statSync(path);
       } catch {
         skipped.push(path);
-        continue;
-      }
-      if (stat.isDirectory()) {
-        walk(path);
         continue;
       }
       if (bytes + stat.size > MAX_BYTES) {
@@ -171,7 +219,7 @@ export const privateSourceCheck = (ctx: AuditContext): CheckResult => {
     const more = corpus.skipped.length > 5 ? `, and ${corpus.skipped.length - 5} more` : "";
     return notApplicable(
       spec("P1"),
-      `${corpus.skipped.length} private file(s) could not be read in full (size cap or unreadable), so the corpus is incomplete and no leak check can be trusted: ${shown}${more}`,
+      `${corpus.skipped.length} private path(s) could not be folded into the corpus (size cap, unreadable, or a symlink leaving the corpus root), so the corpus is incomplete and no leak check can be trusted: ${shown}${more}`,
     );
   }
 

@@ -447,6 +447,21 @@ describe("dependency-asymmetry", () => {
     expect(await candidatesFrom("dependency-asymmetry", ctx)).toEqual([]);
   }, 60_000);
 
+  it("compares repo-root classes as siblings of one another", async () => {
+    // A root-level file has no slash; a bare slice would drop the last character
+    // and strand each class in its own bogus directory, so they would never be
+    // compared. Guarding the no-slash case puts them back in the shared root.
+    const ctx = contextFor({
+      "One.java": "class One { private Runner runner; }\n",
+      "Two.java": "class Two { private Runner runner; }\n",
+      "Three.java": "class Three { private Runner runner; }\n",
+      "Four.java": "class Four { private String key; }\n",
+    });
+    const found = await candidatesFrom("dependency-asymmetry", ctx);
+    expect(found).toHaveLength(1);
+    expect(found[0]!.node.title).toContain("Four holds no Runner");
+  }, 60_000);
+
   it("does not count a nested helper as a directory sibling", async () => {
     // Outer.Helper is not a peer of the top-level classes in its directory.
     // Counting it as one would make it the odd sibling ("Helper holds no Runner,
@@ -534,6 +549,36 @@ describe("ci-policy-guards", () => {
       ".github/workflows/ci.yml": "jobs:\n  a:\n    steps:\n      - run: npm test\n",
     });
     expect(await candidatesFrom("ci-policy-guards", ctx)).toEqual([]);
+  }, 60_000);
+
+  it("does not mint a step from a comment carrying the policy vocabulary", async () => {
+    // The probe asserts a guarding step exists, so a YAML comment that happens to
+    // read like policy - even beside a real, unrelated step - must yield nothing.
+    const ctx = contextFor({
+      ".github/workflows/ci.yml":
+        "jobs:\n  a:\n    steps:\n      # Guard: never commit a private key\n      - run: npm test\n",
+    });
+    expect(await candidatesFrom("ci-policy-guards", ctx)).toEqual([]);
+  }, 60_000);
+
+  it("ignores a policy-named step that only runs the tests", async () => {
+    // The name reads as policy, but the step is a test run; a step is judged by
+    // what it does, so this is not a guarding step.
+    const ctx = contextFor({
+      ".github/workflows/ci.yml":
+        "jobs:\n  a:\n    steps:\n      - name: Guard against a leaked secret\n        run: npm test\n",
+    });
+    expect(await candidatesFrom("ci-policy-guards", ctx)).toEqual([]);
+  }, 60_000);
+
+  it("emits one candidate when a step's name and run both read as policy", async () => {
+    // Per-line matching double-emitted such a step; one step is one candidate.
+    const ctx = contextFor({
+      ".github/workflows/ci.yml":
+        "jobs:\n  a:\n    steps:\n      - name: Guard a leaked secret\n        run: ./verify-no-secret-commit.sh\n",
+    });
+    const found = await candidatesFrom("ci-policy-guards", ctx);
+    expect(found).toHaveLength(1);
   }, 60_000);
 
   it("keeps two jobs' identically-named policy steps distinct by construction", async () => {

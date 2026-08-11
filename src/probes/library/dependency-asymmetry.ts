@@ -15,7 +15,13 @@ import { pathSlug, slug } from "../id.js";
 import { enclosingTypeNames, endLineOf, findAll, lineOf, nameOf, parseJava } from "../java.js";
 
 /** Types in the same directory are the sibling set worth comparing. */
-const directory = (path: string): string => path.slice(0, path.lastIndexOf("/"));
+const directory = (path: string): string => {
+  // A repo-root file has no slash; `lastIndexOf` returns -1 and a bare slice
+  // would drop the final character, stranding each root class in its own bogus
+  // one-member directory instead of the shared root.
+  const slash = path.lastIndexOf("/");
+  return slash === -1 ? "" : path.slice(0, slash);
+};
 
 export const dependencyAsymmetry: Probe = {
   id: "dependency-asymmetry",

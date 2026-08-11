@@ -13,6 +13,7 @@ On a repository with no decision record, the artifact says so - it never reconst
 This build ships the `atlas.json` contract, the harvest stage, the render stage, and the audit's deterministic passes with its stamp; the remaining extraction stages and the model pass land stage by stage.
 
 ```
+npx repo-atlas harvest --clone ../subject -o harvest.json
 npx repo-atlas render atlas.json -o overview.html
 npx repo-atlas audit overview.html --atlas atlas.json --clone ../subject
 ```

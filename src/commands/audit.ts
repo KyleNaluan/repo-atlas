@@ -1,11 +1,12 @@
 /**
  * `repo-atlas audit <artifact.html> --atlas <atlas.json> --clone <path>`
  *
- * Pass A only in this build. The stamping mechanic, the browser pass and the
- * model pass land in later stages, and until they do the audit reports every
- * check it did not run BY NAME rather than omitting it - an audit that quietly
- * reports on nine of twenty checks is the exact failure this stage exists to
- * prevent.
+ * The deterministic passes in this build: pass A (static gates) plus pass B, the
+ * browser gates loaded over a live DOM with the network disabled. The stamping
+ * mechanic and the model pass land in later stages, and until they do the audit
+ * reports every check it did not run BY NAME rather than omitting it - an audit
+ * that quietly reports on some of the twenty checks is the exact failure this
+ * stage exists to prevent.
  */
 import { resolve } from "node:path";
 import { readFileSync } from "node:fs";
@@ -16,7 +17,8 @@ import type { AuditContext, CheckResult } from "../audit/types.js";
 
 const USAGE = `usage: repo-atlas audit <artifact.html> --atlas <atlas.json> --clone <path> [--private-clone <path>]
 
-Runs the deterministic static gates (pass A) over a rendered artifact.
+Runs the deterministic gates over a rendered artifact: pass A (static) and, by
+default, pass B (browser). Pass --no-browser to run pass A alone.
 
 options:
   --atlas <path>           the atlas.json the artifact was rendered from (required)

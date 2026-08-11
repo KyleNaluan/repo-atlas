@@ -10,7 +10,7 @@ Anything that could not be traced is cut, not hedged.
 On a repository with no decision record, the artifact says so - it never reconstructs a decision trail from commit archaeology.
 
 **Status: under construction.** The complete v1 design is closed on this tracker: issues [#1](https://github.com/KyleNaluan/repo-atlas/issues/1)-[#10](https://github.com/KyleNaluan/repo-atlas/issues/10), each with a binding `## Resolution:` comment recording the decision, the why, and the rejected alternatives.
-This build ships the `atlas.json` contract, the render stage, and the audit's deterministic passes; the extraction stages and the model pass land stage by stage.
+This build ships the `atlas.json` contract, the render stage, and the audit's deterministic passes with its stamp; the extraction stages and the model pass land stage by stage.
 
 ```
 npx repo-atlas render atlas.json -o overview.html
@@ -62,6 +62,18 @@ Screenshots are kept as artifacts *of* the audit, never as inputs *to* a check: 
 The audit asserts its preconditions before any check runs - clone present, HEAD equal to the pinned SHA, worktree clean, and a browser available for pass B - and a missing precondition is its own failure, never a pass and never a silent skip.
 
 No check ships without a mutant fixture proving it fails.
+
+**The audit stamps its own result into a slot it alone may write.**
+It hashes the page with that slot blanked, runs its passes, rewrites only the slot, and asserts the hash is unchanged - so the statement's claim that *this page, excluding this box, hashes to X* is one any reader can check by blanking the box and hashing the file.
+
+There are four outcome states, and every one of them names what was **not** checked.
+A statement that lists only successes reads as a marketing claim; naming the boundary is what makes the verified part credible.
+`passed with warnings` is a real ship state and enumerates every warning in full - a bare count would be unauditable.
+
+**A failed artifact does not ship.**
+It goes to `<out>.failed.html`, a name that cannot be mistaken for the deliverable, and the command exits non-zero.
+The banner on that copy is a second line of defence, not the mechanism: a banner is the first thing lost when a reader screenshots a section or shares the file.
+`--allow-failed` emits it anyway for local development; CI never sets it.
 
 ## The contract
 

@@ -14,7 +14,7 @@
  * pass-b-boundary.test.ts.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,13 +29,27 @@ import { runAudit, type AuditOutcome } from "../../src/audit/run.js";
 import { REGISTER } from "../../src/audit/register.js";
 import { passed, notRun } from "../../src/audit/types.js";
 
-const atlasFixture = fileURLToPath(
-  new URL("../fixtures/swe-prep.atlas.json", import.meta.url),
-);
-
 const dir = mkdtempSync(join(tmpdir(), "repo-atlas-cli-report-"));
+
+// The audit mirrors its result into the atlas it was given (#8, section 7.1), so
+// the test works on a COPY. Pointing it at the committed fixture would have the
+// suite rewrite its own input, which it silently did until this was caught.
+const atlasFixture = join(dir, "atlas.json");
+copyFileSync(
+  fileURLToPath(new URL("../fixtures/swe-prep.atlas.json", import.meta.url)),
+  atlasFixture,
+);
 const artifactPath = join(dir, "atlas.html");
-writeFileSync(artifactPath, "<!doctype html><html></html>", "utf8");
+// A real artifact always carries the two reserved audit slots; the stub has to
+// as well, or it exercises a shape the renderer never emits.
+writeFileSync(
+  artifactPath,
+  '<!doctype html><html><body>' +
+    '<span class="audit-badge" data-atlas-audit="badge">Audit: not run</span>' +
+    '<div id="audit-statement" data-atlas-audit="statement"><p>Audit: not run.</p></div>' +
+    "</body></html>",
+  "utf8",
+);
 
 const argv = [artifactPath, "--atlas", atlasFixture, "--clone", "."];
 

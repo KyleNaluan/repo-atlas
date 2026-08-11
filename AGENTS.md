@@ -33,8 +33,15 @@ Concretely, and these recur in every stage:
 - `schema/atlas.schema.json` - **generated** from it by `npm run schema:gen`. Never hand-edit. CI runs `npm run schema:check` and fails if it is stale.
 - `src/stages.ts` - the stage register; the CLI's help text and its dispatcher read the same list, so a stage cannot be documented without existing. An unbuilt stage exits 70 loudly rather than no-opping.
 - `test/fixtures/*.atlas.json` - the #7 prototype's 33-node recast of the hand-made swe-prep overview, and its decision-poor variant. Real evidence, pinned at swe-prep `086c999`.
+- `test/golden/` - render CI's goldens: rendered-byte hashes, the two absence phrasings, and the chrome inventory. Rewrite them deliberately with `UPDATE_GOLDEN=1 npx vitest run`, then read the diff.
 
 After any change to `src/schema/types.ts`, run `npm run schema:gen` and commit the result.
+
+## Three render-stage invariants that are easy to break by accident
+
+- **`raw()` has exactly one call site**, the Graphviz SVG, and `test/render/raw-lint.test.ts` fails the build if a second appears. Raw HTML carries no provenance stamp, so a second call site is a hole check E1 cannot see. Syntax highlighting goes through Shiki's `codeToTokens` and back out through the escaping template for exactly this reason.
+- **`prose()` requires a provenance argument.** There is no unstamped overload, because the moment one exists the check it protects becomes advisory. The renderer's own sentences use the `chrome` template instead.
+- **`src/render/theme.ts` is one big template literal** - a backtick anywhere in it, including in a comment, silently truncates the stylesheet.
 
 ## Maintaining this file
 

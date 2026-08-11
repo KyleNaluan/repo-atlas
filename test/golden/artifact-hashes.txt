@@ -1,0 +1,2 @@
+swe-prep.atlas.json  sha256:3e62c2692e2f34f5eb34d9ead5b7333d4fe2bbb72804f6a58d8a4abd10743218
+degraded.atlas.json  sha256:8b6d067a0ec21cb59ac92386565c5c7df43fc01c692bf3dc4f9efc81c8002087

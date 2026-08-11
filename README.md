@@ -10,7 +10,11 @@ Anything that could not be traced is cut, not hedged.
 On a repository with no decision record, the artifact says so - it never reconstructs a decision trail from commit archaeology.
 
 **Status: under construction.** The complete v1 design is closed on this tracker: issues [#1](https://github.com/KyleNaluan/repo-atlas/issues/1)-[#10](https://github.com/KyleNaluan/repo-atlas/issues/10), each with a binding `## Resolution:` comment recording the decision, the why, and the rejected alternatives.
-This build ships the scaffold and the `atlas.json` contract; the pipeline stages land stage by stage.
+This build ships the `atlas.json` contract and the render stage; the extraction stages and the audit land stage by stage.
+
+```
+npx repo-atlas render atlas.json -o overview.html
+```
 
 ## The pipeline
 
@@ -27,9 +31,16 @@ The mechanical stages are plain deterministic code; only `rank` and `audit` call
 | `audit` | twenty checks, fifteen hard gates; stamps its own result into the artifact | [#8](https://github.com/KyleNaluan/repo-atlas/issues/8) |
 | `validate` | check an `atlas.json` against the generated JSON Schema, fail closed | [#3](https://github.com/KyleNaluan/repo-atlas/issues/3) |
 
-```
-npx repo-atlas validate atlas.json
-```
+## The artifact
+
+One HTML file, nine sections, zero external requests: what this is, the interviewer Q&A index, the real shape, one flow end to end, the decision trail, ranked deep dives, honest edges, the record, and a generated source index.
+Diagrams are laid out by Graphviz at build time and inlined - the page never computes its own layout at read time.
+It is usable at 390 / 768 / 1280 / 1440 with no horizontal page scroll; wide content scrolls in its own frame and the Q&A index stacks to cards on a phone.
+
+Two properties are worth stating because later stages depend on them:
+
+- **Every prose passage is stamped with where it came from.** `prose(text, provenance)` emits a `data-ev` span naming the node and field; the renderer's own sentences carry `data-chrome` and are pinned by a golden inventory. This cannot be reconstructed after the fact, which is why it is built in rather than checked for.
+- **No sentence states an audit conclusion except inside the reserved audit slot.** A freshly rendered artifact says the audit has not run, because it has not. The `audit` stage is the only writer of that slot, and the page's hash excluding the slot is what makes its statement checkable.
 
 ## The contract
 

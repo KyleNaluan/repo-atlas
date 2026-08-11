@@ -12,9 +12,14 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { PROBES, runProbes, treeContext } from "../../src/probes/registry.js";
+import { assertUniqueCandidateIds, PROBES, runProbes, treeContext } from "../../src/probes/registry.js";
 import { gate, gateCandidate } from "../../src/gate/gate.js";
-import { detectToolchains, type Candidate, type ProbeContext } from "../../src/probes/types.js";
+import {
+  detectToolchains,
+  type Candidate,
+  type ProbeContext,
+  type ProbeOutcome,
+} from "../../src/probes/types.js";
 import type { Harvest, HarvestedIssue } from "../../src/harvest/types.js";
 
 /* ---------------------------------------------------------- fixtures */
@@ -185,6 +190,29 @@ describe("the probe manifest", () => {
     const ids = outcomes.flatMap((o) => (o.status === "ran" ? o.candidates.map((c) => c.node.id) : []));
     expect(new Set(ids).size).toBe(ids.length);
   }, 60_000);
+
+  it("fails the run loudly, naming the duplicate, if two candidates share an id", () => {
+    // The structural backstop behind per-probe discriminators: a duplicate id is
+    // a silent wrong answer in the audit's element-id lookups, so the run must
+    // refuse rather than emit it. Two probes each producing "m-dup" collide.
+    const node = {
+      type: "mechanism" as const,
+      id: "m-dup",
+      title: "t",
+      what: "w",
+      why_interesting: "y",
+      enforcement: "type-level" as const,
+      gotchas: [],
+      evidence: [],
+      confidence: "verified" as const,
+      interview_value: 0,
+    };
+    const outcomes: ProbeOutcome[] = [
+      { probe_id: "probe-one", status: "ran", candidates: [{ probe_id: "probe-one", node }] },
+      { probe_id: "probe-two", status: "ran", candidates: [{ probe_id: "probe-two", node }] },
+    ];
+    expect(() => assertUniqueCandidateIds(outcomes)).toThrow(/m-dup.*probe-one.*probe-two/);
+  });
 });
 
 /* ------------------------------------------------ one fixture per probe */
@@ -216,6 +244,26 @@ describe("throw-where-siblings-return", () => {
     const found = await candidatesFrom("throw-where-siblings-return", ctx);
     expect(found).toHaveLength(1);
     expect(found[0]!.node.title).toContain("run");
+  }, 60_000);
+
+  it("names each candidate's OWN enclosing type, not a text-matched sibling", async () => {
+    // Two sibling classes carrying a byte-identical refusing method each contain
+    // the other's method text, so a text-substring owner walk resolved both to
+    // the last-visited class - mis-attributing the title and minting one id
+    // twice. The enclosing-type walk names the actual owner.
+    const ctx = contextFor({
+      "pair/Pair.java":
+        "class A { void foo() { throw new UnsupportedOperationException(); } }\n" +
+        "class B { void foo() { throw new UnsupportedOperationException(); } }\n" +
+        "class C { String foo() { return \"c\"; } }\n",
+    });
+    const found = await candidatesFrom("throw-where-siblings-return", ctx);
+    expect(found).toHaveLength(2);
+    const titles = found.map((c) => c.node.title).sort();
+    expect(titles[0]).toContain("A.foo");
+    expect(titles[1]).toContain("B.foo");
+    const ids = found.map((c) => c.node.id);
+    expect(new Set(ids).size).toBe(ids.length);
   }, 60_000);
 
   it("ignores a throw that is a guard clause rather than a refusal", async () => {
@@ -252,6 +300,25 @@ describe("repeated-sql-predicates", () => {
     const found = await candidatesFrom("repeated-sql-predicates", ctx);
     expect(found).toHaveLength(1);
     expect(found[0]!.node.title).toContain("3 queries");
+  }, 60_000);
+
+  it("mints distinct ids for two predicates sharing a 40-char prefix", async () => {
+    // The id slugs the predicate and truncates it for legibility, so two
+    // predicates differing only past 40 chars would collide on the readable
+    // part alone; a digest of the full predicate keeps the ids distinct.
+    const p1 = "status = 'active-tenant-in-region-europe-primary-shard-one'";
+    const p2 = "status = 'active-tenant-in-region-europe-primary-shard-two'";
+    const ctx = contextFor({
+      "A.java": `String a = "select 1 where ${p1}";\nString b = "select 2 where ${p2}";\n`,
+      "B.java": `String c = "select 3 where ${p1}";\nString d = "select 4 where ${p2}";\n`,
+      "C.java": `String e = "select 5 where ${p1}";\nString f = "select 6 where ${p2}";\n`,
+    });
+    const found = await candidatesFrom("repeated-sql-predicates", ctx);
+    expect(found).toHaveLength(2);
+    const ids = found.map((c) => c.node.id);
+    // The readable, truncated prefixes are identical - the collision the digest exists to break.
+    expect(ids[0]!.slice(0, 55)).toBe(ids[1]!.slice(0, 55));
+    expect(new Set(ids).size).toBe(2);
   }, 60_000);
 
   it("ignores a predicate used twice, which is a coincidence", async () => {

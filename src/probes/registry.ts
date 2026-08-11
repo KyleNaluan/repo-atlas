@@ -69,6 +69,29 @@ export const treeContext = (harvest: Harvest, clone: string): ProbeContext => {
   };
 };
 
+/**
+ * Every candidate id is used verbatim as the rendered element id, so a duplicate
+ * is not a cosmetic defect: it produces invalid HTML and breaks the audit checks
+ * that resolve nodes by element id (G1 absent-node, G2 resurrection, the E1
+ * provenance walk). Per-probe semantic discriminators keep ids readable; this
+ * guard, enforced once where candidates are collected, is what makes uniqueness
+ * a guarantee rather than something each future probe has to remember.
+ */
+export const assertUniqueCandidateIds = (outcomes: ProbeOutcome[]): void => {
+  const owners = new Map<string, string[]>();
+  for (const o of outcomes) {
+    if (o.status !== "ran") continue;
+    for (const c of o.candidates) {
+      owners.set(c.node.id, [...(owners.get(c.node.id) ?? []), c.probe_id]);
+    }
+  }
+  const collisions = [...owners].filter(([, probes]) => probes.length > 1);
+  if (collisions.length > 0) {
+    const detail = collisions.map(([id, probes]) => `${id} (from ${probes.join(", ")})`).join("; ");
+    throw new Error(`probe run minted duplicate candidate id${collisions.length === 1 ? "" : "s"}: ${detail}`);
+  }
+};
+
 export const runProbes = async (ctx: ProbeContext): Promise<ProbeOutcome[]> => {
   const toolchains = detectToolchains(ctx.paths);
   const out: ProbeOutcome[] = [];
@@ -83,5 +106,6 @@ export const runProbes = async (ctx: ProbeContext): Promise<ProbeOutcome[]> => {
     }
     out.push({ probe_id: probe.id, status: "ran", candidates: await probe.run(ctx) });
   }
+  assertUniqueCandidateIds(out);
   return out;
 };

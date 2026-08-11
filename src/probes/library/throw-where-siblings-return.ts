@@ -14,13 +14,13 @@
 import type { Candidate, Probe } from "../types.js";
 import { pathSlug, slug } from "../id.js";
 import {
+  enclosingTypeNames,
   endLineOf,
   findAll,
   lineOf,
   nameOf,
   paramTypesOf,
   parseJava,
-  walk,
   type SyntaxNode,
 } from "../java.js";
 
@@ -58,12 +58,8 @@ export const throwWhereSiblingsReturn: Probe = {
         const body = method.childForFieldName("body");
         if (name === null || !body) continue;
         if (REFUSAL.test(body.text) && isOutrightRefusal(body)) {
-          let owner = "";
-          walk(root, (n) => {
-            if (n.type === "class_declaration" && n.text.includes(method.text)) {
-              owner = nameOf(n) ?? owner;
-            }
-          });
+          const enclosing = enclosingTypeNames(method);
+          const owner = enclosing[enclosing.length - 1] ?? "";
           const params = paramTypesOf(method);
           const sig = params.length > 0 ? slug(params.join("-")) : "noargs";
           refusing.push({ path, name, node: method, owner, sig });

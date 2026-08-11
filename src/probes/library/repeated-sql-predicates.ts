@@ -10,6 +10,7 @@
  * tree, and "which predicate string recurs" is a text question.
  */
 import type { Candidate, Probe } from "../types.js";
+import { shortHash, slug } from "../id.js";
 
 const PREDICATE = /\bwhere\s+([a-z_][\w.]*\s*(?:=|<>|!=|IN|LIKE)\s*(?:'[^']*'|:[\w]+|\?|[\w.]+))/gi;
 
@@ -44,7 +45,7 @@ export const repeatedSqlPredicates: Probe = {
         probe_id: "repeated-sql-predicates",
         node: {
           type: "mechanism",
-          id: `m-sql-predicate-${predicate.replace(/\W+/g, "-").slice(0, 40)}`,
+          id: `m-sql-predicate-${slug(predicate).slice(0, 40).replace(/-+$/, "")}-${shortHash(predicate)}`,
           title: `"${predicate}" is repeated across ${sites.length} queries`,
           what: `The same predicate appears in ${sites.length} queries across ${new Set(sites.map((s) => s.path)).size} files.`,
           why_interesting:

@@ -11,6 +11,8 @@
  * construction. The slug is readable rather than a hash so the id still says
  * where the finding came from.
  */
+import { createHash } from "node:crypto";
+
 /** Reduce any string to a readable id-safe slug: lowercase, dashes for runs. */
 export const slug = (text: string): string =>
   text
@@ -19,3 +21,12 @@ export const slug = (text: string): string =>
     .toLowerCase();
 
 export const pathSlug = (path: string): string => slug(path.replace(/\.[^./]+$/, ""));
+
+/**
+ * A short, stable hex digest of the full string, for an id whose readable part
+ * is a lossy projection. A truncated slug can collide when two distinct values
+ * share a prefix; appending this keeps the id unique whenever the value is,
+ * while staying deterministic so the id does not churn between runs.
+ */
+export const shortHash = (text: string): string =>
+  createHash("sha256").update(text).digest("hex").slice(0, 8);

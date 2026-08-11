@@ -19,6 +19,7 @@ import {
   resolveIssueCitations,
 } from "../../src/audit/checks/issue-resolution.js";
 import { runPassC } from "../../src/audit/pass-c.js";
+import { issueStore } from "../../src/audit/issue-store.js";
 import { cacheFor, cachedIssue } from "./issue-cache.js";
 import {
   absenceWitness,
@@ -50,7 +51,7 @@ const fullCache = (): HarvestedIssue[] => cacheFor(atlas);
 
 describe("pass C resolves issue citations, cache first", () => {
   it("passes when the cache holds every cited issue and comment", async () => {
-    const { result } = await resolveIssueCitations(ctx, { cached: fullCache() });
+    const { result } = await resolveIssueCitations(ctx, issueStore(fullCache()));
     expect(result.outcome).toBe("passed");
     expect(result.count).toBe(issueCitations(atlas).length);
   });
@@ -58,20 +59,20 @@ describe("pass C resolves issue citations, cache first", () => {
   it("never reaches the network when the cache is complete", async () => {
     // The cache-first property itself, checked rather than asserted in a comment.
     let fetches = 0;
-    const { fromCache, fetched } = await resolveIssueCitations(ctx, {
-      cached: fullCache(),
-      fetch: async () => {
+    const { fromCache, fetched } = await resolveIssueCitations(
+      ctx,
+      issueStore(fullCache(), async () => {
         fetches += 1;
         return undefined;
-      },
-    });
+      }),
+    );
     expect(fetches).toBe(0);
     expect(fetched).toBe(0);
     expect(fromCache).toBeGreaterThan(0);
   });
 
   it("reports the split, so an operator can see cache-first holding", async () => {
-    const { fromCache, fetched } = await resolveIssueCitations(ctx, { cached: fullCache() });
+    const { fromCache, fetched } = await resolveIssueCitations(ctx, issueStore(fullCache()));
     expect(resolutionSource(fromCache, fetched)).toMatch(/served from the harvest cache, 0 fetched/);
     expect(resolutionSource(1, 0)).toContain("1 issue served");
   });
@@ -80,13 +81,13 @@ describe("pass C resolves issue citations, cache first", () => {
     const partial = fullCache().slice(1);
     const missing = fullCache()[0]!;
     const asked: number[] = [];
-    const { result, fetched } = await resolveIssueCitations(ctx, {
-      cached: partial,
-      fetch: async (n) => {
+    const { result, fetched } = await resolveIssueCitations(
+      ctx,
+      issueStore(partial, async (n) => {
         asked.push(n);
         return n === missing.number ? missing : undefined;
-      },
-    });
+      }),
+    );
     expect(asked).toEqual([missing.number]);
     expect(fetched).toBe(1);
     expect(result.outcome).toBe("passed");
@@ -98,14 +99,14 @@ describe("pass C resolves issue citations, cache first", () => {
     // citations from it would be the audit blaming the artifact for its own
     // missing state. A cache that DOES hold issues is in a position to know, and
     // the next test is the gate failure that follows from that.
-    const { result } = await resolveIssueCitations(ctx, { cached: [] });
+    const { result } = await resolveIssueCitations(ctx, issueStore([]));
     expect(result.outcome).toBe("not_run");
     expect(result.reason).toMatch(/run harvest for this subject first/);
     expect(result.findings).toBeUndefined();
   });
 
   it("fails when a cited issue does not resolve against a cache that would know", async () => {
-    const { result } = await resolveIssueCitations(ctx, { cached: fullCache().slice(1) });
+    const { result } = await resolveIssueCitations(ctx, issueStore(fullCache().slice(1)));
     expect(result.outcome).toBe("failed");
     expect(result.findings?.[0]).toMatch(/does not resolve/);
   });
@@ -115,7 +116,7 @@ describe("pass C resolves issue citations, cache first", () => {
     // comment from another cannot verify the decision trail cites the resolution
     // rather than a later note.
     const wrongComments = fullCache().map((i) => cachedIssue(i.number, [999_999]));
-    const { result } = await resolveIssueCitations(ctx, { cached: wrongComments });
+    const { result } = await resolveIssueCitations(ctx, issueStore(wrongComments));
     expect(result.outcome).toBe("failed");
     expect(result.findings?.[0]).toMatch(/comment \d+ does not/);
     // And it names what the issue does carry, because the likely cause is a
@@ -139,7 +140,7 @@ describe("pass C resolves issue citations, cache first", () => {
       },
     } as AuditContext;
     // A populated cache, so the check is in a position to say these do not exist.
-    const { result } = await resolveIssueCitations(many, { cached: [cachedIssue(1, [])] });
+    const { result } = await resolveIssueCitations(many, issueStore([cachedIssue(1, [])]));
     expect(result.findings).toHaveLength(20);
     expect(result.count).toBe(24);
   });
@@ -174,7 +175,7 @@ describe("pass C resolves issue citations, cache first", () => {
     } as AuditContext;
     const cited = issueCitations(withDecision.atlas);
     expect(cited).toEqual([{ owner: "d-issue-implemented", e: { kind: "issue", number: 42, comment_id: 7 } }]);
-    const { result } = await resolveIssueCitations(withDecision, { cached: [cachedIssue(42, [7])] });
+    const { result } = await resolveIssueCitations(withDecision, issueStore([cachedIssue(42, [7])]));
     expect(result.outcome).toBe("passed");
     expect(result.count).toBe(1);
   });
@@ -184,7 +185,7 @@ describe("pass C resolves issue citations, cache first", () => {
       ...ctx,
       atlas: { ...atlas, nodes: [], synopsis: { ...atlas.synopsis, evidence: [] }, shape: { ...atlas.shape, evidence: [] } },
     } as AuditContext;
-    const { result } = await resolveIssueCitations(noIssues, { cached: [] });
+    const { result } = await resolveIssueCitations(noIssues, issueStore([]));
     expect(result.outcome).toBe("not_applicable");
     expect(result.reason).toBeTruthy();
   });
@@ -193,12 +194,12 @@ describe("pass C resolves issue citations, cache first", () => {
     // Sharing pass B's boundary would have reported this as "pass B could not
     // run" - a true-shaped sentence about the wrong pass - and dropped L3.
     const checks = (
-      await runPassC(ctx, {
-        cached: [],
-        fetch: async () => {
+      await runPassC(
+        ctx,
+        issueStore([], async () => {
           throw new Error("github is unreachable");
-        },
-      })
+        }),
+      )
     ).checks;
     expect(checks.map((c) => c.id)).toEqual(["L3"]);
     expect(checks[0]!.aborted).toBe(true);
@@ -323,7 +324,7 @@ describe("pass D judges each node alone", () => {
     // A decision node's support IS its cited resolution comment; the resolver must
     // hand that text to the judge, not drop it and invite a spurious overclaim.
     const cached = [cachedIssue(2, [7])];
-    const resolve = evidenceResolver(ctx, cached);
+    const resolve = evidenceResolver(ctx, issueStore(cached));
     // A comment id resolves to that comment's body; no comment id, the issue body.
     expect(resolve({ kind: "issue", number: 2, comment_id: 7 })).toBe("## Resolution: x");
     expect(resolve({ kind: "issue", number: 2 })).toBe("b");
@@ -477,7 +478,7 @@ describe("the model can never decide whether an artifact ships", () => {
       return { supported: true, note: "n" };
     };
     const { checks, passes } = await runLaterPasses(ctx, {
-      issues: { cached: fullCache().slice(1) },
+      issues: issueStore(fullCache().slice(1)),
       model: { judge, resolve: () => "evidence text" },
     });
 
@@ -502,7 +503,7 @@ describe("the model can never decide whether an artifact ships", () => {
       return { supported: true, note: "n" };
     };
     const { checks } = await runLaterPasses(ctx, {
-      issues: { cached: fullCache() },
+      issues: issueStore(fullCache()),
       model: { judge, resolve: () => "evidence text" },
     });
 
@@ -523,5 +524,86 @@ describe("the model can never decide whether an artifact ships", () => {
     const [m1] = await runPassD(ctx, { judge: throwing, ...resolveText });
     expect(m1!.findings).toBeUndefined();
     expect(m1!.reason).toMatch(/after judging 2 of \d+ nodes/);
+  });
+});
+
+/* --------------------------- E1: one issue store shared by passes C and D */
+
+describe("passes C and D read the same issue store", () => {
+  const issueOnlyDecision: AtlasNode = {
+    type: "decision",
+    id: "d-issue-only",
+    title: "t",
+    question: "q",
+    decision: "d",
+    why: "w",
+    rejected: [],
+    status: "decided_and_built",
+    implemented_by: [{ kind: "issue", number: 77, comment_id: 5 }],
+    soundbite: "s",
+    evidence: [],
+    confidence: "attested",
+    interview_value: 5,
+  };
+  const graphOf = (node: AtlasNode): AuditContext =>
+    ({
+      ...ctx,
+      atlas: {
+        ...atlas,
+        nodes: [node],
+        synopsis: { ...atlas.synopsis, evidence: [] },
+        shape: { ...atlas.shape, evidence: [] },
+      },
+    }) as AuditContext;
+
+  it("lets pass D judge a node whose only evidence is an issue pass C had to fetch", async () => {
+    // The cold-cache failure this closes: pass C fetches the missing issue and
+    // passes L3, but a pass D resolver built from the disk snapshot never sees
+    // that fetch and names the node "not weighed". One store per run, handed to
+    // both, makes what C fetched visible to D by construction.
+    const graph = graphOf(issueOnlyDecision);
+    const fetched: number[] = [];
+    const store = issueStore([], async (n) => {
+      fetched.push(n);
+      return n === 77 ? cachedIssue(77, [5]) : undefined;
+    });
+
+    let seenEvidence = -1;
+    const judge: Judge = async (request) => {
+      seenEvidence = request.evidence.length;
+      return { supported: true, note: "n" };
+    };
+
+    const { checks } = await runLaterPasses(graph, {
+      issues: store,
+      model: { judge, resolve: evidenceResolver(graph, store) },
+    });
+
+    // Pass C reached the network exactly once, for the id the cold cache lacked.
+    expect(fetched).toEqual([77]);
+    expect(checks.find((c) => c.id === "L3")!.outcome).toBe("passed");
+
+    // Pass D read the SAME store, so the fetched comment body reached the judge
+    // and the node was judged - not named not weighed against a disk snapshot.
+    const m1 = checks.find((c) => c.id === "M1")!;
+    expect(seenEvidence).toBe(1);
+    expect(m1.count).toBe(1);
+    expect(m1.reason).toBeUndefined();
+  });
+
+  it("resolves a fetched issue once and memoizes it in the store", async () => {
+    // The per-run memoization lives in the store, not in resolveIssueCitations'
+    // local map, so a repeated citation of a fetched issue is asked once and its
+    // resolved copy is the one pass D then reads.
+    let fetches = 0;
+    const store = issueStore([], async (n) => {
+      fetches += 1;
+      return n === 77 ? cachedIssue(77, [5]) : undefined;
+    });
+    await store.resolve(77);
+    await store.resolve(77);
+    expect(fetches).toBe(1);
+    expect(store.fetched).toBe(1);
+    expect(store.resolved().map((i) => i.number)).toEqual([77]);
   });
 });

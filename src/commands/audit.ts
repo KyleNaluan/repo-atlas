@@ -23,6 +23,7 @@ import { fileIssueCache } from "../harvest/cache.js";
 import { GhError, getIssue } from "../harvest/gh.js";
 import { harvestIssue } from "../harvest/issues.js";
 import { sdkJudge } from "../audit/judge.js";
+import { issueStore } from "../audit/issue-store.js";
 import { evidenceResolver } from "../audit/checks/evidence.js";
 import type { AuditContext, CheckResult } from "../audit/types.js";
 import type { AuditRecord } from "../schema/types.js";
@@ -109,7 +110,29 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
         : { privateClone: resolve(flag(argv, "--private-clone")!) }),
     };
     const repo = flag(argv, "--repo") ?? `${ctx.atlas.subject.owner}/${ctx.atlas.subject.repo}`;
-    const cachedIssues = fileIssueCache().all(repo);
+    // One memoizing issue store for the whole run (E1). Seeded from the harvest
+    // file cache and fetching only on a miss, it is handed to BOTH pass C and
+    // pass D's evidence resolver, so anything pass C had to fetch is by
+    // construction visible to pass D rather than lost with the disk snapshot the
+    // fetch never wrote back to. The audit is not a writer of harvest state, so
+    // the store keeps fetched issues in memory for the run and never persists them.
+    const issues = issueStore(
+      fileIssueCache().all(repo),
+      // Cache-first, network only on a miss (#8). A 404 is the answer - that
+      // issue does not exist, so the citation is false - while any other failure
+      // is the audit unable to ask, which pass C's own boundary turns into a
+      // precondition failure rather than a verdict about the artifact.
+      async (n) => {
+        let issue;
+        try {
+          issue = await getIssue(repo, n);
+        } catch (e) {
+          if (e instanceof GhError && e.status === 404) return undefined;
+          throw e;
+        }
+        return harvestIssue(repo, issue);
+      },
+    );
     outcome = argv.includes("--no-browser")
       ? audit(ctx)
       : await runAudit(ctx, {
@@ -117,24 +140,7 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
           ...(flag(argv, "--screenshots") === undefined
             ? {}
             : { screenshotDir: resolve(flag(argv, "--screenshots")!) }),
-          issues: {
-            cached: cachedIssues,
-            // Cache-first, network only on a miss (#8). A 404 is the answer -
-            // that issue does not exist, so the citation is false - while any
-            // other failure is the audit unable to ask, which pass C's own
-            // boundary turns into a precondition failure rather than a verdict
-            // about the artifact.
-            fetch: async (n) => {
-              let issue;
-              try {
-                issue = await getIssue(repo, n);
-              } catch (e) {
-                if (e instanceof GhError && e.status === 404) return undefined;
-                throw e;
-              }
-              return harvestIssue(repo, issue);
-            },
-          },
+          issues,
           // No model means pass D reports as not run rather than failing: an
           // unreachable model must never decide whether an artifact ships.
           ...(argv.includes("--no-model")
@@ -144,8 +150,8 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
                   judge: sdkJudge,
                   // Cache-first, exhaustive over Evidence: file citations to their
                   // cited span, issue citations to the cited comment or issue body
-                  // from the harvest cache. See evidenceResolver.
-                  resolve: evidenceResolver(ctx, cachedIssues),
+                  // from the SAME store pass C resolved through. See evidenceResolver.
+                  resolve: evidenceResolver(ctx, issues),
                 },
               }),
         });

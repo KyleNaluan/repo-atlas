@@ -22,7 +22,7 @@ import { runPassA } from "./pass-a.js";
 import { runPassB, type PassBOptions } from "./pass-b.js";
 import { runPassC } from "./pass-c.js";
 import { runPassD } from "./pass-d.js";
-import type { IssueSource } from "./checks/issue-resolution.js";
+import type { IssueStore } from "./issue-store.js";
 import type { ModelPassOptions } from "./checks/model.js";
 import { NoBrowserError } from "./browser.js";
 import { checksInPass, REGISTER, type PassName } from "./register.js";
@@ -133,8 +133,8 @@ export const audit = (ctx: AuditContext): AuditOutcome => {
 export interface RunAuditOptions extends PassBOptions {
   /** The file on disk. Pass B loads it in a browser, so it needs the path. */
   artifactPath: string;
-  /** Cached issues for pass C, and an optional fetch for a cache miss. */
-  issues?: IssueSource;
+  /** The run's issue store for pass C, shared with pass D's evidence resolver. */
+  issues?: IssueStore;
   /** The model pass. Omitted means no model was available; it never fails a run. */
   model?: ModelPassOptions;
 }

@@ -23,8 +23,8 @@ import {
   type CheckResult,
 } from "../types.js";
 import type { Evidence, IssueEvidence } from "../../schema/types.js";
-import type { HarvestedIssue } from "../../harvest/types.js";
-import { resolveComment, resolveIssue } from "../../harvest/cache.js";
+import { resolveComment } from "../../harvest/cache.js";
+import type { IssueStore } from "../issue-store.js";
 import { nodeEvidence } from "./evidence.js";
 
 /**
@@ -48,13 +48,6 @@ export const issueCitations = (
   return out;
 };
 
-export interface IssueSource {
-  /** Cached issues for the subject, from the harvest cache. */
-  cached: HarvestedIssue[];
-  /** Fetch one issue when the cache does not hold it. Absent means cache-only. */
-  fetch?: (number: number) => Promise<HarvestedIssue | undefined>;
-}
-
 /**
  * The check's result, and where its answers came from.
  *
@@ -70,7 +63,7 @@ export interface ResolutionResult {
 
 export const resolveIssueCitations = async (
   ctx: AuditContext,
-  source: IssueSource,
+  issues: IssueStore,
 ): Promise<ResolutionResult> => {
   const citations = issueCitations(ctx.atlas);
   if (citations.length === 0) {
@@ -81,10 +74,10 @@ export const resolveIssueCitations = async (
     };
   }
 
-  if (source.cached.length === 0 && source.fetch === undefined) {
+  if (issues.empty) {
     // The distinction this refuses to guess at. A citation the cache cannot serve
     // is a false citation only if the cache is in a position to know; an EMPTY
-    // cache with no way to fetch knows nothing, and reporting fifteen unresolved
+    // store with no way to fetch knows nothing, and reporting fifteen unresolved
     // citations from it would be the audit blaming the artifact for its own
     // missing state. It could not run, it says so by name, and "could not run"
     // never counts as a pass.
@@ -99,23 +92,11 @@ export const resolveIssueCitations = async (
   }
 
   const problems: string[] = [];
-  let fromCache = 0;
-  let fetched = 0;
-  const seen = new Map<number, HarvestedIssue | undefined>();
 
+  // The store is the one place that remembers what this run has resolved, so a
+  // repeated issue number is asked once here and is already in memory for pass D.
   for (const { owner, e } of citations) {
-    let issue = seen.get(e.number);
-    if (issue === undefined && !seen.has(e.number)) {
-      issue = resolveIssue(source.cached, e.number);
-      if (issue) {
-        fromCache += 1;
-      } else if (source.fetch) {
-        issue = await source.fetch(e.number);
-        if (issue) fetched += 1;
-      }
-      seen.set(e.number, issue);
-    }
-
+    const issue = await issues.resolve(e.number);
     if (!issue) {
       problems.push(`${owner}: issue #${e.number} does not resolve`);
       continue;
@@ -138,8 +119,8 @@ export const resolveIssueCitations = async (
         : // Count is the problem total, not the twenty shown, so the cap on the
           // enumeration is never silent.
           failed(spec("L3"), problems.slice(0, 20), problems.length),
-    fromCache,
-    fetched,
+    fromCache: issues.fromCache,
+    fetched: issues.fetched,
   };
 };
 

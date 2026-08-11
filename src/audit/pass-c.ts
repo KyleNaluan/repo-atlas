@@ -12,7 +12,8 @@
  * as "pass B could not run", which is a true-shaped sentence about the wrong
  * pass - and the checks pass C did run would have been dropped with it.
  */
-import { resolveIssueCitations, resolutionSource, type IssueSource } from "./checks/issue-resolution.js";
+import { resolveIssueCitations, resolutionSource } from "./checks/issue-resolution.js";
+import type { IssueStore } from "./issue-store.js";
 import { abortedFor, type AuditContext, type CheckResult } from "./types.js";
 
 export interface PassCResult {
@@ -21,9 +22,9 @@ export interface PassCResult {
   notes: string[];
 }
 
-export const runPassC = async (ctx: AuditContext, source: IssueSource): Promise<PassCResult> => {
+export const runPassC = async (ctx: AuditContext, issues: IssueStore): Promise<PassCResult> => {
   try {
-    const { result, fromCache, fetched } = await resolveIssueCitations(ctx, source);
+    const { result, fromCache, fetched } = await resolveIssueCitations(ctx, issues);
     return { checks: [result], notes: [resolutionSource(fromCache, fetched)] };
   } catch (cause) {
     return { checks: abortedFor(["L3"], cause), notes: [] };

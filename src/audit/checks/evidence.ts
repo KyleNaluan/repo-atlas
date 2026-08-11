@@ -9,7 +9,7 @@ import { blobAt, lineCount, sliceLines } from "../git.js";
 import { spec } from "../register.js";
 import { failed, notApplicable, passed, type AuditContext, type CheckResult } from "../types.js";
 import { resolveComment, resolveIssue } from "../../harvest/cache.js";
-import type { HarvestedIssue } from "../../harvest/types.js";
+import type { IssueStore } from "../issue-store.js";
 import type { Atlas, AtlasNode, Evidence, FileEvidence } from "../../schema/types.js";
 
 /**
@@ -62,18 +62,20 @@ export const nodeEvidence = (n: AtlasNode): Evidence[] => {
  *   claim (git.ts), and the judge truncates long text, so handing it the file
  *   head would grade a citation past that head against the wrong region. The
  *   whole blob is the fallback only when no line range is named.
- * - issue: the harvest cache, cache-first per #8 - the named comment's body when
- *   a comment id is cited, the issue body otherwise. A decision node's support
- *   IS its cited resolution comment, so dropping it would show the judge nothing
- *   and invite a spurious overclaim warning. A cache miss returns undefined and
- *   the model pass names the node as not weighed rather than judging it blind.
+ * - issue: the run's issue store, cache-first per #8 - the named comment's body
+ *   when a comment id is cited, the issue body otherwise. The store is the same
+ *   one pass C resolved through, so an id pass C had to fetch is visible here
+ *   too. A decision node's support IS its cited resolution comment, so dropping
+ *   it would show the judge nothing and invite a spurious overclaim warning. A
+ *   miss returns undefined and the model pass names the node as not weighed
+ *   rather than judging it blind.
  * - command: the excerpt captured at harvest, which is the evidence itself.
  *
  * undefined means "this citation did not resolve to readable text"; the caller
  * decides what an unresolved citation means, never this function.
  */
 export const evidenceResolver =
-  (ctx: AuditContext, cached: HarvestedIssue[]) =>
+  (ctx: AuditContext, issues: IssueStore) =>
   (e: Evidence): string | undefined => {
     switch (e.kind) {
       case "command":
@@ -83,10 +85,12 @@ export const evidenceResolver =
         if (blob === null) return undefined;
         return e.line_start === undefined ? blob : sliceLines(blob, e.line_start, e.line_end);
       }
-      case "issue":
+      case "issue": {
+        const known = issues.resolved();
         return e.comment_id === undefined
-          ? resolveIssue(cached, e.number)?.body
-          : resolveComment(cached, e.number, e.comment_id)?.body;
+          ? resolveIssue(known, e.number)?.body
+          : resolveComment(known, e.number, e.comment_id)?.body;
+      }
       default: {
         const _exhaustive: never = e;
         return _exhaustive;

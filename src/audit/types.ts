@@ -57,6 +57,16 @@ export const failed = (s: CheckSpec, findings: string[], count?: number): CheckR
 /**
  * A check that could not run says so by name, and "could not run" never counts
  * as passing (#8). The reason is mandatory for exactly that reason.
+ *
+ * The distinction an author must draw when reaching for this, and it is NOT
+ * simply "count 0 means not_applicable":
+ *
+ * - A check with no POPULATION to examine reports not_applicable with a reason.
+ *   L2 with zero line ranges resolved nothing, so it cannot claim a pass.
+ * - A check that examined its population and found nothing wrong is a genuine
+ *   pass, even at count 0. G1 finding zero absent nodes rendered and G2 finding
+ *   zero resurrections both examined the whole graph and found no violation;
+ *   those are real passes, not vacuous ones.
  */
 export const notApplicable = (s: CheckSpec, reason: string): CheckResult => ({
   id: s.id,

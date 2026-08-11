@@ -88,9 +88,16 @@ export const resolveFileEvidence = (ctx: AuditContext): [CheckResult, CheckResul
     missing.length === 0
       ? passed(spec("L1"), entries.length)
       : failed(spec("L1"), missing, entries.length),
-    outOfRange.length === 0
-      ? passed(spec("L2"), ranges)
-      : failed(spec("L2"), outOfRange, ranges),
+    // L1 examined a real population (the file paths) and reports its outcome. L2
+    // is different: if not one cited entry carries a line range, L2 resolved
+    // nothing, so it had no population and cannot claim a pass (#8). It reports
+    // not_applicable by name rather than a hollow passed(0), the same ruling as
+    // the both-empty case above, one granularity finer.
+    ranges === 0
+      ? notApplicable(spec("L2"), "the graph cites files but none carry a line range to resolve")
+      : outOfRange.length === 0
+        ? passed(spec("L2"), ranges)
+        : failed(spec("L2"), outOfRange, ranges),
   ];
 };
 

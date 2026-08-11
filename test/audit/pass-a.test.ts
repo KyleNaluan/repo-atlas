@@ -277,6 +277,48 @@ describe("L1/L2 when the graph cites no file evidence at all", () => {
   });
 });
 
+describe("L2 when the graph cites files but none carry a line range", () => {
+  // line_start is optional (#3, settled), so a graph can cite paths with no
+  // ranges. L1 examined a real population (the paths) and reports its outcome;
+  // L2 resolved zero ranges, so it had no population and must report
+  // not_applicable rather than a hollow pass (#8).
+  const stripLineRanges = (atlas: Atlas): Atlas => {
+    const a = structuredClone(atlas);
+    const drop = (e: Evidence) => {
+      if (e.kind === "file") {
+        delete e.line_start;
+        delete e.line_end;
+      }
+    };
+    a.synopsis.evidence.forEach(drop);
+    a.shape.evidence.forEach(drop);
+    for (const n of a.nodes) {
+      n.evidence.forEach(drop);
+      if (n.type === "decision") n.implemented_by.forEach(drop);
+      if (n.type === "mechanism" && n.code_excerpt) drop(n.code_excerpt.evidence);
+      if (n.type === "flow") for (const s of n.steps) if (s.evidence) drop(s.evidence);
+    }
+    return a;
+  };
+
+  const pathOnly = (): AuditContext => ({ ...clean, atlas: stripLineRanges(clean.atlas) });
+
+  it("reports L1 passed but L2 not_applicable with a reason", () => {
+    const [l1, l2] = resolveFileEvidence(pathOnly());
+    expect(l1.id).toBe("L1");
+    expect(l1.outcome).toBe("passed");
+    expect(l2.id).toBe("L2");
+    expect(l2.outcome).toBe("not_applicable");
+    expect(l2.reason).toMatch(/none carry a line range/);
+  });
+
+  it("does not count that L2 as a passing gate", () => {
+    // Mirrors the exact predicate the verdict uses to tally hard gates passed.
+    const l2 = resolveFileEvidence(pathOnly())[1];
+    expect(l2.class === "gate" && l2.outcome === "passed").toBe(false);
+  });
+});
+
 describe("P1 cannot pass on an incomplete corpus", () => {
   it("reports not_applicable, naming the skip, when a private file could not be read in full", () => {
     // A partial corpus can never support a passing truth gate: a leaked passage

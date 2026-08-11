@@ -22,6 +22,7 @@
  *                must never arrive looking checked
  */
 import type { Candidate, ExistenceClaim, ProbeContext } from "../probes/types.js";
+import { declaredManifests } from "../probes/manifests.js";
 import type { AtlasNode, EdgeNode, Evidence } from "../schema/types.js";
 
 export type Verdict = "confirmed" | "overturned" | "unresolved";
@@ -49,6 +50,17 @@ const treeHas = (ctx: ProbeContext, claim: ExistenceClaim): { found: boolean; wh
       if (include && !include.test(path)) continue;
       const text = ctx.read(path);
       if (text !== null && regex.test(text)) where.push(path);
+      if (where.length >= 5) break;
+    }
+  }
+
+  if (claim.declares !== undefined) {
+    // Re-parse declared dependency names with the SAME rule the probe used, so
+    // "declared" means one thing on both sides. A bare mention in a comment or a
+    // transitive coordinate is not a declaration and must not settle the claim.
+    const tech = claim.declares;
+    for (const m of declaredManifests(ctx)) {
+      if ([...m.names].some((n) => n.includes(tech))) where.push(m.path);
       if (where.length >= 5) break;
     }
   }
@@ -101,7 +113,8 @@ export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCan
   }
 
   for (const claim of claims) {
-    const checkable = (claim.paths?.length ?? 0) > 0 || claim.pattern !== undefined;
+    const checkable =
+      (claim.paths?.length ?? 0) > 0 || claim.pattern !== undefined || claim.declares !== undefined;
     if (!checkable) {
       // A claim with nothing to read cannot be resolved either way. #7's live
       // false positive is the reason this is a demotion rather than a pass: the
@@ -117,12 +130,13 @@ export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCan
     const { found, where } = treeHas(ctx, claim);
     const agrees = claim.expect === "present" ? found : !found;
     if (!agrees) {
-      const fixed = toDivergence(candidate, claim, where).evidence.map((e) =>
+      const divergence = toDivergence(candidate, claim, where);
+      const evidence = divergence.evidence.map((e) =>
         e.kind === "file" && e.sha === "" ? { ...e, sha: ctx.sha } : e,
       );
       return {
         probe_id: candidate.probe_id,
-        node: { ...toDivergence(candidate, claim, where), evidence: fixed },
+        node: { ...divergence, evidence },
         verdict: "overturned",
         finding: `${claim.description}, but the tree says otherwise${where.length > 0 ? ` (${where.slice(0, 3).join(", ")})` : ""}`,
       };

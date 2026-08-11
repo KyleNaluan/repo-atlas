@@ -137,6 +137,23 @@ describe("the probe manifest", () => {
     const outcomes = await runProbes(ctx);
     expect(outcomes.every((o) => o.status === "ran" || o.status === "not_applicable")).toBe(true);
   }, 60_000);
+
+  it("mints a unique id for every candidate even when names collide across files", async () => {
+    // id is used verbatim as the rendered element id, so two candidates for the
+    // same simple name in two packages - or the same setting in two config
+    // files - must not share one. Uniqueness is minted where the id is, by
+    // including a path-derived component.
+    const ctx = contextFor({
+      "a/Grader.java": "package a;\nsealed interface Grader permits AnswerKey, SelfCheck {}\n",
+      "b/Grader.java": "package b;\nsealed interface Grader permits AnswerKey, SelfCheck {}\n",
+      "main/application.yml": "# measured: 10s is the p99 under load\ntimeout: PT10S\n",
+      "test/application.yml": "# measured: 5s is enough for the suite\ntimeout: PT5S\n",
+    });
+    const outcomes = await runProbes(ctx);
+    const ids = outcomes.flatMap((o) => (o.status === "ran" ? o.candidates.map((c) => c.node.id) : []));
+    expect(ids.length).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(ids.length);
+  }, 60_000);
 });
 
 /* ------------------------------------------------ one fixture per probe */
@@ -354,6 +371,49 @@ describe("the existence gate overturns the record in BOTH directions", () => {
     expect(result.node.type).toBe("edge");
     expect(result.node.type === "edge" && result.node.kind).toBe("divergence");
     expect(result.node.evidence.length).toBeGreaterThan(1);
+  }, 60_000);
+
+  it("re-checks a divergence the SAME way the probe decided it, not by a looser proxy", async () => {
+    // The probe reads declared dependency NAMES; the gate must too. A tech named
+    // only in an XML comment (docker, in a note about Testcontainers) is not a
+    // declaration, so the divergence stands rather than being overturned by a
+    // substring hit the probe never counted.
+    const ctx = contextFor({
+      "README.md": "Runs with Docker via Testcontainers.\n",
+      "pom.xml":
+        "<project><artifactId>app</artifactId><!-- docker connectivity for testcontainers --></project>\n",
+    });
+    const [candidate] = await candidatesFrom("dependency-divergence", ctx);
+    expect(candidate).toBeDefined();
+    expect(gateCandidate(ctx, candidate!).verdict).toBe("confirmed");
+  }, 60_000);
+
+  it("overturns a divergence when the manifest really does declare the tech", async () => {
+    // The mirror case: if the build file declares it, the README does not
+    // diverge and the gate says so.
+    const ctx = contextFor({
+      "README.md": "Runs with Docker via Testcontainers.\n",
+      "pom.xml": "<project><artifactId>testcontainers</artifactId></project>\n",
+    });
+    // testcontainers is declared, so the probe never emits a docker divergence;
+    // build one by hand to exercise the overturn path against a real declaration.
+    const candidate: Candidate = {
+      probe_id: "dependency-divergence",
+      claims: [{ description: "docker is named but declared nowhere", expect: "absent", declares: "testcontainers" }],
+      node: {
+        type: "edge",
+        kind: "divergence",
+        id: "e-divergence-testcontainers",
+        title: "t",
+        statement: "s",
+        why_it_matters: "w",
+        how_to_say_it: "h",
+        evidence: [],
+        confidence: "verified",
+        interview_value: 0,
+      },
+    };
+    expect(gateCandidate(ctx, candidate).verdict).toBe("overturned");
   }, 60_000);
 
   it("requires ADJACENCY, so an unrelated file does not overturn a real finding", async () => {

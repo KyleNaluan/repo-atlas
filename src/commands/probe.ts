@@ -1,6 +1,6 @@
 /**
  * `repo-atlas probe --harvest <harvest.json> --clone <path> -o candidates.json`
- * `repo-atlas gate  --candidates <candidates.json> --clone <path> -o gated.json`
+ * `repo-atlas gate  --candidates <candidates.json> --harvest <harvest.json> --clone <path> -o gated.json`
  *
  * Probes propose; the gate confirms; the rank stage accepts or deletes. Neither
  * of these commands decides what survives (#2, #5).
@@ -27,7 +27,7 @@ emits candidate nodes. Probes are pure deterministic functions: no network, no
 model calls. A probe that finds nothing emits nothing; a probe that does not
 apply to this subject's toolchain says so by name rather than passing silently.`;
 
-const GATE_USAGE = `usage: repo-atlas gate --candidates <candidates.json> --clone <path> [-o <gated.json>]
+const GATE_USAGE = `usage: repo-atlas gate --candidates <candidates.json> --harvest <harvest.json> --clone <path> [-o <gated.json>]
 
 Resolves each candidate's claims against the tree at the pinned SHA. The gate
 overturns the record in BOTH directions: a stated decision is not evidence of

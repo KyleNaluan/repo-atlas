@@ -12,6 +12,7 @@
  * from a method whose entire contract is to refuse.
  */
 import type { Candidate, Probe } from "../types.js";
+import { pathSlug } from "../id.js";
 import { endLineOf, findAll, lineOf, nameOf, parseJava, walk, type SyntaxNode } from "../java.js";
 
 const REFUSAL = /UnsupportedOperationException|NotImplementedException|AssertionError/;
@@ -66,7 +67,7 @@ export const throwWhereSiblingsReturn: Probe = {
         probe_id: "throw-where-siblings-return",
         node: {
           type: "mechanism" as const,
-          id: `m-refuses-${r.owner || "type"}-${r.name}`,
+          id: `m-refuses-${pathSlug(r.path)}-${r.owner || "type"}-${r.name}`,
           title: `${r.owner ? `${r.owner}.` : ""}${r.name} refuses where its siblings return`,
           what: `${r.name} throws outright here, while ${returning.get(r.name)} other ${(returning.get(r.name) ?? 0) === 1 ? "implementation returns" : "implementations return"} a value.`,
           why_interesting:

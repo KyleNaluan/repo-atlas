@@ -11,6 +11,7 @@
  * productions, and a grep would match the type name in imports and comments.
  */
 import type { Candidate, Probe } from "../types.js";
+import { pathSlug } from "../id.js";
 import { endLineOf, findAll, lineOf, nameOf, parseJava } from "../java.js";
 
 /** Types in the same directory are the sibling set worth comparing. */
@@ -56,7 +57,7 @@ export const dependencyAsymmetry: Probe = {
           probe_id: "dependency-asymmetry",
           node: {
             type: "boundary",
-            id: `b-asymmetry-${odd.name}-${type}`,
+            id: `b-asymmetry-${pathSlug(odd.path)}-${odd.name}-${type}`,
             title: `${odd.name} holds no ${type}, and every sibling does`,
             a: odd.name,
             b: type,

@@ -11,6 +11,7 @@
  * grepping for the word would match it in prose and comments too.
  */
 import type { Candidate, Probe } from "../types.js";
+import { pathSlug } from "../id.js";
 import { endLineOf, findAll, lineOf, nameOf, parseJava } from "../java.js";
 
 export const sealedHierarchies: Probe = {
@@ -43,9 +44,9 @@ export const sealedHierarchies: Probe = {
           probe_id: "sealed-hierarchies",
           node: {
             type: "mechanism",
-            id: `m-sealed-${name}`,
+            id: `m-sealed-${pathSlug(path)}-${name}`,
             title: `${name} is sealed over ${members.length} permitted ${members.length === 1 ? "type" : "types"}`,
-            what: `${name} permits exactly ${members.join(", ")}. The compiler rejects a fourth implementation.`,
+            what: `${name} permits exactly ${members.join(", ")}. The compiler rejects any implementation outside that set.`,
             why_interesting:
               "A sealed hierarchy is a closed enumeration the type system enforces. It is also one of the few things that can witness an absence claim, because the set is provably complete.",
             enforcement: "type-level",

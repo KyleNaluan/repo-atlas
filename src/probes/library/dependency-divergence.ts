@@ -10,30 +10,7 @@
  * text question, and #5 refuses to push text questions through a parse tree.
  */
 import type { Candidate, Probe } from "../types.js";
-
-const MANIFESTS = ["pom.xml", "build.gradle", "build.gradle.kts", "package.json"];
-
-/** Dependency names a manifest declares, however it spells them. */
-const declared = (manifest: string, text: string): Set<string> => {
-  const names = new Set<string>();
-  if (manifest === "package.json") {
-    try {
-      const parsed = JSON.parse(text) as { dependencies?: Record<string, string> };
-      for (const name of Object.keys(parsed.dependencies ?? {})) names.add(name.toLowerCase());
-    } catch {
-      /* a manifest that does not parse is not a divergence finding */
-    }
-    return names;
-  }
-  for (const m of text.matchAll(/<artifactId>([^<]+)<\/artifactId>/g)) {
-    names.add((m[1] ?? "").toLowerCase());
-  }
-  for (const m of text.matchAll(/^\s*(?:implementation|api|compile)\s*[('"]+([^'")]+)/gm)) {
-    const coord = (m[1] ?? "").split(":");
-    if (coord[1]) names.add(coord[1].toLowerCase());
-  }
-  return names;
-};
+import { declaredManifests } from "../manifests.js";
 
 /** Technologies a README claims, from a small vocabulary worth being wrong about. */
 const CLAIMED = [
@@ -50,14 +27,9 @@ export const dependencyDivergence: Probe = {
     if (readme === null) return [];
     const lower = readme.toLowerCase();
 
+    const manifests = declaredManifests(ctx);
     const names = new Set<string>();
-    for (const manifest of MANIFESTS) {
-      const found = ctx.paths.filter((p) => p === manifest || p.endsWith(`/${manifest}`));
-      for (const path of found) {
-        const text = ctx.read(path);
-        if (text !== null) for (const n of declared(manifest, text)) names.add(n);
-      }
-    }
+    for (const m of manifests) for (const n of m.names) names.add(n);
     if (names.size === 0) return [];
 
     const out: Candidate[] = [];
@@ -70,7 +42,7 @@ export const dependencyDivergence: Probe = {
           {
             description: `${tech} is named in the README but declared in no build manifest`,
             expect: "absent",
-            pattern: { regex: tech, include: MANIFESTS.join("|") },
+            declares: tech,
           },
         ],
         node: {

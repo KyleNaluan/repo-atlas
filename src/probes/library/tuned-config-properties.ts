@@ -10,6 +10,7 @@
  * Grep-class: this is entirely a question about what a comment says.
  */
 import type { Candidate, Probe } from "../types.js";
+import { pathSlug } from "../id.js";
 
 const CONFIG = /\.(ya?ml|properties|toml|ini|conf|json)$/i;
 const TUNED = /\b(empiric|measured|measurement|tuned|benchmark|profil|observed|found that|in practice|by experiment)\w*\b/i;
@@ -42,7 +43,7 @@ export const tunedConfigProperties: Probe = {
           probe_id: "tuned-config-properties",
           node: {
             type: "fact",
-            id: `f-tuned-${setting[1]!.replace(/\W+/g, "-")}`,
+            id: `f-tuned-${pathSlug(path)}-${setting[1]!.replace(/\W+/g, "-")}`,
             label: setting[1]!,
             value: setting[2]!,
             source: "file",

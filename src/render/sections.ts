@@ -143,12 +143,10 @@ const title = (n: AtlasNode): Safe => prose(n.title, from(n.id, "title"));
 
 export const sectionWhat = (atlas: Atlas, nodes: AtlasNode[]): Safe => {
   const factNodes = ranked(nodes.filter(isType("fact")));
-  const suiteFact = factNodes.find((f) =>
-    f.evidence.some((e) => e.kind === "command" && /test|mvn|npm/.test(e.cmd)),
-  );
-  const suiteOutput = suiteFact?.evidence.find(
-    (e): e is CommandEvidence => e.kind === "command",
-  );
+  const isSuiteCommand = (e: Evidence): e is CommandEvidence =>
+    e.kind === "command" && /test|mvn|npm/.test(e.cmd);
+  const suiteFact = factNodes.find((f) => f.evidence.some(isSuiteCommand));
+  const suiteOutput = suiteFact?.evidence.find(isSuiteCommand);
   const failing = /BUILD FAILURE|FAILED|\[ERROR\]/.test(suiteOutput?.output_excerpt ?? "");
   return html`
     <section id="what">

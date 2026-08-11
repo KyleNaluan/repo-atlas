@@ -126,6 +126,27 @@ describe("self-containment", () => {
     expect(rich).toMatch(/<code class="lang-java">/);
     expect(rich).toMatch(/<span style="color:#[0-9a-fA-F]{3,8}">/);
   });
+
+  it("does not trip on a subject repo's own CSS quoted inside a code excerpt", () => {
+    // `@import` and non-data `url(...)` fetch only from a stylesheet, so a repo's
+    // own source that happens to contain them - rendered escaped and inert inside
+    // <pre>/<code> - must not fail-close a perfectly valid render.
+    const withQuotedCss = `<style>body{color:red}</style>
+      <pre><code>@import &quot;base.css&quot;;
+      background: url(https://example.com/x.png);</code></pre>`;
+    expect(findExternalRefs(withQuotedCss)).toEqual([]);
+  });
+
+  it("still catches a real @import or non-data url() inside a <style> block", () => {
+    expect(findExternalRefs(`<style>@import "evil.css";</style>`).map((p) => p.what)).toContain(
+      "@import",
+    );
+    expect(
+      findExternalRefs(`<style>body{background:url(https://evil.example/x.png)}</style>`).map(
+        (p) => p.what,
+      ),
+    ).toContain("non-data url()");
+  });
 });
 
 describe("absence is stated in place, in one of two approved phrasings", () => {

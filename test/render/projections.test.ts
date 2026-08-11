@@ -131,6 +131,23 @@ describe("the source index fold", () => {
     expect(solo).toHaveLength(1);
     expect(solo[0]!.label).not.toMatch(/comment/);
   });
+
+  it("keeps every file source's label range and href fragment describing the same lines", () => {
+    // A file cited at several ranges dedupes to one row. When a later, more
+    // specific label wins, its href must win too, or the row reads ":99-110" while
+    // the link jumps to the first-seen range.
+    const files = sourceIndex(atlas.nodes, [], atlas.subject).get("file") ?? [];
+    expect(files.length).toBeGreaterThan(0);
+    const range = (s: string, re: RegExp): string | null => {
+      const m = s.match(re);
+      return m ? `${m[1]}${m[2] ? `-${m[2]}` : ""}` : null;
+    };
+    for (const f of files) {
+      const labelRange = range(f.label, /:(\d+)(?:-(\d+))?$/);
+      const hrefRange = range(f.href ?? "", /#L(\d+)(?:-L(\d+))?$/);
+      expect(hrefRange, `${f.label} -> ${f.href}`).toBe(labelRange);
+    }
+  });
 });
 
 describe("ranking and the deletion record", () => {

@@ -123,8 +123,13 @@ export const sourceIndex = (
     const existing = seen.get(r.key);
     if (existing) {
       if (owner && !existing.citedBy.includes(owner)) existing.citedBy.push(owner);
-      // Prefer the most specific label (one with line numbers) for the index.
-      if (r.label.length > existing.label.length) existing.label = r.label;
+      // Prefer the most specific label (one with line numbers) for the index, and
+      // carry its href so the rendered label and the link's line fragment always
+      // describe the same range.
+      if (r.label.length > existing.label.length) {
+        existing.label = r.label;
+        existing.href = r.href;
+      }
       return;
     }
     seen.set(r.key, { ...r, citedBy: owner ? [owner] : [] });

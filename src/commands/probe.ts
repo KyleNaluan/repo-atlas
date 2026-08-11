@@ -52,7 +52,7 @@ export const probeCommand = async (argv: string[]): Promise<number> => {
   }
   const harvest = JSON.parse(readFileSync(harvestPath, "utf8")) as Harvest;
   const ctx = treeContext(harvest, resolve(clone));
-  const { outcomes, collisions } = await runProbes(ctx);
+  const { outcomes, idCollisions, findingCollisions } = await runProbes(ctx);
 
   const output = resolve(flag(argv, "-o", "--out") ?? "out/candidates.json");
   mkdirSync(dirname(output), { recursive: true });
@@ -72,15 +72,23 @@ export const probeCommand = async (argv: string[]): Promise<number> => {
   }
   console.log(`  ${total} candidate${total === 1 ? "" : "s"} for the gate`);
 
-  // A duplicate candidate id is dropped rather than emitted, but the run still
-  // fails: a duplicate would corrupt the audit's element-id lookups, so it must
-  // never reach the artifact, and it is reported by name rather than swallowed.
-  if (collisions.length > 0) {
-    for (const c of collisions) {
-      console.error(`  collision  ${c.id} minted by ${c.probes.join(", ")} - all such candidates dropped`);
-    }
+  // A duplicate candidate id, or two candidates describing the same finding, is
+  // dropped rather than emitted, but the run still fails: a duplicate id would
+  // corrupt the audit's element-id lookups and a duplicate finding would assert
+  // one thing twice, so neither may reach the artifact, and each is reported by
+  // name rather than swallowed.
+  for (const c of idCollisions) {
+    console.error(`  id collision       ${c.id} minted by ${c.probes.join(", ")} - all such candidates dropped`);
+  }
+  for (const c of findingCollisions) {
     console.error(
-      `probe run failed: ${collisions.length} duplicate candidate id${collisions.length === 1 ? "" : "s"} dropped, not emitted`,
+      `  finding collision  ${c.type} "${c.title}" minted by ${c.probes.join(", ")} - all such candidates dropped`,
+    );
+  }
+  const collisionCount = idCollisions.length + findingCollisions.length;
+  if (collisionCount > 0) {
+    console.error(
+      `probe run failed: ${collisionCount} duplicate candidate${collisionCount === 1 ? "" : "s"} dropped, not emitted`,
     );
     return 70;
   }

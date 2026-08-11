@@ -67,15 +67,18 @@ export interface ExistenceClaim {
   /** A pattern that must be found in the tree's source to settle it. */
   pattern?: { regex: string; include?: string };
   /**
-   * A dependency name the gate must resolve against declared build manifests,
-   * parsed the SAME way the probe decided it (`declaredManifests`) rather than
-   * by a looser substring proxy. The claim is settled by whether any manifest
-   * declares a dependency whose name contains this string. Sharing one
-   * definition of "declared" is the point: a mention in a comment, a plugin
-   * name or a transitive coordinate must not read as a declaration on either
-   * side and flip a correct finding into a spurious divergence.
+   * The spellings of one technology the gate must resolve against declared build
+   * manifests, parsed the SAME way the probe decided it (`declaredManifests`)
+   * rather than by a looser substring proxy. The claim is settled by whether any
+   * manifest declares a dependency whose name contains ANY of these aliases.
+   * Sharing one definition of "declared" is the point: a mention in a comment, a
+   * plugin name or a transitive coordinate must not read as a declaration on
+   * either side and flip a correct finding into a spurious divergence. The list
+   * (rather than a single string) is what lets one technology be one concept on
+   * both sides - a dependency declared as `postgresql` satisfies a README that
+   * says `postgres`.
    */
-  declares?: string;
+  declares?: string[];
 }
 
 export type Toolchain = "any" | "java" | "typescript" | "python";

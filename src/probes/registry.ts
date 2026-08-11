@@ -20,6 +20,7 @@ import { sealedHierarchies } from "./library/sealed-hierarchies.js";
 import { throwWhereSiblingsReturn } from "./library/throw-where-siblings-return.js";
 import { tunedConfigProperties } from "./library/tuned-config-properties.js";
 import { detectToolchains, type Probe, type ProbeContext, type ProbeOutcome } from "./types.js";
+import type { AtlasNode } from "../schema/types.js";
 import type { Harvest } from "../harvest/types.js";
 
 /** All eight discovery probes ship in v1 (#5, point 1). */
@@ -75,6 +76,13 @@ export interface CandidateIdCollision {
   probes: string[];
 }
 
+/** A (type, title) pair minted by more than one candidate: the same finding twice. */
+export interface CandidateFindingCollision {
+  type: string;
+  title: string;
+  probes: string[];
+}
+
 /**
  * Every candidate id is used verbatim as the rendered element id, so a duplicate
  * is not a cosmetic defect: it produces invalid HTML and breaks the audit checks
@@ -113,9 +121,68 @@ export const dedupeCandidateIds = (
   return { outcomes: cleaned, collisions };
 };
 
+/**
+ * The id guard proves no two candidates share an ID; it cannot prove no two
+ * candidates describe the same FINDING. Those are different guarantees: two
+ * candidates can carry distinct ids - one differing by an occurrence ordinal,
+ * another by a vocabulary alias - and still assert one and the same thing, which
+ * the id guard passes through unseen. Per-probe grouping is meant to prevent
+ * that, but it has failed more than once, in more than one probe, so the
+ * invariant needs a structural backstop of its own rather than per-probe
+ * vigilance.
+ *
+ * The key is (type, title, evidence): two candidates are the same finding only
+ * when they assert the same thing ABOUT THE SAME PLACE. Title alone is too
+ * coarse - two method overloads that both refuse (`add(String)` and
+ * `add(int,String)`), or two same-simple-named types in different packages
+ * (`a.Grader` and `b.Grader`), legitimately share a title yet are distinct
+ * findings that earlier review rounds required to survive. What separates them
+ * is the evidence they point at: different lines, different files. The genuine
+ * duplicates this guards against - the same setting emitted twice, one
+ * technology matched under two aliases - are byte-identical in title AND
+ * evidence and differ only in the id, which is exactly what this catches.
+ *
+ * It behaves exactly like the id guard - drop ONLY the duplicated candidates,
+ * report every collision by name with the probes that produced it, and fail the
+ * run at the end - so one over-eager probe cannot make a whole subject
+ * unprobeable, and this is "dropped and reported", never silent dropping.
+ */
+export const dedupeCandidateFindings = (
+  outcomes: ProbeOutcome[],
+): { outcomes: ProbeOutcome[]; collisions: CandidateFindingCollision[] } => {
+  const key = (node: AtlasNode): string => JSON.stringify([node.type, node.title, node.evidence]);
+  const owners = new Map<string, { type: string; title: string; probes: string[] }>();
+  for (const o of outcomes) {
+    if (o.status !== "ran") continue;
+    for (const c of o.candidates) {
+      const k = key(c.node);
+      const prev = owners.get(k);
+      owners.set(k, {
+        type: c.node.type,
+        title: c.node.title,
+        probes: [...(prev?.probes ?? []), c.probe_id],
+      });
+    }
+  }
+  const dropped = new Set([...owners].filter(([, v]) => v.probes.length > 1).map(([k]) => k));
+  const collisions = [...owners.values()]
+    .filter((v) => v.probes.length > 1)
+    .map(({ type, title, probes }) => ({ type, title, probes }));
+  const cleaned = outcomes.map((o) =>
+    o.status === "ran"
+      ? { ...o, candidates: o.candidates.filter((c) => !dropped.has(key(c.node))) }
+      : o,
+  );
+  return { outcomes: cleaned, collisions };
+};
+
 export const runProbes = async (
   ctx: ProbeContext,
-): Promise<{ outcomes: ProbeOutcome[]; collisions: CandidateIdCollision[] }> => {
+): Promise<{
+  outcomes: ProbeOutcome[];
+  idCollisions: CandidateIdCollision[];
+  findingCollisions: CandidateFindingCollision[];
+}> => {
   const toolchains = detectToolchains(ctx.paths);
   const out: ProbeOutcome[] = [];
   for (const probe of PROBES) {
@@ -129,5 +196,11 @@ export const runProbes = async (
     }
     out.push({ probe_id: probe.id, status: "ran", candidates: await probe.run(ctx) });
   }
-  return dedupeCandidateIds(out);
+  const byId = dedupeCandidateIds(out);
+  const byFinding = dedupeCandidateFindings(byId.outcomes);
+  return {
+    outcomes: byFinding.outcomes,
+    idCollisions: byId.collisions,
+    findingCollisions: byFinding.collisions,
+  };
 };

@@ -12,10 +12,31 @@
 import type { Candidate, Probe } from "../types.js";
 import { declaredManifests } from "../manifests.js";
 
-/** Technologies a README claims, from a small vocabulary worth being wrong about. */
-const CLAIMED = [
-  "postgres", "postgresql", "mysql", "sqlite", "redis", "kafka", "rabbitmq",
-  "mongodb", "elasticsearch", "docker", "testcontainers", "flyway", "liquibase",
+/**
+ * Technologies a README claims, from a small vocabulary worth being wrong about.
+ *
+ * One technology per entry, carrying every spelling it goes by. Membership is a
+ * substring test, so overlapping spellings in a flat list double-count: a README
+ * saying "PostgreSQL" satisfies BOTH "postgres" (a substring of it) and
+ * "postgresql", and the probe would emit two divergence edges for one
+ * technology. Grouping the aliases means at most one candidate per technology,
+ * and the group governs BOTH sides - a README mention and a manifest declaration
+ * are the same technology however either spells it, so a dependency declared as
+ * `postgresql` also satisfies a README that says `postgres`.
+ */
+const CLAIMED: { tech: string; aliases: string[] }[] = [
+  { tech: "postgres", aliases: ["postgresql", "postgres"] },
+  { tech: "mysql", aliases: ["mysql"] },
+  { tech: "sqlite", aliases: ["sqlite"] },
+  { tech: "redis", aliases: ["redis"] },
+  { tech: "kafka", aliases: ["kafka"] },
+  { tech: "rabbitmq", aliases: ["rabbitmq"] },
+  { tech: "mongodb", aliases: ["mongodb"] },
+  { tech: "elasticsearch", aliases: ["elasticsearch"] },
+  { tech: "docker", aliases: ["docker"] },
+  { tech: "testcontainers", aliases: ["testcontainers"] },
+  { tech: "flyway", aliases: ["flyway"] },
+  { tech: "liquibase", aliases: ["liquibase"] },
 ];
 
 export const dependencyDivergence: Probe = {
@@ -39,16 +60,16 @@ export const dependencyDivergence: Probe = {
     if (names.size === 0 && !anyUnrecognized) return [];
 
     const out: Candidate[] = [];
-    for (const tech of CLAIMED) {
-      if (!lower.includes(tech)) continue;
-      if ([...names].some((n) => n.includes(tech))) continue;
+    for (const { tech, aliases } of CLAIMED) {
+      if (!aliases.some((a) => lower.includes(a))) continue;
+      if ([...names].some((n) => aliases.some((a) => n.includes(a)))) continue;
       out.push({
         probe_id: "dependency-divergence",
         claims: [
           {
             description: `${tech} is named in the README but declared in no build manifest`,
             expect: "absent",
-            declares: tech,
+            declares: aliases,
           },
         ],
         node: {

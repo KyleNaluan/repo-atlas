@@ -12,7 +12,13 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { dedupeCandidateIds, PROBES, runProbes, treeContext } from "../../src/probes/registry.js";
+import {
+  dedupeCandidateFindings,
+  dedupeCandidateIds,
+  PROBES,
+  runProbes,
+  treeContext,
+} from "../../src/probes/registry.js";
 import { gate, gateCandidate } from "../../src/gate/gate.js";
 import {
   detectToolchains,
@@ -227,6 +233,47 @@ describe("the probe manifest", () => {
     // Only the colliding candidates are dropped; the untouched one survives.
     const survivors = cleaned.flatMap((o) => (o.status === "ran" ? o.candidates.map((c) => c.node.id) : []));
     expect(survivors).toEqual(["m-keep"]);
+  });
+
+  it("drops two candidates describing the same finding, though their ids differ", () => {
+    // The id guard cannot see this: two candidates with DISTINCT ids that assert
+    // the same (type, title) are one finding twice. The finding guard drops both
+    // and reports the pair; a genuinely different finding is untouched.
+    const edge = (id: string, title: string) => ({
+      type: "edge" as const,
+      kind: "divergence" as const,
+      id,
+      title,
+      statement: "s",
+      why_it_matters: "w",
+      how_to_say_it: "h",
+      evidence: [],
+      confidence: "verified" as const,
+      interview_value: 0,
+    });
+    const outcomes: ProbeOutcome[] = [
+      {
+        probe_id: "probe-one",
+        status: "ran",
+        candidates: [
+          { probe_id: "probe-one", node: edge("e-a", "The record names postgres") },
+          { probe_id: "probe-one", node: edge("e-distinct", "The record names redis") },
+        ],
+      },
+      {
+        probe_id: "probe-two",
+        status: "ran",
+        candidates: [{ probe_id: "probe-two", node: edge("e-b", "The record names postgres") }],
+      },
+    ];
+    const { outcomes: cleaned, collisions } = dedupeCandidateFindings(outcomes);
+    // Named by the (type, title) pair, with every probe that minted it.
+    expect(collisions).toEqual([
+      { type: "edge", title: "The record names postgres", probes: ["probe-one", "probe-two"] },
+    ]);
+    // Both duplicates are dropped; the similar-but-different finding survives.
+    const survivors = cleaned.flatMap((o) => (o.status === "ran" ? o.candidates.map((c) => c.node.id) : []));
+    expect(survivors).toEqual(["e-distinct"]);
   });
 });
 
@@ -693,6 +740,28 @@ describe("dependency-divergence", () => {
     expect(found.map((c) => c.node.id)).toEqual(["e-divergence-redis"]);
   }, 60_000);
 
+  it("emits ONE candidate for a technology the README spells with an overlapping alias", async () => {
+    // "PostgreSQL" is the common spelling and it contains "postgres", so a flat
+    // vocabulary carrying both would match twice and emit two divergence edges
+    // for one technology. Alias groups collapse that to a single candidate.
+    const ctx = contextFor({
+      "README.md": "Runs on PostgreSQL.\n",
+      "pom.xml": "<project><artifactId>app</artifactId></project>\n",
+    });
+    const found = await candidatesFrom("dependency-divergence", ctx);
+    expect(found.map((c) => c.node.id)).toEqual(["e-divergence-postgres"]);
+  }, 60_000);
+
+  it("does not diverge when the manifest declares the technology under another alias", async () => {
+    // A README saying "postgres" is satisfied by a dependency declared as
+    // "postgresql": one technology, one concept, on both sides of the group.
+    const ctx = contextFor({
+      "README.md": "Runs on Postgres.\n",
+      "pom.xml": "<project><artifactId>postgresql</artifactId></project>\n",
+    });
+    expect(await candidatesFrom("dependency-divergence", ctx)).toEqual([]);
+  }, 60_000);
+
   it("recognises a Gradle dependency declared under runtimeOnly", async () => {
     // The shared rule must know the standard Gradle configurations, not only
     // implementation/api/compile, or a driver declared under runtimeOnly reads
@@ -841,7 +910,7 @@ describe("the existence gate overturns the record in BOTH directions", () => {
     // build one by hand to exercise the overturn path against a real declaration.
     const candidate: Candidate = {
       probe_id: "dependency-divergence",
-      claims: [{ description: "docker is named but declared nowhere", expect: "absent", declares: "testcontainers" }],
+      claims: [{ description: "docker is named but declared nowhere", expect: "absent", declares: ["testcontainers"] }],
       node: {
         type: "edge",
         kind: "divergence",

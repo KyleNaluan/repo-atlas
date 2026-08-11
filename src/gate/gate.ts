@@ -70,14 +70,16 @@ const treeHas = (
     // Re-parse declared dependency names with the SAME rule the probe used, so
     // "declared" means one thing on both sides. A bare mention in a comment or a
     // transitive coordinate is not a declaration and must not settle the claim.
-    const tech = claim.declares;
+    // Any alias of the technology counts, so the group that governs the finding
+    // also governs its verification.
+    const aliases = claim.declares;
     let sawUnrecognized = false;
     for (const m of declaredManifests(ctx)) {
       if (!m.recognized) {
         sawUnrecognized = true;
         continue;
       }
-      if ([...m.names].some((n) => n.includes(tech))) where.push(m.path);
+      if ([...m.names].some((n) => aliases.some((a) => n.includes(a)))) where.push(m.path);
       if (where.length >= 5) break;
     }
     // A manifest the rule could not read might declare it; absence is unproven.

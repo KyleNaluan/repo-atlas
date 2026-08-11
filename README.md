@@ -10,7 +10,7 @@ Anything that could not be traced is cut, not hedged.
 On a repository with no decision record, the artifact says so - it never reconstructs a decision trail from commit archaeology.
 
 **Status: under construction.** The complete v1 design is closed on this tracker: issues [#1](https://github.com/KyleNaluan/repo-atlas/issues/1)-[#10](https://github.com/KyleNaluan/repo-atlas/issues/10), each with a binding `## Resolution:` comment recording the decision, the why, and the rejected alternatives.
-This build ships the `atlas.json` contract, the harvest stage, the probe library and its existence gate, the render stage, and the audit's deterministic passes with its stamp; the remaining extraction stages and the model pass land stage by stage.
+This build ships the `atlas.json` contract, the harvest stage, the probe library and its existence gate, the rank stage's deterministic half, the render stage, and the audit's deterministic passes with its stamp; the model scorer behind `rank` and the remaining extraction stages land stage by stage.
 
 ```
 npx repo-atlas harvest --clone ../subject -o harvest.json

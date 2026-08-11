@@ -22,7 +22,7 @@ import {
   StampError,
   withFailureBanner,
 } from "../../src/artifact/stamp.js";
-import { statement, warningCount } from "../../src/artifact/statement.js";
+import { badge, statement, warningCount } from "../../src/artifact/statement.js";
 import { REGISTER } from "../../src/audit/register.js";
 import { failed, notRun, passed } from "../../src/audit/types.js";
 import type { Atlas } from "../../src/schema/types.js";
@@ -180,6 +180,28 @@ describe("the four statement states", () => {
     expect(t).toContain("span.dim at 3.10:1");
     expect(t).toContain("a.sha at 4.20:1");
     expect(warningCount([warned])).toBe(2);
+  });
+
+  it("badge and statement pluralise the warning count by one rule, so they cannot disagree", () => {
+    // The two slots are stamped from one source precisely so they never diverge;
+    // compare them against each other, not each against a hardcoded expectation.
+    const pluralWord = (s: string): string => {
+      const m = s.match(/\b\d+ (warnings?)\b/);
+      if (m?.[1] === undefined) throw new Error(`no warning count in: ${s}`);
+      return m[1];
+    };
+    for (const n of [1, 2]) {
+      const warned = failed(
+        spec("V1"),
+        Array.from({ length: n }, (_, i) => `warning ${i + 1}`),
+      );
+      const count = warningCount([warned]);
+      expect(count).toBe(n);
+      const badgeWord = pluralWord(badge("passed_with_warnings", count).toString());
+      const statementWord = pluralWord(text("passed_with_warnings", [...allPassed, warned]));
+      expect(badgeWord).toBe(statementWord);
+      expect(badgeWord).toBe(n === 1 ? "warning" : "warnings");
+    }
   });
 
   it("tells the reader not to rely on a failed document, and why it exists", () => {

@@ -43,7 +43,9 @@ export const BADGE_TEXT: Record<AuditStatus, string> = {
 export const badge = (status: AuditStatus, warnings = 0): Safe => html`<a
   href="#audit-statement"
   class="${BADGE_CLASS[status]}"
-  >${status === "passed_with_warnings" ? `Audit: passed, ${warnings} warnings` : BADGE_TEXT[status]}</a
+  >${status === "passed_with_warnings"
+    ? `Audit: passed, ${warnings} ${plural(warnings, "warning", "warnings")}`
+    : BADGE_TEXT[status]}</a
 >`;
 
 export interface StatementInput {

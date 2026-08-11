@@ -113,35 +113,45 @@ export const openArtifact = async (
     },
   });
 
-  const page = await browser.newPage();
-  const requests: string[] = [];
-  const consoleLines: string[] = [];
-  const pageErrors: string[] = [];
+  // Everything after launch is guarded: a broken or hanging artifact - exactly
+  // the kind of subject an audit is pointed at - can make newPage or the 30s
+  // goto throw before the returned `close` is ever wired up, which would leak the
+  // Chrome process. Close it on any failure and let the original error propagate
+  // unchanged so the caller still learns what actually broke.
+  try {
+    const page = await browser.newPage();
+    const requests: string[] = [];
+    const consoleLines: string[] = [];
+    const pageErrors: string[] = [];
 
-  page.on("console", (message) => {
-    consoleLines.push(`${message.type()}: ${message.text()}`);
-  });
-  page.on("pageerror", (error: unknown) => {
-    pageErrors.push(error instanceof Error ? error.message : String(error));
-  });
+    page.on("console", (message) => {
+      consoleLines.push(`${message.type()}: ${message.text()}`);
+    });
+    page.on("pageerror", (error: unknown) => {
+      pageErrors.push(error instanceof Error ? error.message : String(error));
+    });
 
-  await page.setRequestInterception(true);
-  page.on("request", (request) => {
-    const url = request.url();
-    requests.push(url);
-    // The file itself is the only thing that may load. Everything else is
-    // aborted rather than allowed to fail slowly, and it is already counted.
-    if (url.startsWith("file://")) void request.continue();
-    else void request.abort();
-  });
+    await page.setRequestInterception(true);
+    page.on("request", (request) => {
+      const url = request.url();
+      requests.push(url);
+      // The file itself is the only thing that may load. Everything else is
+      // aborted rather than allowed to fail slowly, and it is already counted.
+      if (url.startsWith("file://")) void request.continue();
+      else void request.abort();
+    });
 
-  await page.goto(pathToFileURL(path).href, { waitUntil: "load", timeout: 30_000 });
+    await page.goto(pathToFileURL(path).href, { waitUntil: "load", timeout: 30_000 });
 
-  return {
-    page,
-    requests,
-    console: consoleLines,
-    pageErrors,
-    close: () => browser.close(),
-  };
+    return {
+      page,
+      requests,
+      console: consoleLines,
+      pageErrors,
+      close: () => browser.close(),
+    };
+  } catch (error) {
+    await browser.close().catch(() => {});
+    throw error;
+  }
 };

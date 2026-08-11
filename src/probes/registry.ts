@@ -19,6 +19,7 @@ import { repeatedSqlPredicates } from "./library/repeated-sql-predicates.js";
 import { sealedHierarchies } from "./library/sealed-hierarchies.js";
 import { throwWhereSiblingsReturn } from "./library/throw-where-siblings-return.js";
 import { tunedConfigProperties } from "./library/tuned-config-properties.js";
+import { parseJava, type SyntaxNode } from "./java.js";
 import { detectToolchains, type Probe, type ProbeContext, type ProbeOutcome } from "./types.js";
 import type { AtlasNode } from "../schema/types.js";
 import type { Harvest } from "../harvest/types.js";
@@ -51,21 +52,37 @@ export const treeContext = (harvest: Harvest, clone: string): ProbeContext => {
     .split("\n")
     .filter((l) => l.length > 0);
   const cache = new Map<string, string | null>();
+  const trees = new Map<string, Promise<SyntaxNode | null>>();
+  const read = (path: string): string | null => {
+    if (cache.has(path)) return cache.get(path) ?? null;
+    let text: string | null;
+    try {
+      text = git(clone, ["cat-file", "-p", `${sha}:${path}`]);
+    } catch {
+      text = null;
+    }
+    cache.set(path, text);
+    return text;
+  };
   return {
     harvest,
     clone,
     sha,
     paths,
-    read: (path) => {
-      if (cache.has(path)) return cache.get(path) ?? null;
-      let text: string | null;
-      try {
-        text = git(clone, ["cat-file", "-p", `${sha}:${path}`]);
-      } catch {
-        text = null;
-      }
-      cache.set(path, text);
-      return text;
+    read,
+    // Memoise parse trees alongside the read cache: the read cache dedupes file
+    // reads, but the parse tree is the expensive part, and three structural
+    // probes each iterate every .java path. Keyed by path, caching the promise
+    // so a second asker joins the first parse rather than starting another.
+    parse: (path) => {
+      const cached = trees.get(path);
+      if (cached) return cached;
+      const tree = (async (): Promise<SyntaxNode | null> => {
+        const source = read(path);
+        return source === null ? null : parseJava(source);
+      })();
+      trees.set(path, tree);
+      return tree;
     },
   };
 };

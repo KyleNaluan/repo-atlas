@@ -19,7 +19,6 @@ import {
   findAll,
   lineOf,
   nameOf,
-  parseJava,
 } from "../java.js";
 
 // Types in the same directory are the sibling set this probe compares. The
@@ -35,9 +34,8 @@ export const dependencyAsymmetry: Probe = {
     const byDir = new Map<string, { path: string; name: string; fields: Set<string>; line: [number, number] }[]>();
 
     for (const path of ctx.paths.filter((p) => p.endsWith(".java"))) {
-      const source = ctx.read(path);
-      if (source === null) continue;
-      const root = await parseJava(source);
+      const root = await ctx.parse(path);
+      if (root === null) continue;
       for (const decl of findAll(root, "class_declaration")) {
         const name = nameOf(decl);
         if (name === null) continue;

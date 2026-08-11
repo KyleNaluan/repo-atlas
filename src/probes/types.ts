@@ -18,6 +18,7 @@
  */
 import type { AtlasNode } from "../schema/types.js";
 import type { Harvest } from "../harvest/types.js";
+import type { SyntaxNode } from "./java.js";
 
 /** What a probe needs. Nothing here reaches the network or a model. */
 export interface ProbeContext {
@@ -29,6 +30,13 @@ export interface ProbeContext {
   paths: string[];
   /** Read one file at the pinned SHA, or null if it is not there. */
   read: (path: string) => string | null;
+  /**
+   * The parse tree of one file at the pinned SHA, or null if it is not there.
+   * Memoised by path, so three structural probes asking for the same file share
+   * one parse rather than reparsing the whole Java tree once each. Probes stay
+   * independent - they ask for a parse and get a cached one, never coordinating.
+   */
+  parse: (path: string) => Promise<SyntaxNode | null>;
 }
 
 /**

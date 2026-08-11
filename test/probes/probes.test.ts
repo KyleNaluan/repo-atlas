@@ -805,7 +805,8 @@ describe("dependency-divergence", () => {
   it("finds a technology the record names that the build does not declare", async () => {
     const ctx = contextFor({
       "README.md": "Runs on Postgres and Redis.\n",
-      "pom.xml": "<project><artifactId>postgresql</artifactId></project>\n",
+      "pom.xml":
+        "<project><dependencies><dependency><artifactId>postgresql</artifactId></dependency></dependencies></project>\n",
     });
     const found = await candidatesFrom("dependency-divergence", ctx);
     expect(found.map((c) => c.node.id)).toEqual(["e-divergence-redis"]);
@@ -817,7 +818,8 @@ describe("dependency-divergence", () => {
     // for one technology. Alias groups collapse that to a single candidate.
     const ctx = contextFor({
       "README.md": "Runs on PostgreSQL.\n",
-      "pom.xml": "<project><artifactId>app</artifactId></project>\n",
+      "pom.xml":
+        "<project><dependencies><dependency><artifactId>guava</artifactId></dependency></dependencies></project>\n",
     });
     const found = await candidatesFrom("dependency-divergence", ctx);
     expect(found.map((c) => c.node.id)).toEqual(["e-divergence-postgres"]);
@@ -828,7 +830,54 @@ describe("dependency-divergence", () => {
     // "postgresql": one technology, one concept, on both sides of the group.
     const ctx = contextFor({
       "README.md": "Runs on Postgres.\n",
-      "pom.xml": "<project><artifactId>postgresql</artifactId></project>\n",
+      "pom.xml":
+        "<project><dependencies><dependency><artifactId>postgresql</artifactId></dependency></dependencies></project>\n",
+    });
+    expect(await candidatesFrom("dependency-divergence", ctx)).toEqual([]);
+  }, 60_000);
+
+  it("does not treat an artifactId inside an XML comment as declared", async () => {
+    // A commented-out dependency is not a declaration. Reading it as one would be
+    // a false negative: the divergence a reviewer wants surfaced is silently
+    // suppressed, and nothing appears in the artifact to look at. A real
+    // dependency sits alongside so the build is not empty.
+    const ctx = contextFor({
+      "README.md": "Runs on Postgres.\n",
+      "pom.xml":
+        "<project><dependencies>" +
+        "<dependency><artifactId>guava</artifactId></dependency>" +
+        "<!-- <dependency><artifactId>postgresql</artifactId></dependency> -->" +
+        "</dependencies></project>\n",
+    });
+    const found = await candidatesFrom("dependency-divergence", ctx);
+    expect(found.map((c) => c.node.id)).toEqual(["e-divergence-postgres"]);
+  }, 60_000);
+
+  it("does not treat an artifactId inside a plugin block as declared", async () => {
+    // A build plugin sharing a name with a runtime dependency is not that
+    // dependency. Only <dependencies> declarations count; a real dependency
+    // sits alongside so the build is not empty.
+    const ctx = contextFor({
+      "README.md": "Runs on Postgres.\n",
+      "pom.xml":
+        "<project>" +
+        "<dependencies><dependency><artifactId>guava</artifactId></dependency></dependencies>" +
+        "<build><plugins><plugin><artifactId>postgresql</artifactId></plugin></plugins></build>" +
+        "</project>\n",
+    });
+    const found = await candidatesFrom("dependency-divergence", ctx);
+    expect(found.map((c) => c.node.id)).toEqual(["e-divergence-postgres"]);
+  }, 60_000);
+
+  it("treats a real dependency declaration as declared", async () => {
+    // The declaration that does count: an artifactId inside <dependencies>. A
+    // <parent> coordinate sharing no name and a plugin are ignored around it.
+    const ctx = contextFor({
+      "README.md": "Runs on Postgres.\n",
+      "pom.xml":
+        "<project><parent><artifactId>spring-boot-starter-parent</artifactId></parent>" +
+        "<dependencies><dependency><artifactId>postgresql</artifactId></dependency></dependencies>" +
+        "<build><plugins><plugin><artifactId>maven-surefire-plugin</artifactId></plugin></plugins></build></project>\n",
     });
     expect(await candidatesFrom("dependency-divergence", ctx)).toEqual([]);
   }, 60_000);
@@ -963,7 +1012,8 @@ describe("the existence gate overturns the record in BOTH directions", () => {
     const ctx = contextFor({
       "README.md": "Runs with Docker via Testcontainers.\n",
       "pom.xml":
-        "<project><artifactId>app</artifactId><!-- docker connectivity for testcontainers --></project>\n",
+        "<project><dependencies><dependency><artifactId>testcontainers</artifactId></dependency></dependencies>" +
+        "<!-- docker connectivity for testcontainers --></project>\n",
     });
     const [candidate] = await candidatesFrom("dependency-divergence", ctx);
     expect(candidate).toBeDefined();
@@ -975,7 +1025,8 @@ describe("the existence gate overturns the record in BOTH directions", () => {
     // diverge and the gate says so.
     const ctx = contextFor({
       "README.md": "Runs with Docker via Testcontainers.\n",
-      "pom.xml": "<project><artifactId>testcontainers</artifactId></project>\n",
+      "pom.xml":
+        "<project><dependencies><dependency><artifactId>testcontainers</artifactId></dependency></dependencies></project>\n",
     });
     // testcontainers is declared, so the probe never emits a docker divergence;
     // build one by hand to exercise the overturn path against a real declaration.

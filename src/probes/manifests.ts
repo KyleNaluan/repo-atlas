@@ -61,11 +61,20 @@ export const declaredIn = (manifest: string, text: string): DeclaredDeps => {
     }
   }
   if (manifest === "pom.xml") {
-    for (const m of text.matchAll(/<artifactId>([^<]+)<\/artifactId>/g)) {
-      names.add((m[1] ?? "").toLowerCase());
+    // Scanning every artifactId in the raw file counts a mention in an XML
+    // comment, a <plugin> or a <parent> as a declaration. Shared with the gate,
+    // that is not a spurious divergence but the quieter FALSE NEGATIVE: a
+    // commented-out or plugin-only dependency reads as declared and silently
+    // suppresses a genuine finding. So strip comments and collect artifactIds
+    // only from within <dependencies> blocks, where a real dependency lives.
+    const stripped = text.replace(/<!--[\s\S]*?-->/g, "");
+    for (const block of stripped.matchAll(/<dependencies\b[^>]*>([\s\S]*?)<\/dependencies>/g)) {
+      for (const m of (block[1] ?? "").matchAll(/<artifactId>([^<]+)<\/artifactId>/g)) {
+        names.add((m[1] ?? "").toLowerCase());
+      }
     }
     // A pom without a single artifactId is not maven as this rule understands it.
-    return { names, recognized: /<artifactId>/.test(text) };
+    return { names, recognized: /<artifactId>/.test(stripped) };
   }
   // Gradle (build.gradle or build.gradle.kts).
   for (const m of text.matchAll(GRADLE_DEP)) {

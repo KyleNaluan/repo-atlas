@@ -12,7 +12,7 @@
  */
 import type { Candidate, Probe } from "../types.js";
 import { pathSlug, slug } from "../id.js";
-import { enclosingTypeNames, endLineOf, findAll, lineOf, nameOf, parseJava } from "../java.js";
+import { enclosingTypeNames, endLineOf, findAll, lineOf, nameOf } from "../java.js";
 
 export const sealedHierarchies: Probe = {
   id: "sealed-hierarchies",
@@ -23,7 +23,8 @@ export const sealedHierarchies: Probe = {
     for (const path of ctx.paths.filter((p) => p.endsWith(".java"))) {
       const source = ctx.read(path);
       if (source === null || !source.includes("permits")) continue;
-      const root = await parseJava(source);
+      const root = await ctx.parse(path);
+      if (root === null) continue;
 
       for (const type of [
         ...findAll(root, "interface_declaration"),

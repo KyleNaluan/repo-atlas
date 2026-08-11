@@ -23,7 +23,6 @@ import {
   lineOf,
   nameOf,
   paramTypesOf,
-  parseJava,
   supertypeNamesOf,
   type SyntaxNode,
 } from "../java.js";
@@ -134,9 +133,8 @@ export const throwWhereSiblingsReturn: Probe = {
     }[] = [];
 
     for (const path of ctx.paths.filter((p) => p.endsWith(".java"))) {
-      const source = ctx.read(path);
-      if (source === null) continue;
-      const root = await parseJava(source);
+      const root = await ctx.parse(path);
+      if (root === null) continue;
       for (const name of declaredTypeNames(root)) declared.add(name);
       for (const method of findAll(root, "method_declaration")) {
         const name = nameOf(method);

@@ -122,17 +122,29 @@ const runJudgements = async (
     return passed(spec(id), 0);
   }
 
-  // Evidence is resolved BEFORE the judge try, deliberately. Resolution reads
-  // git (blobAt), which can throw a GitError - a claim about the audit's own
-  // filesystem, never about the model. Caught by the try below it would be
-  // mislabelled as the model becoming unreachable; left outside, a git failure
-  // propagates as itself, exactly the misattribution discipline this pass keeps.
-  const judgements = nodes.map((node) => ({
-    node,
-    evidence: node.evidence
-      .map((e) => ({ citation: citationOf(e), text: options.resolve(e) }))
-      .filter((e): e is { citation: string; text: string } => e.text !== undefined),
-  }));
+  // Evidence is resolved in its OWN try, before the judge's, deliberately.
+  // Resolution reads git (blobAt), which can throw a GitError - a claim about the
+  // audit's own filesystem, never about the model. Sharing the judge's catch
+  // would mislabel it as the model becoming unreachable; letting it propagate
+  // would hand it to the run's boundary, which quarantines a throw as a
+  // precondition failure - and pass D must never fail an artifact. So a resolve
+  // failure is caught here and reported not_run, by name, with the git cause.
+  let judgements: { node: AtlasNode; evidence: { citation: string; text: string }[] }[];
+  try {
+    judgements = nodes.map((node) => ({
+      node,
+      evidence: node.evidence
+        .map((e) => ({ citation: citationOf(e), text: options.resolve(e) }))
+        .filter((e): e is { citation: string; text: string } => e.text !== undefined),
+    }));
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    return notRun(
+      spec(id),
+      `a node's evidence could not be read from the local clone (${message}), ` +
+        `and the model pass never decides whether an artifact ships`,
+    );
+  }
 
   const judge = options.judge;
   const findings: string[] = [];

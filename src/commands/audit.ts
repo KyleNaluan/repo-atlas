@@ -23,7 +23,7 @@ import { fileIssueCache } from "../harvest/cache.js";
 import { GhError, getIssue } from "../harvest/gh.js";
 import { harvestIssue } from "../harvest/issues.js";
 import { sdkJudge } from "../audit/judge.js";
-import { blobAt } from "../audit/git.js";
+import { blobAt, sliceLines } from "../audit/git.js";
 import type { AuditContext, CheckResult } from "../audit/types.js";
 import type { AuditRecord } from "../schema/types.js";
 
@@ -141,12 +141,20 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
             : {
                 model: {
                   judge: sdkJudge,
-                  resolve: (e) =>
-                    e.kind === "file"
-                      ? (blobAt(ctx.clone, ctx.atlas.subject.sha, e.path) ?? undefined)
-                      : e.kind === "command"
-                        ? e.output_excerpt
-                        : undefined,
+                  // Resolve a file citation to its CITED SPAN, not the whole file:
+                  // the line range is what pins the claim (git.ts), and the judge
+                  // truncates long text, so handing it the file head would grade a
+                  // citation past that head against the wrong region. Fall back to
+                  // the whole blob only when the citation names no line range.
+                  resolve: (e) => {
+                    if (e.kind === "command") return e.output_excerpt;
+                    if (e.kind !== "file") return undefined;
+                    const blob = blobAt(ctx.clone, ctx.atlas.subject.sha, e.path);
+                    if (blob === null) return undefined;
+                    return e.line_start === undefined
+                      ? blob
+                      : sliceLines(blob, e.line_start, e.line_end);
+                  },
                 },
               }),
         });

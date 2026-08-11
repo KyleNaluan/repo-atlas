@@ -8,6 +8,17 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Judge, JudgeRequest, Verdict } from "./checks/model.js";
 
+const EXCERPT_LIMIT = 4000;
+
+// Show the model at most EXCERPT_LIMIT characters of an evidence text, but never
+// let a shortened excerpt read as the whole thing: a truncated span presented as
+// complete would have the judge weigh prose against evidence it was not actually
+// shown. When it truncates, it says so and by how much.
+const excerpt = (text: string): string =>
+  text.length <= EXCERPT_LIMIT
+    ? text
+    : `${text.slice(0, EXCERPT_LIMIT)}\n[... truncated; ${text.length - EXCERPT_LIMIT} more characters not shown]`;
+
 const prompt = (request: JudgeRequest, question: string): string => `${question}
 
 Return ONLY a JSON object, no prose and no code fence:
@@ -22,7 +33,7 @@ ${JSON.stringify(request.node, null, 1)}
 --- END NODE ---
 
 --- ITS OWN CITED EVIDENCE ---
-${request.evidence.map((e) => `[${e.citation}]\n${e.text.slice(0, 4000)}`).join("\n\n") || "(none resolved)"}
+${request.evidence.map((e) => `[${e.citation}]\n${excerpt(e.text)}`).join("\n\n") || "(none resolved)"}
 --- END EVIDENCE ---`;
 
 export const sdkJudge: Judge = async (request, question): Promise<Verdict> => {

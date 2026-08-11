@@ -29,6 +29,7 @@ import {
   type Judge,
 } from "../../src/audit/checks/model.js";
 import { runPassD } from "../../src/audit/pass-d.js";
+import { GitError } from "../../src/audit/git.js";
 import { runLaterPasses } from "../../src/audit/run.js";
 import { GATES } from "../../src/audit/register.js";
 import type { AuditContext, CheckResult } from "../../src/audit/types.js";
@@ -236,6 +237,31 @@ describe("pass D judges each node alone", () => {
     const result = await proseSupport(atlas.nodes, resolveNothing);
     expect(result.outcome).toBe("not_run");
     expect(result.reason).toMatch(/never decides whether an artifact ships/);
+  });
+
+  it("reports not run naming the git cause when evidence cannot be resolved", async () => {
+    // Resolving evidence reads git, which can throw. That is a claim about the
+    // audit's own clone, never about the model, so it must not be labelled as the
+    // model becoming unreachable, must not crash out to the run's boundary, and
+    // must never fail the artifact. The judge is not even reached.
+    let judgeCalls = 0;
+    const judge: Judge = async () => {
+      judgeCalls += 1;
+      return { supported: true, note: "n" };
+    };
+    const result = await proseSupport(atlas.nodes, {
+      judge,
+      resolve: () => {
+        throw new GitError("git cat-file -p abc123:Foo.java could not run in /clone");
+      },
+    });
+    expect(judgeCalls).toBe(0);
+    expect(result.outcome).toBe("not_run");
+    expect(result.aborted).toBeUndefined();
+    expect(result.reason).toContain("could not be read from the local clone");
+    expect(result.reason).toContain("git cat-file");
+    // The honest cause, not the wrong one: a git failure is not a dead model.
+    expect(result.reason).not.toMatch(/became unreachable|after judging/);
   });
 
   it("describes each citation so a warning names where it came from", () => {

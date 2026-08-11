@@ -109,3 +109,13 @@ export const lineCount = (contents: string): number => {
   if (lines[lines.length - 1] === "") lines.pop();
   return lines.length;
 };
+
+/**
+ * The 1-based, inclusive line span `start..end` of a blob (end defaults to start
+ * for a single-line citation). The line range is the part of a file citation
+ * that pins the claim, so a model judging that citation must be shown that span
+ * and not the file's head - a claim about `Foo.java:250-260` weighed against the
+ * first 4000 characters of a 500-line file grades the wrong region.
+ */
+export const sliceLines = (contents: string, start: number, end?: number): string =>
+  contents.split("\n").slice(start - 1, end ?? start).join("\n");

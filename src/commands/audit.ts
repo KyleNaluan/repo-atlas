@@ -208,7 +208,7 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
         ...(c.findings === undefined ? {} : { findings: c.findings }),
         ...(c.reason === undefined ? {} : { reason: c.reason }),
       })),
-      ...(argv.includes("--no-browser") ? {} : { viewports: declaredViewports() }),
+      ...((outcome.measurements?.length ?? 0) > 0 ? { viewports: declaredViewports() } : {}),
     };
     const mirrored = { ...ctx.atlas, record: { ...ctx.atlas.record, audit: record } };
     writeFileSync(atlasPath, `${JSON.stringify(mirrored, null, 2)}\n`, "utf8");

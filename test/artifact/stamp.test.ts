@@ -24,7 +24,7 @@ import {
 } from "../../src/artifact/stamp.js";
 import { badge, statement, warningCount } from "../../src/artifact/statement.js";
 import { REGISTER } from "../../src/audit/register.js";
-import { failed, notRun, passed } from "../../src/audit/types.js";
+import { aborted, failed, notRun, passed } from "../../src/audit/types.js";
 import type { Atlas } from "../../src/schema/types.js";
 import type { CheckResult } from "../../src/audit/types.js";
 
@@ -209,6 +209,37 @@ describe("the four statement states", () => {
     expect(t).toContain("Do not rely on this document");
     expect(t).toContain("AttemptService.java:141-150 does not exist");
     expect(t).toContain("was not emitted as the engine's output");
+  });
+
+  it("names an aborted warning check on a failed run, and never claims no finding", () => {
+    // A visual check that throws makes the run failed, but it is warning-class,
+    // so enumerating only gate failures would drop it: the page would then claim
+    // zero failures and no recorded finding while a real "could not run" exists.
+    const checks = [...allPassed, aborted(spec("V1"), new Error("page context destroyed"))];
+    const t = text("failed", checks);
+    expect(t).toMatch(/^Audit: FAILED\./);
+    expect(t).toContain("1 hard check did not pass");
+    expect(t).toContain("could not run at all");
+    expect(t).toContain("V1");
+    expect(t).toContain("page context destroyed");
+    expect(t).not.toContain("No individual finding was recorded");
+  });
+
+  it("labels a gate failure and an aborted check distinctly, and counts both", () => {
+    // The two mean different things to a reader deciding whether to trust the
+    // page: a gate failure is an untrue claim, an abort is a check that could not
+    // run. The headline count must equal what is enumerated.
+    const checks = [
+      failed(spec("L1"), ["AttemptService.java:141-150 does not exist"]),
+      aborted(spec("V2"), new Error("browser died mid-run")),
+    ];
+    const t = text("failed", checks);
+    expect(t).toContain("2 hard checks did not pass");
+    expect(t).toContain("makes at least one claim that could not be verified");
+    expect(t).toContain("could not run at all");
+    expect(t).toContain("AttemptService.java:141-150 does not exist");
+    expect(t).toContain("browser died mid-run");
+    expect(t).not.toContain("No individual finding was recorded");
   });
 
   it("does not print a hash claim on a failed artifact", () => {

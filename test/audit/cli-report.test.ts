@@ -14,7 +14,7 @@
  * pass-b-boundary.test.ts.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { copyFileSync, mkdtempSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,7 +27,9 @@ vi.mock("../../src/audit/run.js", () => ({
 import { auditCommand } from "../../src/commands/audit.js";
 import { runAudit, type AuditOutcome } from "../../src/audit/run.js";
 import { REGISTER } from "../../src/audit/register.js";
-import { passed, notRun } from "../../src/audit/types.js";
+import { failed, passed, notRun } from "../../src/audit/types.js";
+import { VIEWPORTS, type ViewportMeasurement } from "../../src/audit/checks/visual.js";
+import type { Atlas } from "../../src/schema/types.js";
 
 const dir = mkdtempSync(join(tmpdir(), "repo-atlas-cli-report-"));
 
@@ -83,6 +85,17 @@ const midRun: AuditOutcome = {
   notes: [],
 };
 
+// A run where pass B completed carries a measurement per declared viewport;
+// that is the evidence the layout checks actually ran at those widths.
+const measurements: ViewportMeasurement[] = VIEWPORTS.map((width) => ({
+  width,
+  scrollWidth: width,
+  clientWidth: width,
+  overflowing: [],
+  clipped: [],
+  lowContrast: [],
+}));
+
 const passing: AuditOutcome = {
   status: "passed",
   checks: REGISTER.map((s) =>
@@ -90,7 +103,28 @@ const passing: AuditOutcome = {
   ),
   preconditions: [],
   notes: [],
+  measurements,
 };
+
+// Pass A failed at a gate, so pass B never launched: the run is failed but not a
+// precondition failure, and it carries no measurements. The stamp and record
+// path is still reached, and the record must not claim the layout checks ran.
+const passAGateFailed: AuditOutcome = {
+  status: "failed",
+  failure_kind: "gate",
+  checks: REGISTER.map((s) =>
+    s.id === "L1"
+      ? failed(s, ["AttemptService.java:141-150 does not exist"])
+      : s.pass === "A"
+        ? passed(s)
+        : notRun(s, "pass A stopped at an earlier gate failure"),
+  ),
+  preconditions: [],
+  notes: [],
+};
+
+const recordedViewports = (): number[] | undefined =>
+  (JSON.parse(readFileSync(atlasFixture, "utf8")) as Atlas).record.audit?.viewports;
 
 describe("repo-atlas audit reports what it established", () => {
   it("prints only the precondition problems on a pre-flight failure and exits 78", async () => {
@@ -129,5 +163,24 @@ describe("repo-atlas audit reports what it established", () => {
     expect(code).toBe(0);
     expect(err.join("\n")).not.toContain("precondition");
     expect(out.join("\n")).toMatch(/^passed: \d+ of \d+ hard gates passed$/m);
+  });
+});
+
+describe("record.viewports records only the widths the layout checks ran at", () => {
+  it("records the declared viewport matrix when pass B ran", async () => {
+    vi.mocked(runAudit).mockResolvedValue(passing);
+    const code = await auditCommand(argv);
+    expect(code).toBe(0);
+    expect(recordedViewports()).toEqual([...VIEWPORTS]);
+  });
+
+  it("records no viewports when pass A failed before pass B ran", async () => {
+    // A failed run still reaches the stamp and record path; keying viewports on
+    // the absence of --no-browser would falsely record all four while V1-V3 are
+    // not_run. --out keeps the failed copy off the shared stub.
+    vi.mocked(runAudit).mockResolvedValue(passAGateFailed);
+    const code = await auditCommand([...argv, "--out", join(dir, "failed-out.html")]);
+    expect(code).toBe(1);
+    expect(recordedViewports()).toBeUndefined();
   });
 });

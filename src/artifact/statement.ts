@@ -67,7 +67,10 @@ const gatesPassed = (checks: CheckResult[]): CheckResult[] =>
   checks.filter((c) => c.class === "gate" && c.outcome === "passed");
 
 const gatesFailed = (checks: CheckResult[]): CheckResult[] =>
-  checks.filter((c) => c.class === "gate" && c.outcome === "failed");
+  checks.filter((c) => c.class === "gate" && c.outcome === "failed" && c.aborted !== true);
+
+const abortedChecks = (checks: CheckResult[]): CheckResult[] =>
+  checks.filter((c) => c.outcome === "failed" && c.aborted === true);
 
 const warningsFailed = (checks: CheckResult[]): CheckResult[] =>
   checks.filter((c) => c.class === "warning" && c.outcome === "failed");
@@ -214,17 +217,34 @@ const passedWithWarningsStatement = (input: StatementInput): Safe => {
  * quoted or presented.
  */
 const failedStatement = (input: StatementInput): Safe => {
-  const failed = gatesFailed(input.checks);
-  const findings = failed.flatMap((c) => c.findings ?? []);
+  const gates = gatesFailed(input.checks);
+  const aborts = abortedChecks(input.checks);
+  const blocking = [...gates, ...aborts];
+  const findings = blocking.flatMap((c) => c.findings ?? []);
   return join([
     html`<p>
       <b>Audit: FAILED. Do not rely on this document.</b>
-      ${failed.length} hard ${plural(failed.length, "check", "checks")} did not pass, which means
-      this page makes at least one claim that could not be verified.
+      ${blocking.length} hard ${plural(blocking.length, "check", "checks")} did not pass, so this
+      document was not cleared.
     </p>`,
-    html`<ul>
-      ${findingList(failed)}
-    </ul>`,
+    gates.length === 0
+      ? html``
+      : html`<p>
+            ${gates.length} ${plural(gates.length, "check", "checks")} failed, which means this page
+            makes at least one claim that could not be verified:
+          </p>
+          <ul>
+            ${findingList(gates)}
+          </ul>`,
+    aborts.length === 0
+      ? html``
+      : html`<p>
+            ${aborts.length} ${plural(aborts.length, "check", "checks")} could not run at all, and a
+            check that could not run can never leave this page cleared:
+          </p>
+          <ul>
+            ${findingList(aborts)}
+          </ul>`,
     findings.length === 0
       ? html`<p>
           No individual finding was recorded, which is itself a defect in this run: a failure that

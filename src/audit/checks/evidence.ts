@@ -108,20 +108,24 @@ export const resolveFileEvidence = (ctx: AuditContext): [CheckResult, CheckResul
   // - Ranges declared but not one of their paths resolved: L2 examined nothing,
   //   so it still cannot claim a pass, and its reason must be the real one - the
   //   unresolved paths - never "no ranges exist" (see L1 for those paths).
+  // - Some declared ranges resolved and some did not: L2 reports on the subset it
+  //   examined but must NAME the shortfall, so a reduced count is never read as
+  //   full coverage. L2 may never claim coverage it did not have, regardless of
+  //   the fact that any unresolved path already fails L1 and blocks the verdict.
   // - Otherwise L2 reports on the ranges it actually examined; the count never
   //   claims coverage it did not have.
+  const shortfall = `${unresolvedRanges.length} of ${declaredRanges} declared line range(s) could not be checked because their paths did not resolve at ${ctx.atlas.subject.sha}; see L1: ${unresolvedRanges.slice(0, 20).join("; ")}`;
   let l2: CheckResult;
   if (declaredRanges === 0) {
     l2 = notApplicable(spec("L2"), "the graph cites files but none carry a line range to resolve");
   } else if (examinedRanges === 0) {
-    l2 = notApplicable(
-      spec("L2"),
-      `${declaredRanges} declared line range(s) could not be checked because their paths did not resolve at ${ctx.atlas.subject.sha}; see L1: ${unresolvedRanges.slice(0, 20).join("; ")}`,
-    );
-  } else if (outOfRange.length === 0) {
-    l2 = passed(spec("L2"), examinedRanges);
-  } else {
+    l2 = notApplicable(spec("L2"), shortfall);
+  } else if (outOfRange.length > 0) {
     l2 = failed(spec("L2"), outOfRange, examinedRanges);
+  } else if (unresolvedRanges.length > 0) {
+    l2 = { ...passed(spec("L2"), examinedRanges), reason: shortfall };
+  } else {
+    l2 = passed(spec("L2"), examinedRanges);
   }
 
   return [l1, l2];

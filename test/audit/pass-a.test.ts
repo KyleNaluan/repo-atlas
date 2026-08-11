@@ -357,6 +357,17 @@ describe("L2 when the graph declares ranges but their paths do not resolve", () 
     expect(l2.count ?? 0).toBeGreaterThan(0);
     // Fewer ranges examined than the clean run: L2 never claims coverage it lost.
     expect(l2.count ?? 0).toBeLessThan(examinedAll);
+    // ...and it says so: a reduced count is never left to read as full coverage.
+    expect(l2.reason).toMatch(/could not be checked because their paths did not resolve/);
+    expect(l2.reason).toMatch(/\d+ of \d+ declared line range/);
+  });
+
+  it("(c) partial: a clean full run carries no coverage-shortfall reason", () => {
+    // The shortfall note appears only when coverage was actually lost, so a fully
+    // resolved graph passes with no reason attached.
+    const l2 = resolveFileEvidence(clean)[1];
+    expect(l2.outcome).toBe("passed");
+    expect(l2.reason).toBeUndefined();
   });
 });
 

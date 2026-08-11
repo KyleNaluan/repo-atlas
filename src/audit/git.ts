@@ -53,27 +53,23 @@ export const isShallow = (path: string): boolean =>
   git(path, ["rev-parse", "--is-shallow-repository"]).trim() === "true";
 
 /**
- * Whether `path` exists in the tree at `sha`, decided by git's exit code alone.
+ * Verify the pinned commit is present and readable, once per (repo, sha).
  *
- * `git cat-file -e` exits zero when the object exists and non-zero when it does
- * not, printing nothing either way - so the answer never depends on parsing a
- * (translated) error message. A non-numeric status means git could not run at
- * all (binary missing, repository unreadable); that is a precondition failure,
- * not an absent path, so it throws rather than silently reading as "missing".
+ * The pinned commit is the same for every citation in a run, so verifying it is
+ * loop-invariant: a graph with 66 citations should spawn one rev-parse, not 66.
+ * The check is remembered the first time it holds rather than re-run per blob.
+ * It stays load-bearing - it is what lets a non-zero `cat-file` exit in `blobAt`
+ * be read as "path absent" rather than "commit absent" - so it still runs before
+ * any blob is read (#8: a bad object is a precondition finding, never a false
+ * citation). A bad object throws GitError before the set is updated.
  */
-const pathExistsAt = (repo: string, sha: string, path: string): boolean => {
-  try {
-    execFileSync("git", ["cat-file", "-e", `${sha}:${path}`], {
-      cwd: repo,
-      stdio: "ignore",
-      env: GIT_ENV,
-    });
-    return true;
-  } catch (cause) {
-    const status = (cause as { status?: number | null }).status;
-    if (typeof status === "number") return false;
-    throw new GitError(`git cat-file -e ${sha}:${path} could not run in ${repo}: ${String(cause)}`);
-  }
+const verifiedCommits = new Set<string>();
+
+const verifyCommit = (repo: string, sha: string): void => {
+  const key = `${repo}\0${sha}`;
+  if (verifiedCommits.has(key)) return;
+  git(repo, ["rev-parse", "--verify", `${sha}^{commit}`]);
+  verifiedCommits.add(key);
 };
 
 /**
@@ -82,14 +78,28 @@ const pathExistsAt = (repo: string, sha: string, path: string): boolean => {
  * The distinction is load-bearing and must not turn on locale: a missing path
  * is a finding about the artifact (L1 records a false citation), while anything
  * else is a finding about the audit's own preconditions. So the commit is
- * verified first (a bad object throws GitError, a precondition finding), and
- * whether the path exists is then read from `git cat-file -e`'s exit code, never
- * from its message text. Only once existence is established is the blob read.
+ * verified first (a bad object throws GitError, a precondition finding), and the
+ * read itself then answers whether the path exists - `git cat-file -p` exits
+ * non-zero with a numeric status when the path is absent from the tree, which is
+ * read as "missing" (null); a non-numeric status means git could not run at all
+ * (binary missing, repository unreadable) and throws. No separate existence
+ * probe, and never a decision made by parsing a (translated) message.
  */
 export const blobAt = (repo: string, sha: string, path: string): string | null => {
-  git(repo, ["rev-parse", "--verify", `${sha}^{commit}`]);
-  if (!pathExistsAt(repo, sha, path)) return null;
-  return git(repo, ["cat-file", "-p", `${sha}:${path}`]);
+  verifyCommit(repo, sha);
+  try {
+    return execFileSync("git", ["cat-file", "-p", `${sha}:${path}`], {
+      cwd: repo,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: GIT_ENV,
+    });
+  } catch (cause) {
+    const status = (cause as { status?: number | null }).status;
+    if (typeof status === "number") return null;
+    throw new GitError(`git cat-file -p ${sha}:${path} could not run in ${repo}: ${String(cause)}`);
+  }
 };
 
 /** Line count of a blob, counting a trailing newline as ending the last line. */

@@ -59,6 +59,16 @@ The existence gate runs in **both directions** (#7 point 7), and the single-dire
 
 `assets/tree-sitter-java.wasm` is vendored deliberately. The only npm package shipping a prebuilt Java grammar bundles ~40 of them at 50 MB for one 430 KB file, which is not a defensible npx footprint. `web-tree-sitter` is pinned to the ABI that grammar was built against - **the two move together or not at all**.
 
+## Ranking
+
+`rubric/interview-v1.md` is a **prompt asset**, versioned and changed only by commit (#9). Per-project overrides are data and may pin, boost or suppress; they may not rewrite the rubric. Every override carries a required `why`, because the file is also the calibration record for future rubric revisions.
+
+`src/rank/rank.ts` is the **only** place deletion happens. Both mechanisms are required - floor and per-section budgets - and every cut is recorded with id, score and reason for #8's G2.
+
+Scoring sits behind the `Scorer` seam in `src/rank/scorer.ts` and is deliberately unwired: #2 puts it behind a model, and how that is credentialed and verified in CI is an open decision. `rank --scores` reads them from a file, which is neutral about what fills it.
+
+Note on the reference fixture: `test/fixtures/swe-prep.atlas.json` keeps two nodes scored below the floor its own deletion record states, because its scores are hand-authored rather than model-produced (see #7's report). The resolution governs over the fixture; the discrepancy is pinned by a test in `test/rank/rank.test.ts` rather than accommodated.
+
 ## The audit's two standing rules
 
 - **No check ships without a mutant fixture proving it fails** (#8). `test/mutants/` holds one deliberately-broken artifact per check, and `test/audit/pass-a.test.ts` asserts each check rejects its own mutant and only its own. A check that has never been watched fail is a check nobody knows works.

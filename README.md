@@ -58,6 +58,20 @@ On the reference subject the gate overturns an open ticket for a "second languag
 A confirmed contradiction becomes a `divergence` edge rather than being dropped - the record and the build disagreeing is the finding, not noise to filter.
 A claim nothing in the tree can settle is demoted rather than admitted, because a claim nobody checked must never arrive looking checked.
 
+## Ranking, and what gets cut
+
+`interview_value` is the only pure-judgement field in the contract, and it is the field that makes the output usable: fourteen packages, twenty endpoints and forty-eight issues all "deserve" a mention, and almost none do.
+
+The rubric is a written, versioned prompt asset at [`rubric/interview-v1.md`](rubric/interview-v1.md).
+It changes by commit, never per run.
+A project may pin, boost or suppress specific nodes through config - that is data - but it cannot rewrite the rubric, so runs stay reproducible and the override file doubles as the record of where a human disagreed.
+
+Deletion uses two mechanisms, and needs both: a hard value floor, because budgets alone let weak nodes fill an under-subscribed section, and per-section budgets, because a floor alone caps nothing when everything scores mid-range.
+**Every deletion is recorded** with its id, score and reason.
+That record is what makes the ruthlessness defensible rather than arbitrary, and the audit checks it, so the renderer cannot quietly resurrect something the rank stage cut.
+
+This is the only stage that deletes. The renderer renders everything it is handed, or it becomes a second authority over what survives.
+
 ## The artifact
 
 One HTML file, nine sections, zero external requests: what this is, the interviewer Q&A index, the real shape, one flow end to end, the decision trail, ranked deep dives, honest edges, the record, and a generated source index.

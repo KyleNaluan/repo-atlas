@@ -1,0 +1,405 @@
+{
+  "prompt_version": "v1",
+  "prompt_sha256": "e646d4e36a97c38e",
+  "generated_at": "2026-08-11T18:42:52.571Z",
+  "model": "claude-fable-5",
+  "subject_sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+  "decisions": [
+    {
+      "issue": 2,
+      "comment_id": 5181222288,
+      "written": {
+        "admissible": true,
+        "title": "Runtime shape and stack: a local Spring Boot web app",
+        "question": "Where does swe-prep run, and what is it built with - the shape (local web app, desktop app, CLI/TUI), where state lives, and the stack - weighed primarily against time-to-first-keystroke and secondarily against being credible portfolio evidence?",
+        "decision": "A local web app on the captain's existing stack: Spring Boot 3.4.3 on Java 21 (Spring Web, Data JPA, Actuator, Lombok), Postgres, React + Vite, and Monaco for the editor, reused from the Team-7-Banking-Application repo. It autostarts via a systemd user unit, is reached over the tailnet via Tailscale, and hosting later is protected but not built: Postgres from the start, the runner behind an interface, and a user id modeled from day one with exactly one seeded user and no authentication.",
+        "why": "The shape is decided by domain coverage, not friction: front-end practice requires rendering and asserting in a browser, which only a web app can hold without a second platform later. The friction weakness of a web app is answered by systemd autostart, making time-to-first-keystroke one click with no cold start. Reusing the banking-app stack removes learning cost and stack-selection risk, and a Spring Boot backend is itself portfolio evidence since entry-level Java postings screen for it. The three hosting-later decisions cost nothing today: Postgres avoids a migration, the runner interface lets a container runner be swapped in rather than rewritten, and carrying a user id from the start makes adding auth roughly a day's work instead of a refactor that touches every table and query. Building login now would put a screen between the captain and the daily drill, adding friction to the one thing meant to remove it.",
+        "rejected": [
+          {
+            "alternative": "A CLI/TUI",
+            "why_it_lost": "It can never render and assert in a browser, so it cannot grade front-end practice - even though the record concedes a TUI would genuinely have had the lowest friction for a heavy terminal user."
+          },
+          {
+            "alternative": "A desktop app",
+            "why_it_lost": "It would have to embed a browser to fake the front-end grading a web app gets natively, meaning a second platform later."
+          },
+          {
+            "alternative": "SQLite instead of Postgres",
+            "why_it_lost": "Its only real advantage was needing no service, which is worth little against Postgres already being configured and behind JPA, and it would force a database migration if the app is ever hosted."
+          },
+          {
+            "alternative": "Building authentication now",
+            "why_it_lost": "The expensive part of auth is the schema, which the seeded user id already solves, and a login screen would add friction to a tool whose entire purpose is removing friction."
+          },
+          {
+            "alternative": "Hosting now",
+            "why_it_lost": "The captain does not need hosted access today; Tailscale is already working and covers the real cases at zero cost, with the accepted limitation that the PC must be on."
+          }
+        ],
+        "rejected_absent_from_record": false,
+        "status": "decided",
+        "soundbite": "It runs locally as a Spring Boot web app on Java 21 with Postgres, React, and Monaco, autostarted and reached over the tailnet, with hosting kept cheap for later rather than built now.",
+        "implementation_claim": {
+          "description": "A Spring Boot 3.4.3 / Java 21 backend with Data JPA against Postgres, a React + Vite front end using Monaco, a runner behind an interface rather than called directly, and person-owned tables carrying a user id with exactly one seeded user and no login, session, or Spring Security wiring.",
+          "expect": "present",
+          "paths": [
+            "pom.xml",
+            "src/main/java",
+            "src/main/resources/application.properties",
+            "frontend/package.json"
+          ],
+          "pattern": {
+            "regex": "spring-boot-starter",
+            "include": "pom.xml"
+          }
+        }
+      }
+    },
+    {
+      "issue": 3,
+      "comment_id": 5180801286,
+      "written": {
+        "admissible": true,
+        "title": "Three-tier daily session with a small required core",
+        "question": "What one daily session looks like: how long it takes, how many exercises it contains, what happens on a wrong answer or when stuck, what 'done for today' means, whether it is a fixed daily serving or an open-ended practice surface, and whether partial completion counts - given that a hard algorithm problem might take 40 minutes, which sits awkwardly with a short daily serving.",
+        "decision": "The session is three tiers, and only the first is required: a warm-up of about 8 quick recall and recognition reps taking about 4 minutes, which alone completes the day; an optional main exercise of one full problem at roughly 30 minutes; and an open continuation with no cap. The session shape is domain-agnostic - warm-up reps and main exercises draw from whatever domains are active, and nothing in the session shape may assume the content is an algorithm problem, as a hard requirement on the exercise abstraction. A wrong warm-up rep is corrected immediately and re-queued later in the same session. A stuck main exercise gets a hint ladder the user chooses to climb - pattern name, approach, key insight, solution - with every rung recorded. Done for today means warm-up complete. Partial completion counts for the streak; an abandoned exercise is recorded as abandoned for the scheduler rather than discarded.",
+        "why": "The minimum session has to be small enough that it is never skipped, because bad days are the only days that matter - good days were never the problem - and one skip usually ends the habit. The warm-up is not filler: pattern recognition is the highest-value-per-minute training for entry-level interviews, and the main exercises are how recognition converts into execution. Separating the streak (showing up) from the exercises (improving) keeps a self-imposed streak from feeling fake, since a single-player streak has no external enforcement. Hint rungs are recorded because 'solved after three hints' and 'solved cold' are different data points the scheduler needs to tell apart. Calibration with the captain confirmed the warm-up reads as genuinely valuable and four minutes is small enough for a bad day.",
+        "rejected": [
+          {
+            "alternative": "A 40-minute minimum session",
+            "why_it_lost": "A 40-minute minimum is a session you skip when tired, and one skip usually ends the habit."
+          },
+          {
+            "alternative": "A purely fixed daily serving with nothing beyond it",
+            "why_it_lost": "The open door after the serving lets a good day be a good day."
+          },
+          {
+            "alternative": "A purely open-ended practice surface with no fixed serving",
+            "why_it_lost": "The fixed serving protects the habit."
+          }
+        ],
+        "rejected_absent_from_record": false,
+        "status": "decided",
+        "soundbite": "A day is done after about eight quick warm-up reps in four minutes, and a full problem after that is offered but optional.",
+        "implementation_claim": {
+          "description": "A session flow with a required warm-up tier of short recall and recognition reps that alone completes the day, an optional main exercise with a recorded hint ladder, in-session re-queueing of missed reps, and a domain-agnostic exercise abstraction that does not assume algorithm content.",
+          "expect": "present",
+          "pattern": {
+            "regex": "warm[-_ ]?up|hint ladder"
+          }
+        }
+      }
+    },
+    {
+      "issue": 4,
+      "comment_id": 5182805341,
+      "written": {
+        "admissible": true,
+        "title": "Public engine, private problem content",
+        "question": "Whether Blind 75 problem statements can ship in a public repository, and if not, what the cheapest lawful source of problem text is.",
+        "decision": "Ship the engine publicly and keep all problem content - statements, test data, reference solutions, generators - in the private repo the solutions already go to, loaded via a private submodule or a gitignored local path. The public repo keeps the list of problem titles and optionally a few original demo statements.",
+        "why": "LeetCode's statement prose is copyrighted expression while the list of titles is a free fact, so copying 75 statements into a public repo is infringement. The streak decision had already sent solutions to a separate private repo, so three of the authoring unit's four parts were already going private; moving the statement across costs nothing and leaves the public, portfolio-facing repo with zero protected prose. It is also the fastest path to the first daily session, which the record calls the map's binding constraint.",
+        "rejected": [
+          {
+            "alternative": "An openly-licensed source of Blind 75 / NeetCode 150 statements",
+            "why_it_lost": "None exists and none can - Blind 75 is a curated list of LeetCode's problems, and repos claiming to have it either license only their author's solution code or reproduce LeetCode text with no right to grant."
+          },
+          {
+            "alternative": "Clean permissive datasets (HumanEval, MBPP, Exercism problem-specifications)",
+            "why_it_lost": "Genuinely reusable but general or entry-level katas rather than interview-algorithm curation; adopting them would mean abandoning the curated set, so they serve as a format demo, not the content pile."
+          },
+          {
+            "alternative": "Permissively-wrapped scraped datasets (APPS, CodeContests)",
+            "why_it_lost": "A permissive wrapper licence does not cure scraped provenance - the problems are collected from third-party judges, and a licensor can only license what they own."
+          },
+          {
+            "alternative": "Writing fresh original statements now, as a gate",
+            "why_it_lost": "Confirmed clean, since the algorithm is unprotectable, but it loses as a gate purely on time; kept as later portfolio polish."
+          },
+          {
+            "alternative": "Scraping Blind 75 into the app",
+            "why_it_lost": "LeetCode's ToS forbids crawling, scraping and spidering outright, independent of the copyright analysis, so it is off the table permanently."
+          }
+        ],
+        "rejected_absent_from_record": false,
+        "status": "decided",
+        "soundbite": "The statements are LeetCode's copyrighted prose, so the engine ships publicly and every problem statement goes to the private repo the solutions were already going to.",
+        "implementation_claim": {
+          "description": "The public swe-prep repo contains no LeetCode problem statement prose - only the engine, the list of problem titles, and optionally a few original demo statements - with problem content loaded from a private submodule or a gitignored local path.",
+          "expect": "absent"
+        }
+      }
+    },
+    {
+      "issue": 5,
+      "comment_id": 5180987178,
+      "written": {
+        "admissible": true,
+        "title": "Submission judging model",
+        "question": "What the app checks when the captain hits run and what verdicts exist: pure pass/fail or partial credit, whether time and memory limits are graded or merely reported, whether the app says anything about approach such as complexity or style, what feedback appears on failure, and whether a submission's result is durable for the scheduling ticket.",
+        "decision": "Correctness is pass/fail with no partial credit, though the count of tests passed is shown as information, not a score. On failure the app reports only how many tests failed; an explicit 'show me the failing case' is always available, returns input, expected, and actual, and its use is recorded visibly but never penalised - the same shape as the hint ladder, so help is always available, always chosen, always recorded. Each problem carries an authored target complexity; after tests pass the user states their solution's time and space complexity before the target is revealed, and the claim is verified by running the submission at growing input sizes and fitting the runtime curve, with only coarse claims made and inconclusive measurement reported as 'measured scaling is consistent with your claim' rather than 'correct'. There is no style feedback. Resource limits are reported, not graded, with a generous timeout to catch infinite loops. Every attempt is persisted, recording pass/fail, submissions taken, hint-ladder rungs climbed, whether the failing case was revealed, the complexity self-assessment and what measurement said about it, and whether the exercise was abandoned.",
+        "why": "Partial credit would invent a number that means nothing and soften the only honest signal available. Re-reading your own code and reasoning about it without an oracle is the skill a real interview tests, and always handing over the failing case trains the opposite reflex - which is why people grind hundreds of problems and still freeze. Penalising reveals would only teach the user to game a self-imposed system, and matching the hint ladder gives the app one consistent idea about help. Correctness is the floor, not the bar, since a working brute force gets rejected in a real interview; articulating complexity out loud is itself the interview skill, and a self-report alone would congratulate an O(n^2) solution claiming to be O(n), the single case most worth catching. Empirical measurement reliably catches polynomial blow-up but cannot cleanly separate O(n) from O(n log n) because constant factors swamp a log at practical sizes, so claims stay coarse; it also makes the self-report a prediction scored against measurement, a stronger training loop. Accepted costs: every problem needs a large-input generator, timing on a normal machine is noisy and only usable for order-of-magnitude differences, and the runner needs a second execution mode. Style nagging is noise and not what interviews reject people over. Grading on wall-clock would punish JVM warm-up and teach nothing. Thin attempt records would quietly cripple the scheduler ticket, since this history is the scheduler's input.",
+        "rejected": [
+          {
+            "alternative": "Partial credit on correctness",
+            "why_it_lost": "It would invent a number that means nothing and soften the only honest signal available."
+          },
+          {
+            "alternative": "Always handing over the failing case on failure",
+            "why_it_lost": "It trains the opposite of reasoning about your own code without an oracle, which is why people grind hundreds of problems and still freeze."
+          },
+          {
+            "alternative": "Penalising use of the failing-case reveal",
+            "why_it_lost": "Penalties on a self-imposed system only teach the user to game themselves."
+          },
+          {
+            "alternative": "Accepting the complexity self-report on its own",
+            "why_it_lost": "A self-report alone is unverified and would congratulate an O(n^2) solution claiming to be O(n), the single case most worth catching."
+          },
+          {
+            "alternative": "Automated style feedback",
+            "why_it_lost": "It is noise and is not what interviews reject people over."
+          },
+          {
+            "alternative": "Grading on wall-clock time or memory",
+            "why_it_lost": "Grading on wall-clock would punish JVM warm-up and teach nothing."
+          },
+          {
+            "alternative": "Persisting only the final verdict",
+            "why_it_lost": "This history is the scheduler's input, and thin records here would quietly cripple that ticket."
+          }
+        ],
+        "rejected_absent_from_record": false,
+        "status": "decided",
+        "soundbite": "A submission passes or fails outright, help like seeing the failing case is opt-in and recorded, and a claimed complexity is checked by measuring how the runtime actually scales.",
+        "implementation_claim": {
+          "description": "A runner execution mode that runs a submission at multiple input sizes and captures timings, a large-input generator per problem alongside its correctness cases, and durable per-attempt records carrying pass/fail, hint-ladder rungs, failing-case reveals, the complexity self-assessment, and the measurement outcome.",
+          "expect": "present",
+          "pattern": {
+            "regex": "large[- ]?input|input size|scaling|self[- ]?(report|assess)"
+          }
+        }
+      }
+    },
+    {
+      "issue": 6,
+      "comment_id": 5181413478,
+      "written": {
+        "admissible": true,
+        "title": "Grader/Runner split with language-neutral test-case data",
+        "question": "What an exercise is independent of language and domain, what a test specification looks like, what contract a runner adapter satisfies, and how a submission flows from editor to verdict - such that Java plus another language, SQL, front end, concepts, and warm-up reps all fit without redesign.",
+        "decision": "Split Grader from Runner: a Grader decides pass or fail, a Runner only executes, and a concept question has a Grader and no Runner at all. Test cases are language-neutral JSON data, with a language adapter supplying the harness and stub per language. Form (Rep or Challenge) is an attribute of Exercise, not a separate type. The Runner is a swappable execution boundary Graders never see behind. Complexity measurement is optional metadata: an exercise may carry an InputGenerator, and a ScalingProbe reuses the same Runner at growing sizes. Tree and linked-list serialisation adopts LeetCode's existing convention. Every row belonging to a person carries a user id, one user seeded, no authentication built.",
+        "why": "Separating what the user produces from how it is judged stops 'exercise' from secretly meaning 'thing that runs code', so concepts and warm-up reps are first-class rather than bolted-on special cases. Test cases as data mean a case is authored once and runs in every language ever added, which is the difference between pluggable languages being real and being aspirational. Making complexity checking optional metadata keeps it from polluting the concepts layer. The record states its accepted constraint plainly: JSON test cases restrict exercises to JSON-representable inputs and outputs, and the model does not extend to front end, where Component carries its own spec shape because Grader and Runner are both polymorphic.",
+        "rejected": [
+          {
+            "alternative": "The obvious design where Exercise means 'thing that runs code'",
+            "why_it_lost": "Concepts and warm-up reps become special cases bolted on the side."
+          },
+          {
+            "alternative": "Writing test cases as JUnit code",
+            "why_it_lost": "Every new language requires re-authoring the entire problem set, making pluggable languages aspirational rather than real."
+          },
+          {
+            "alternative": "Form as a separate type rather than an attribute",
+            "why_it_lost": "The attribute is what lets warm-up reps exist in every domain instead of being an algorithms-only gimmick; Form decides where an exercise appears in a session and nothing else."
+          },
+          {
+            "alternative": "Inventing a serialisation convention for trees and linked lists",
+            "why_it_lost": "LeetCode's existing convention ([1,2,3,null,4]) is adopted instead, since the captain will be reading their problem statements anyway."
+          }
+        ],
+        "rejected_absent_from_record": false,
+        "status": "decided",
+        "soundbite": "A Grader decides pass or fail and a Runner only executes, and test cases are language-neutral data authored once, so an exercise does not have to run code and a new language does not mean rewriting the problem set.",
+        "implementation_claim": {
+          "description": "A Grader abstraction separate from a swappable Runner interface, Exercise with a Form attribute (Rep or Challenge), Attempt and Submission records carrying a user id, language-neutral JSON test cases with per-language adapters, and an optional InputGenerator with a ScalingProbe for timing curves.",
+          "expect": "present",
+          "pattern": {
+            "regex": "Grader|ScalingProbe|InputGenerator"
+          }
+        }
+      }
+    },
+    {
+      "issue": 7,
+      "comment_id": 5182411379,
+      "written": {
+        "admissible": true,
+        "title": "Streak mechanics without invented currency",
+        "question": "What makes a single-player streak actually stick, given that the captain is the only user and the author, knows the points are invented, and can edit the database?",
+        "decision": "Invented currency is cut entirely - no XP, no hearts, no lives, no leagues. Instead: every solved problem is committed to a private repo with private contributions shown on the profile, so the contribution graph is a true external record; the app shows an honest readiness picture derived from existing attempt records instead of a score; a notification at a chosen time provides a scheduled cue; the streak is displayed as a true record of days practised but is not spendable; and a missed day may be repaired by a double session the next day, capped at roughly two per month. Only real artifacts are committed, never synthetic markers.",
+        "why": "Any number the captain can print himself is a number he stops believing in around week two, and a fake number that goes up is actively misleading about whether he is getting hired. What the design can do is narrower and more honest: remove every excuse, make the record true rather than invented, and make breaking it cost something real. The readiness figures derive from attempt records that judging and scheduling already keep, so they cost nothing to compute and all of them are true. Habit research is consistent that the cue matters more than the motivation, and an all-or-nothing streak that breaks makes people quit outright rather than resume. The record also names a lever it cannot build - telling one person - because accountability to an actual human is the strongest effect in the habit literature, and it closes by warning that if this design fails the answer is not more gamification.",
+        "rejected": [
+          {
+            "alternative": "Invented currency: XP, hearts, lives, leagues",
+            "why_it_lost": "Any number the captain can print himself he stops believing in around week two, and a fake number that goes up is actively misleading about whether he is getting hired."
+          },
+          {
+            "alternative": "Publishing solutions to a public repo",
+            "why_it_lost": "The captain declined it, a public dump of Blind 75 solutions reads as interview grinding rather than building, and it would collide with the licensing question if statements ride along. Nothing that mattered is lost, since the witness function was never about anyone reading the solutions."
+          },
+          {
+            "alternative": "Synthetic 'practice happened' commit markers",
+            "why_it_lost": "Auto-inflating a contribution graph is gaming, and the captain would know."
+          },
+          {
+            "alternative": "Financial stakes, Beeminder-style",
+            "why_it_lost": "They genuinely work, but wiring up money is real friction, and adding a punishment to an activity already being avoided is more likely to increase the avoidance. Available later if nothing else lands."
+          }
+        ],
+        "rejected_absent_from_record": false,
+        "status": "decided",
+        "soundbite": "A single-player streak sticks when the record is true instead of invented: real commits, an honest readiness picture, a scheduled cue, and a repair mechanic that survives one bad evening.",
+        "implementation_claim": {
+          "description": "A readiness summary derived from attempt records (patterns covered, stale topics, solved-cold counts), a displayed days-practised streak with a capped double-session repair mechanic, a scheduled notification, and commit-per-solution to a private repo. The record states these as design, not as built.",
+          "expect": "present",
+          "pattern": {
+            "regex": "streak|readiness|repair"
+          }
+        }
+      }
+    },
+    {
+      "issue": 8,
+      "comment_id": 5182242970,
+      "written": {
+        "admissible": true,
+        "title": "Two schedulers over one shared record",
+        "question": "How does the app choose what the captain practises next: spaced repetition on a known algorithm, weakness targeting, topic coverage, or a combination, what signal feeds it, whether flashcard intervals survive a 40-minute problem, and how cold-start and graduation behave.",
+        "decision": "Two schedulers over one shared record. Reps get a standard spaced-repetition due-date queue, SM-2 with the algorithm kept swappable. Challenges get a daily priority score built from time since last attempt, how badly the last attempt went, pattern under-coverage, and a hard floor on minimum interval, with the highest scorer taken. The judging record is collapsed into a single 0-5 quality score as the signal, time taken is excluded, review debt comes before new problems with a weekly cap on introductions, nothing is ever deleted (clean passes earn month-long intervals as retirement), and an 'interview soon' mode re-weights the challenge score toward broad recency and drops the minimum-interval floor. Once SQL exercises exist, the daily rep set mixes domains rather than running per-domain queues.",
+        "why": "Spaced repetition assumes reviews are cheap, and that arithmetic breaks for a 30-40 minute challenge: twenty due challenges is a fortnight of work, and a scheduler that generates impossible debt gets ignored within a week. The scarcity is structural - roughly 90 challenge slots in three months against ~75 problems leaves barely room for one pass. Due dates ask what is owed, a priority score asks what is worth it, and only the second survives scarcity. Collapsing the per-attempt record to a 0-5 score maps directly onto SM-2 and keeps the scheduler from ossifying around today's exact recorded fields. The weekly cap on new problems exists because ~75 problems can be burned through in two months, arriving at breadth with no depth.",
+        "rejected": [
+          {
+            "alternative": "One scheduler serving both reps and challenges, with standard spaced repetition applied to challenges",
+            "why_it_lost": "Twenty due challenges is a fortnight of work, and a scheduler that generates impossible debt is one that gets ignored within a week. With ~90 challenge slots against ~75 problems there is barely room for one pass, let alone spaced review."
+          },
+          {
+            "alternative": "Due dates for challenges",
+            "why_it_lost": "Due dates ask what is owed, a priority score asks what is worth it, and only the second survives scarcity."
+          },
+          {
+            "alternative": "FSRS for the rep queue",
+            "why_it_lost": "Better on paper, but the difference over SM-2 is marginal at this scale, and SM-2 is about fifty lines and entirely adequate for one user and ~400 reps."
+          },
+          {
+            "alternative": "Feeding raw judging fields into the algorithm",
+            "why_it_lost": "Collapsing to a single 0-5 quality score maps directly onto SM-2 and keeps the scheduler from ossifying around today's exact set of recorded fields."
+          },
+          {
+            "alternative": "Time taken as a scheduling signal",
+            "why_it_lost": "It is noise: interruptions, thinking before typing, and typing fast on a misunderstood problem all corrupt it, adding variance without carrying information."
+          },
+          {
+            "alternative": "Unbounded introduction of new material",
+            "why_it_lost": "The classic Anki failure: review debt piles up and the user quits, and ~75 problems can be burned through in two months, arriving at breadth with no depth and everything half-remembered."
+          },
+          {
+            "alternative": "Removing problems passed cleanly three times",
+            "why_it_lost": "An interval of months is retirement, not removal - nothing is ever deleted."
+          },
+          {
+            "alternative": "A different app for the final fortnight before interviews",
+            "why_it_lost": "The objective change is a different scoring function, not a different app - re-weighting toward broad recency and dropping the floor is cheap to build."
+          },
+          {
+            "alternative": "Separate per-domain rep queues once SQL exercises exist",
+            "why_it_lost": "The scheduler operates over exercises, and domain is one more coverage dimension alongside topic, not a reason for a second queue."
+          }
+        ],
+        "rejected_absent_from_record": false,
+        "status": "decided",
+        "soundbite": "Reps come due on a spaced-repetition queue, and the day's challenge slot goes to whichever problem a priority score says is the best use of forty minutes.",
+        "implementation_claim": {
+          "description": "A rep scheduler implementing SM-2 behind a swappable algorithm seam, a challenge priority scorer over recency, last-attempt quality, pattern coverage and a minimum-interval floor, a collapse of the judging record into a 0-5 quality score, and an interview-mode scoring variant.",
+          "expect": "present",
+          "pattern": {
+            "regex": "SM-2|SM2"
+          }
+        }
+      }
+    },
+    {
+      "issue": 9,
+      "comment_id": 5181855182,
+      "written": {
+        "admissible": true,
+        "title": "Warm-up rep types, grading, and authoring",
+        "question": "What a warm-up rep concretely is - which rep types exist and what each presents and accepts, how each is graded, where reps come from and whether enough can be authored, and whether reps derive from problems the captain has attempted or stand independent of the problem set.",
+        "decision": "Five rep types: pattern identification, complexity of a snippet, fill in the missing line, predict the output, and spot the bug, the last added deliberately to the original sketch. Multiple choice by default; predict-the-output is free text graded by exact match after normalisation. Every rep carries a verified explanation, shown immediately on a wrong answer, not by default on a correct one, always one keystroke away, with asking recorded as a signal. Nearly every rep is derived from a problem already being authored - roughly five to six per problem, so ~75 problems yields roughly 400 reps, LLM-drafted and human-verified - making the authoring unit statement + test cases + reference solution + input generator, one content pile rather than two. Derived reps unlock as problems are attempted; ~75 pattern-ID reps are available cold on day one.",
+        "why": "Reps train recognition and discrimination while production is what the Challenge exercises are for - a division of labour rather than a compromise, and the honest answer to whether reps are busywork. Plausible distractors are the entire value; obviously-wrong options waste a slot in a four-minute daily budget. Spot-the-bug is code review, which is genuinely the job, and coheres with the judging decision to make the captain reason about code without an oracle. Deriving reps from the reference solution dissolves the second-content-pile risk where the project most plausibly dies, and ~400 reps against ~240 monthly slots is comfortably sufficient since repetition is the point under spaced repetition. Gating derived reps behind attempted problems means the reps concern problems actually wrestled with, which is what spaced repetition should be doing, and it is not a cold-start problem because pattern-ID works cold.",
+        "rejected": [
+          {
+            "alternative": "Free text answers for complexity reps",
+            "why_it_lost": "The answer set is finite, so multiple choice grades exactly; free text would only mean normalising O(n^2) against O(n squared) for no benefit."
+          },
+          {
+            "alternative": "Executing a typed line for fill-in-the-blank",
+            "why_it_lost": "A Java compile takes a second or two and eight of those destroys the four-minute session; discrimination is the target anyway."
+          },
+          {
+            "alternative": "Showing the explanation by default on a correct answer",
+            "why_it_lost": "Re-reading something already known is low-value compared to retrieval, and eight explanations would roughly double the session, attacking the property the whole design protects."
+          },
+          {
+            "alternative": "Buying the confidence signal by interrupting with a 'how hard was that?' prompt",
+            "why_it_lost": "Users learn to click through it; recording whether the captain asked why gives the same signal from behaviour that would happen anyway."
+          },
+          {
+            "alternative": "Trusting generated explanations without verification",
+            "why_it_lost": "A confidently wrong explanation is worse than none; they are verified alongside the rep."
+          }
+        ],
+        "rejected_absent_from_record": false,
+        "status": "decided",
+        "soundbite": "A warm-up rep is one of five short recognition exercises, mostly multiple choice, and nearly all of them are derived from problems already in the set.",
+        "implementation_claim": {
+          "description": "Five rep types including the added spot-the-bug, a content unit of statement plus test cases plus reference solution plus input generator, and unlock gating of derived reps behind attempted problems",
+          "expect": "present",
+          "pattern": {
+            "regex": "spot[-_ ]?the[-_ ]?bug|pattern[-_ ]?id(entification)?|predict[-_ ]?(the[-_ ]?)?output|fill[-_ ]?in[-_ ]?the[-_ ]?(missing[-_ ]?line|blank)"
+          }
+        }
+      }
+    },
+    {
+      "issue": 10,
+      "comment_id": 5182571856,
+      "written": {
+        "admissible": true,
+        "title": "The shape of a SQL exercise: Postgres fixture database, shared schemas, multiset comparison",
+        "question": "What does a SQL exercise actually look like - which engine runs it, how fixtures are authored, how result sets are compared, what topics are tested, what a seconds-long SQL warm-up rep is, and whether SQL exercises carry a complexity target.",
+        "decision": "Exercises run against the same Postgres that holds app state, but in a separate fixture database, with each attempt inside a transaction that is rolled back and the submission connecting as a read-only role. Fixtures are two or three shared realistic schemas (an e-commerce schema of users, orders, products, order_items, and perhaps an events/analytics schema) with many exercises authored against each. Results are compared as a multiset of rows, matching columns by position and ignoring names, with row order ignored unless the exercise sets a per-exercise ordering flag, and a normalisation pass for numeric types, float rounding, and NULLs. The default failure signal is row counts only ('Your result: 12 rows. Expected: 8.'), with reveal-on-request showing the diff. Topics tested: joins including LEFT JOIN row-dropping, aggregation with GROUP BY and HAVING, subqueries and CTEs, window functions, NULL semantics, finding duplicates, date bucketing, and top-N-per-group, at roughly 25-40 exercises. The five warm-up rep types map over with predict-the-output replacing complexity, spot-the-bug being the standout, and reps deriving from the reference query. There is no complexity target for SQL, and query plans are deferred, not built.",
+        "why": "Dialect parity is the deciding factor for the engine: SQLite or H2 would train a dialect the captain will not interview in, and Postgres is already running so there is no infrastructure to add; transaction rollback gives perfect isolation at zero cost, and the read-only role refuses a DROP TABLE outright rather than merely rolling it back. Shared schemas win because a schema learned once answers twenty questions, which is how real SQL interviews and the job run, and because a twenty-second warm-up rep is only possible against tables already known. Position-based comparison avoids failing the captain over a cosmetic alias while still holding him to the requested column order, and normalisation is required or false failures will be constant. The row-count failure signal is the analogue of '3 of 12 tests failed' under the judging ticket's withhold-by-default rule, and is unusually diagnostic because excess rows almost always mean join fan-out. 25-40 exercises because SQL is a much smaller surface than algorithms. Spot-the-bug is high value because most real SQL errors are silently wrong rather than syntax errors. Query plans are shallow at entry level and grading on EXPLAIN output is a research project rather than a feature.",
+        "rejected": [
+          {
+            "alternative": "An embedded engine (SQLite or H2)",
+            "why_it_lost": "Easier to embed but trains the wrong dialect - window function syntax, FULL OUTER JOIN, and type handling all differ from Postgres in ways that bite in a real interview."
+          },
+          {
+            "alternative": "Per-exercise fixtures",
+            "why_it_lost": "Sound cleaner but are worse in practice: most of a 30-minute budget would go on re-reading an unfamiliar schema instead of writing SQL, and they would make twenty-second warm-up reps unviable."
+          },
+          {
+            "alternative": "Query plans as a graded exercise",
+            "why_it_lost": "A real interview topic but shallow at entry level, and grading on EXPLAIN output is a research project rather than a feature; if it ever happens it belongs as a rep type, not a graded exercise. Logged as fog on the map."
+          }
+        ],
+        "rejected_absent_from_record": false,
+        "status": "decided",
+        "soundbite": "A SQL exercise runs the submitted query as a read-only role inside a rolled-back transaction on a shared Postgres fixture schema, and grades it by comparing result sets as a multiset of rows.",
+        "implementation_claim": {
+          "description": "A separate Postgres fixture database with two or three shared schemas including an e-commerce schema (users, orders, products, order_items) and seed data, a read-only submission role, per-attempt transaction rollback, multiset result comparison with a numeric and NULL normalisation pass, and roughly 25-40 exercises; no query-plan grading should exist.",
+          "expect": "present",
+          "pattern": {
+            "regex": "order_items"
+          }
+        }
+      }
+    }
+  ],
+  "prose": {
+    "admissible": true,
+    "statement": "swe-prep is a single-user, habit-forming interview-prep app that runs your code. The daily loop is a ~4-minute warm-up of ~8 quick reps, which alone completes the day, then an optional ~30-minute main exercise and open-ended continuation for anyone who wants more. The engine is public - Spring Boot 3.4.x on Java 21 with Postgres, React + Vite with a Monaco editor, run locally and reached over a tailnet - while all problem content lives in a separate private repo, swe-prep-content, loaded from a local clone.",
+    "tree": ".\n├── .github/workflows/ci.yml                    CI runs the same ./test.sh on every push and pull request\n├── .gitignore                                  keeps the local content clone out of this public repo\n├── AGENTS.md                                   repo layout decision and other project-intrinsic notes\n├── CLAUDE.md\n├── README.md                                   the daily loop, running locally, and the content split\n├── backend/                                    Spring Boot 3.4.x on Java 21, Maven; runs on :8080, applies Flyway migrations on boot\n│   ├── pom.xml                                 Maven build\n│   ├── src/main/java/com/sweprep/backend/\n│   │   ├── attempt/                            every attempt persisted as durable practice history: pass/fail, hint rungs, reveals, complexity claim, abandonment\n│   │   ├── authoring/                          derives a CHALLENGE entry plus up to five warm-up reps from one problem spec; ProblemSpecParser.java documents the spec format\n│   │   ├── challenge/                          selection of the main exercise, the highest scorer under the daily priority score\n│   │   ├── commit/                             commits a solved challenge's real solution to the swe-prep-content clone and pushes it; real artifacts only\n│   │   ├── complexity/                         checks a complexity claim by running the solution at growing input sizes; says \"consistent\" or inconclusive, never \"correct\"\n│   │   ├── content/                            loads exercises from the local content clone at sweprep.content.path; a malformed file shows a clear error, the app still starts\n│   │   ├── exercise/                           the exercise model: Form (Rep or Challenge) is an attribute of Exercise, test cases are language-neutral JSON data\n│   │   ├── grader/                             a Grader decides pass or fail; a concept exercise has a Grader and no Runner\n│   │   ├── language/                           language adapters supply the harness and stub per language; switching regenerates the stub from the language-neutral signature\n│   │   ├── learned/                            the \"retrieved to criterion\" state behind the Readiness counts\n│   │   ├── readiness/                          GET /api/readiness: pattern coverage, shaky topics, staleness, solved-cold as plain counts and lists, never a score\n│   │   ├── reps/                               warm-up selection: ~8 interleaved quick reps, a wrong answer re-queued later in the set\n│   │   ├── role/                               role choice: required warm-up and auto-seeding draw only from the chosen families plus the always-on core\n│   │   ├── runner/                             a Runner only executes: a swappable boundary Graders never see behind; local Java and Python runners\n│   │   ├── scheduler/                          two schedulers over one shared record: SM-2 due dates for reps, a daily priority score for challenges\n│   │   ├── session/                            day completion and streak: warm-up complete means done for today; missed-day repair by double session, capped per month\n│   │   ├── sql/                                SQL runs on a separate fixture database, as a read-only role, inside a transaction that is always rolled back\n│   │   └── web/                                HTTP controllers; the CORS allowed-origins list only matters for clients that bypass the frontend proxy\n│   ├── src/main/resources/application.yml      sweprep.* configuration: content path, solution commit, streak repairs, allowed origins\n│   ├── src/main/resources/db/migration/        Flyway migrations, applied on boot\n│   └── src/test/                               backend suite: Spring Boot tests against a real, disposable Postgres container via Testcontainers\n├── docker-compose.yml                          the Postgres the app requires; the backend refuses to start without it\n├── frontend/                                   React + Vite on :5173 and only :5173 - strictPort fails loudly rather than silently moving\n│   ├── src/App.tsx                             Today/Readiness/Practice/Learn tabs and the header role picker\n│   ├── src/Warmup.tsx                          the daily warm-up: one rep at a time, explanation at once on a wrong answer, one keystroke away on a right one\n│   ├── src/Session.tsx                         day-complete landing: celebrates first, offers the optional main exercise, links into Readiness\n│   ├── src/Practice.tsx                        free-practice Monaco editor: Run, hint ladder, failing-case reveal after a hypothesis, History panel, Give up\n│   ├── src/Lesson.tsx                          Learn tab: a lesson is read, never attempted, with self-explanation prompts\n│   ├── src/Readiness.tsx                       the honest progress picture: plain X/Y counts and a per-family breakdown, never a score\n│   ├── src/RolePicker.tsx                      chooses which roles you are preparing for\n│   ├── src/api.ts                              API calls, routed through the dev server's proxy to the backend on the same host\n│   └── vite.config.ts                          dev server settings: the strictPort pin, binding every interface, the API proxy\n├── scripts/\n│   ├── author-content.sh                       turns one problem spec into a reviewed content entry; refuses to write inside this public repo\n│   ├── check-no-content.sh                     asserts no private problem content is committed; runs in CI and ./test.sh\n│   ├── check-no-content.test.sh                the content guard's own tests\n│   ├── daily-cue.sh\n│   ├── daily-cue.test.sh                       the daily-cue check, run by ./test.sh\n│   └── daily-cue/                              install.sh sets up a systemd user timer that notifies on any day today's session isn't complete\n└── test.sh                                     content guard first, then the shell suites, the backend suite, and the frontend suite; CI runs this same script"
+  }
+}

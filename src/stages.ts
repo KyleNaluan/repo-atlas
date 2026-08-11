@@ -31,6 +31,12 @@ export const STAGES: Stage[] = [
     run: async (argv) => (await import("./commands/probe.js")).probeCommand(argv),
   },
   {
+    name: "write",
+    summary: "read each resolution comment into a decision candidate, and write the prose (#2)",
+    implemented: true,
+    run: async (argv) => (await import("./commands/write.js")).writeCommand(argv),
+  },
+  {
     name: "gate",
     summary: "confirm each candidate against the tree in both directions (#5, #7 point 7)",
     implemented: true,

@@ -560,6 +560,42 @@ describe("tuned-config-properties", () => {
     const found = await candidatesFrom("tuned-config-properties", ctx);
     expect(found).toHaveLength(2);
   }, 60_000);
+
+  it("cites only the comment lines directly above the setting", async () => {
+    const ctx = contextFor({
+      "application.yml":
+        "# We measured this under load.\n" + // line 1
+        "# Found that PT10S is the sweet spot.\n" + // line 2
+        "timeout: PT10S\n", // line 3
+    });
+    const found = await candidatesFrom("tuned-config-properties", ctx);
+    expect(found).toHaveLength(1);
+    const ev = found[0]!.node.evidence[0]!;
+    expect(ev.line_start).toBe(1);
+    expect(ev.line_end).toBe(3);
+    expect(ev.note).toBe("We measured this under load. Found that PT10S is the sweet spot.");
+  }, 60_000);
+
+  it("does not merge an unrelated block separated by a blank line", async () => {
+    // A licence header / section divider above a blank line above the real tuning
+    // comment must not be pulled into the rationale, and line_start must point at
+    // the tuning comment, not the unrelated block - else the citation range would
+    // not contain the text it cites.
+    const ctx = contextFor({
+      "application.yml":
+        "# Copyright 2026 Acme. All rights reserved.\n" + // line 1
+        "\n" + // line 2
+        "# measured: 10s is the p99 under load\n" + // line 3
+        "timeout: PT10S\n", // line 4
+    });
+    const found = await candidatesFrom("tuned-config-properties", ctx);
+    expect(found).toHaveLength(1);
+    const ev = found[0]!.node.evidence[0]!;
+    expect(ev.line_start).toBe(3);
+    expect(ev.line_end).toBe(4);
+    expect(ev.note).toBe("measured: 10s is the p99 under load");
+    expect(ev.note).not.toContain("Copyright");
+  }, 60_000);
 });
 
 describe("ci-policy-guards", () => {

@@ -41,21 +41,19 @@ export const tunedConfigProperties: Probe = {
       for (const [index, line] of lines.entries()) {
         const setting = SETTING.exec(line);
         if (!setting) continue;
-        // The rationale is the contiguous comment block immediately above the
-        // setting, gathered outermost-first; blanks within it do not break it,
-        // mirroring the record's own layout.
+        // The rationale is the comment block DIRECTLY above the setting: a blank
+        // line breaks it, so an unrelated block above a gap (a licence header, a
+        // section divider) is never pulled in. Merging across a blank would make
+        // line_start point at that unrelated block, so the evidence citation's
+        // range would not contain the text it cites - a false citation the engine
+        // must never mint, since it is exactly what audit L1/L2 exist to catch.
         const rationale: string[] = [];
         let first = index;
         for (let above = index - 1; above >= 0; above -= 1) {
           const commented = COMMENT.exec(lines[above]!)?.[1];
-          if (commented !== undefined) {
-            rationale.unshift(commented.trim());
-            first = above;
-          } else if (lines[above]!.trim() === "") {
-            continue;
-          } else {
-            break;
-          }
+          if (commented === undefined) break;
+          rationale.unshift(commented.trim());
+          first = above;
         }
         if (!rationale.some((c) => TUNED.test(c))) continue;
 

@@ -33,7 +33,10 @@ pre{font-family:var(--mono);font-size:12.5px;line-height:1.55;background:#0b0e13
 pre code{background:none;border:none;padding:0;font-size:inherit;overflow-wrap:normal}
 .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px}
 .small{font-size:13px} .muted{color:var(--ink2)} .dim{color:var(--ink3)}
-[data-ev],[data-chrome]{display:inline}
+/* The provenance stamp appears on spans, but also on links, code, pills and the
+   diagram frame. Only the spans want this; applying it to every stamped element
+   turns block containers inline and destroys their own scrollers. */
+span[data-ev],span[data-chrome]{display:inline}
 
 /* ---------- header ---------- */
 .hero{border-bottom:1px solid var(--line);background:

@@ -103,6 +103,13 @@ export const qaIndex = (nodes: AtlasNode[]): QaRow[] => {
 
 export interface IndexedSource extends RenderedEvidence {
   citedBy: AtlasNode[];
+  /**
+   * Which graph element this entry was first reached through. The source index
+   * is a fold, so its rows are graph data and have to carry provenance like any
+   * other rendered field - a generated index whose rows could not be traced back
+   * would be the exact re-derivation #7 forbids.
+   */
+  owner: string;
 }
 
 /**
@@ -114,11 +121,11 @@ export interface IndexedSource extends RenderedEvidence {
  */
 export const sourceIndex = (
   nodes: AtlasNode[],
-  extra: Evidence[],
+  extra: { evidence: Evidence; owner: string }[],
   subject: Subject,
 ): Map<Evidence["kind"], IndexedSource[]> => {
   const seen = new Map<string, IndexedSource>();
-  const add = (e: Evidence, owner: AtlasNode | null) => {
+  const add = (e: Evidence, owner: AtlasNode | null, ownerId?: string) => {
     const r = renderEvidence(e, subject);
     const existing = seen.get(r.key);
     if (existing) {
@@ -132,9 +139,9 @@ export const sourceIndex = (
       }
       return;
     }
-    seen.set(r.key, { ...r, citedBy: owner ? [owner] : [] });
+    seen.set(r.key, { ...r, citedBy: owner ? [owner] : [], owner: owner?.id ?? ownerId ?? "record" });
   };
-  for (const e of extra) add(e, null);
+  for (const { evidence, owner } of extra) add(evidence, null, owner);
   for (const n of nodes) {
     for (const e of n.evidence) add(e, n);
     if (n.type === "decision") for (const e of n.implemented_by) add(e, n);
@@ -198,6 +205,12 @@ export const confidenceTally = (nodes: AtlasNode[]): Record<string, number> =>
 export const allExtraEvidence = (atlas: Atlas): Evidence[] => [
   ...atlas.synopsis.evidence,
   ...atlas.shape.evidence,
+];
+
+/** The same entries, each tagged with the metadata block that carries it. */
+export const taggedExtraEvidence = (atlas: Atlas): { evidence: Evidence; owner: string }[] => [
+  ...atlas.synopsis.evidence.map((evidence) => ({ evidence, owner: "synopsis" })),
+  ...atlas.shape.evidence.map((evidence) => ({ evidence, owner: "shape" })),
 ];
 
 /**

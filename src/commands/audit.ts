@@ -10,7 +10,7 @@
 import { resolve } from "node:path";
 import { readFileSync } from "node:fs";
 import { loadAtlas } from "../schema/validate.js";
-import { audit } from "../audit/run.js";
+import { audit, runAudit, type AuditOutcome } from "../audit/run.js";
 import { GATES } from "../audit/register.js";
 import type { AuditContext, CheckResult } from "../audit/types.js";
 
@@ -22,6 +22,13 @@ options:
   --atlas <path>           the atlas.json the artifact was rendered from (required)
   --clone <path>           a local checkout of the subject at the run's pinned SHA (required)
   --private-clone <path>   a readable checkout of the declared-private source, if there is one
+  --screenshots <dir>      write one full-page screenshot per declared viewport
+  --no-browser             run only the static passes; the browser gates report as not run
+
+Pass B loads the artifact in a browser with the network disabled. It needs a
+Chrome-family browser on the machine; set CHROME_PATH if it is somewhere
+unusual. A missing browser is a precondition failure, not a skip - the audit
+cannot certify what it was unable to open.
 
 Preconditions are asserted before any check runs: the clone must exist, its HEAD
 must equal the run's pinned SHA, and its worktree must be clean. A missing
@@ -61,7 +68,7 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
   }
 
   let ctx: AuditContext;
-  let outcome: ReturnType<typeof audit>;
+  let outcome: AuditOutcome;
   try {
     ctx = {
       artifact: readFileSync(artifactPath, "utf8"),
@@ -71,7 +78,14 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
         ? {}
         : { privateClone: resolve(flag(argv, "--private-clone")!) }),
     };
-    outcome = audit(ctx);
+    outcome = argv.includes("--no-browser")
+      ? audit(ctx)
+      : await runAudit(ctx, {
+          artifactPath: resolve(artifactPath),
+          ...(flag(argv, "--screenshots") === undefined
+            ? {}
+            : { screenshotDir: resolve(flag(argv, "--screenshots")!) }),
+        });
   } catch (e) {
     // The per-check boundary means audit() does not throw for a check failure;
     // this catches the surrounding I/O (unreadable artifact, invalid atlas) so
@@ -98,6 +112,10 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
     // pass; report every check it did not run BY NAME and with its reason,
     // rather than dropping the reason and communicating absence by silence.
     if (c.reason) console.log(`        ${c.id}: ${c.reason}`);
+  }
+
+  for (const shot of outcome.screenshots ?? []) {
+    console.log(`  shot  ${shot}`);
   }
 
   const gatesPassed = outcome.checks.filter(

@@ -32,6 +32,7 @@ import {
   join,
   prose,
   proseFragment,
+  provAttr,
   raw,
   type Provenance,
   type Safe,
@@ -48,6 +49,7 @@ import {
   qaIndex,
   ranked,
   sourceIndex,
+  taggedExtraEvidence,
   totalEvidence,
 } from "./projections.js";
 import {
@@ -81,7 +83,11 @@ const evidenceList = (
           const r = renderEvidence(e, atlas.subject);
           return html`<li>
             <span class="k ${r.kind}">${r.kind}</span>
-            ${r.href ? html`<a href="${r.href}">${r.label}</a>` : html`<code>${r.label}</code>`}
+            ${r.href
+              ? html`<a href="${r.href}" data-ev="${provAttr(from(owner, `${field}[${i}]`))}"
+                  >${r.label}</a
+                >`
+              : html`<code data-ev="${provAttr(from(owner, `${field}[${i}]`))}">${r.label}</code>`}
             ${r.note
               ? html`<span class="n">- ${prose(r.note, from(owner, `${field}[${i}].note`))}</span>`
               : ""}
@@ -293,7 +299,9 @@ export const sectionFlows = async (
     figures.push(html`
       <h3 id="${flow.id}">${title(flow)}</h3>
       <figure>
-        <div class="diagram-frame">${raw(svg)}</div>
+        <div class="diagram-frame" data-ev="${provAttr(from(flow.id, "steps"))}">
+          ${raw(svg)}
+        </div>
         <div class="legend">
           <span>${chrome`<i style="background:#7aa2f7"></i>request path`}</span>
           <span>${chrome`<i style="background:#7ec699"></i>response path`}</span>
@@ -351,7 +359,7 @@ const decisionBlock = (d: DecisionNode, atlas: Atlas): Safe => {
         ${d.rejected.length === 0 && d.rejected_absent_from_record
           ? html`<span class="pill gap">${chrome`no alternative recorded`}</span>`
           : ""}
-        <span class="pill ${pill.cls}">${pill.text}</span>
+        <span class="pill ${pill.cls}" data-ev="${provAttr(from(d.id, "status"))}">${pill.text}</span>
       </summary>
       <div class="dec-body">
         <dl>
@@ -435,8 +443,12 @@ export const sectionDives = async (atlas: Atlas, nodes: AtlasNode[]): Promise<Sa
         <div class="dive-head">
           <span class="badge">#${i + 1}</span>
           <h3>${title(m)}</h3>
-          <span class="pill info">${ENFORCEMENT_LABEL[m.enforcement]}</span>
-          <span class="score">value ${m.interview_value}/5 &middot; ${m.confidence}</span>
+          <span class="pill info" data-ev="${provAttr(from(m.id, "enforcement"))}"
+            >${ENFORCEMENT_LABEL[m.enforcement]}</span
+          >
+          <span class="score" data-ev="${provAttr(from(m.id, "interview_value"))}"
+            >value ${m.interview_value}/5 &middot; ${m.confidence}</span
+          >
         </div>
         <p>${prose(m.what, from(m.id, "what"))}</p>
         <p>${prose(m.why_interesting, from(m.id, "why_interesting"))}</p>
@@ -536,10 +548,14 @@ export const sectionEdges = (atlas: Atlas, nodes: AtlasNode[]): Safe => {
                       <div class="card" id="${e.id}" style="margin-bottom:12px">
                         <div class="dive-head" style="margin-bottom:6px">
                           <h5 style="font-size:15px">${title(e)}</h5>
-                          <span class="pill ${EDGE_KIND_PILL[e.kind].cls}"
+                          <span
+                            class="pill ${EDGE_KIND_PILL[e.kind].cls}"
+                            data-ev="${provAttr(from(e.id, "kind"))}"
                             >${EDGE_KIND_PILL[e.kind].text}</span
                           >
-                          <span class="score">value ${e.interview_value}/5 &middot; ${e.confidence}</span>
+                          <span class="score" data-ev="${provAttr(from(e.id, "interview_value"))}"
+                            >value ${e.interview_value}/5 &middot; ${e.confidence}</span
+                          >
                         </div>
                         <p class="small">${prose(e.statement, from(e.id, "statement"))}</p>
                         <p class="small muted" style="margin-top:8px">
@@ -742,7 +758,7 @@ export const sectionRecord = (atlas: Atlas, surviving: AtlasNode[]): Safe => {
 /* ----------------------------------------------- 09 Source index */
 
 export const sectionSourceIndex = (atlas: Atlas, surviving: AtlasNode[]): Safe => {
-  const grouped = sourceIndex(surviving, allExtraEvidence(atlas), atlas.subject);
+  const grouped = sourceIndex(surviving, taggedExtraEvidence(atlas), atlas.subject);
   const titles: Record<Evidence["kind"], string> = {
     file: "Files, pinned at this SHA",
     issue: "Issues and resolution comments",
@@ -775,8 +791,12 @@ export const sectionSourceIndex = (atlas: Atlas, surviving: AtlasNode[]): Safe =
                     (s) => html`<tr>
                       <td>
                         ${s.href
-                          ? html`<a href="${s.href}">${s.label}</a>`
-                          : html`<code>${s.label}</code>`}
+                          ? html`<a href="${s.href}" data-ev="${provAttr(from(s.owner, "evidence"))}"
+                              >${s.label}</a
+                            >`
+                          : html`<code data-ev="${provAttr(from(s.owner, "evidence"))}"
+                              >${s.label}</code
+                            >`}
                       </td>
                       <td>${s.citedBy.length || "-"}</td>
                       <td class="small muted">
@@ -816,7 +836,9 @@ export const heroBlock = (atlas: Atlas): Safe => html`
             >${atlas.subject.owner}/${atlas.subject.repo}</a
           >
           (${atlas.subject.visibility})</span>
-        <span>${chrome`<b>Profile</b>`} ${atlas.profile} &middot; rubric ${atlas.rubric_version}</span>
+        <span
+          >${chrome`<b>Profile</b> ${atlas.profile} &middot; rubric ${atlas.rubric_version}`}</span
+        >
       </div>
       <p class="small muted" style="margin-top:14px;max-width:82ch">
         ${chrome`Every source link is pinned to that commit, so it stays valid as the branch moves.

@@ -48,6 +48,10 @@ After any change to `src/schema/types.ts`, run `npm run schema:gen` and commit t
 - **No check ships without a mutant fixture proving it fails** (#8). `test/mutants/` holds one deliberately-broken artifact per check, and `test/audit/pass-a.test.ts` asserts each check rejects its own mutant and only its own. A check that has never been watched fail is a check nobody knows works.
 - **A check that could not run says so by name.** `not_applicable` and `not_run` carry a mandatory reason, and neither ever counts as passing. The audit reports all twenty checks even though only some passes are built, for the same reason #6 forbids communicating absence by silence.
 
+Pass B needs a Chrome-family browser (`puppeteer-core` drives one that is already installed; set `CHROME_PATH` if it is somewhere unusual). A missing browser is a **precondition failure** for a real audit, not a skip - an audit that cannot open the file must never report on it. The test suite is the one exception: it skips the browser tests when none exists, and CI asserts one is present so that skip cannot quietly disable five gates.
+
+Anything handed to `page.evaluate` is compiled by the toolchain first, and esbuild's keep-names transform rewrites inner helpers into `__name(...)` calls that do not exist in the browser - the symptom is `__name is not defined` and an audit that crashes rather than reporting. In-page code with helper functions is therefore written as a **source string** (`src/audit/checks/visual.ts`), not as a function.
+
 Audit tests build a synthetic subject (`test/audit/subject.ts`): a real git repo holding exactly the files the reference graph cites, with the graph re-pinned to its commit. That keeps L1/L2 hermetic - no network, no 40 MB checkout - while still exercising the real `git cat-file` comparison.
 
 ## Maintaining this file

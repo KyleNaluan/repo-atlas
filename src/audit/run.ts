@@ -161,22 +161,28 @@ export const runAudit = async (
       screenshots: b.screenshots,
     };
   } catch (error) {
-    if (error instanceof NoBrowserError) {
-      return {
-        ...preconditionOutcome([error.message], pre.notes),
-        checks: [
-          ...a,
-          ...unrun(a, ["A"]).map((c) =>
-            checksInPass("B").some((s) => s.id === c.id)
-              ? { ...c, reason: "pass B could not run: no browser was available" }
-              : c,
-          ),
-        ].sort(
-          (x, y) =>
-            REGISTER.findIndex((s) => s.id === x.id) - REGISTER.findIndex((s) => s.id === y.id),
+    // Any throw escaping pass B - a missing browser, a page that will not load,
+    // a browser that dies mid-launch - is a precondition failure, never a generic
+    // crash. The reasoning is the one NoBrowserError already gets: the audit could
+    // not see what it needed, which is a claim about the audit and never about the
+    // artifact. Pass A's real answers are preserved; the pass B checks are named as
+    // not run with the underlying cause, so nothing degrades into exit 70.
+    const message = error instanceof Error ? error.message : String(error);
+    const reason =
+      error instanceof NoBrowserError
+        ? "pass B could not run: no browser was available"
+        : `pass B could not run: ${message}`;
+    return {
+      ...preconditionOutcome([message], pre.notes),
+      checks: [
+        ...a,
+        ...unrun(a, ["A"]).map((c) =>
+          checksInPass("B").some((s) => s.id === c.id) ? { ...c, reason } : c,
         ),
-      };
-    }
-    throw error;
+      ].sort(
+        (x, y) =>
+          REGISTER.findIndex((s) => s.id === x.id) - REGISTER.findIndex((s) => s.id === y.id),
+      ),
+    };
   }
 };

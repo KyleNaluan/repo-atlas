@@ -30,7 +30,7 @@ const DECISION_SHAPE = `{
   "why": "<the reasoning the record gives>",
   "rejected": [{"alternative": "<what lost>", "why_it_lost": "<the record's reason>"}],
   "rejected_absent_from_record": <true when the record names no alternative>,
-  "status": "decided" | "decided_and_built" | "decided_not_built" | "superseded",
+  "status": "decided" | "superseded",
   "soundbite": "<one plain sentence answering this decision's own question>",
   "implementation_claim": {
     "description": "<what a reader should find, in words>",
@@ -44,6 +44,10 @@ const decisionPrompt = (record: RecordToRead, prompt: string): string => `${prom
 
 --- RETURN ONLY THIS JSON, no prose and no code fence ---
 ${DECISION_SHAPE}
+
+"status" is "decided" or "superseded" only. Whether a thing was built is never
+yours to state: it travels solely on "implementation_claim.expect" and is settled
+against the tree afterwards, by machinery that does not consult you.
 
 Omit "implementation_claim" entirely when the record supports neither presence
 nor absence. Omit any field you cannot ground in the record below.

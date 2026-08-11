@@ -28,6 +28,7 @@
   "files": [
     "dist",
     "schema",
+    "assets",
     "README.md"
   ],
   "engines": {

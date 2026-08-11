@@ -14,6 +14,7 @@
 import type { Candidate, Probe } from "../types.js";
 import { pathSlug, slug } from "../id.js";
 import {
+  declaredTypeNames,
   directoryOf,
   enclosingTypeNames,
   enclosingTypeNode,
@@ -84,12 +85,17 @@ const ownerScopeOf = (method: SyntaxNode, path: string): OwnerScope => {
  * where the others return - is only true between siblings, so the sibling set is
  * bounded rather than "any same-named method anywhere":
  *
- * - Where the refusing type DECLARES a supertype, its siblings are the other
- *   types declaring that same supertype: the shared shape is what makes the
- *   asymmetry a design rather than a coincidence.
- * - Where it declares none, siblings fall back to other types in the same
- *   directory - the peer notion `dependency-asymmetry` also uses (`directoryOf`),
- *   so the two probes agree on what a sibling is.
+ * - Where the refusing type declares a supertype THE SUBJECT ITSELF DECLARES,
+ *   its siblings are the other types declaring that same supertype: the shared
+ *   shape is what makes the asymmetry a design rather than a coincidence. A
+ *   supertype the tree does not declare (`Comparable`, `Runnable`, any JDK or
+ *   third-party interface) is shared by types that decided nothing together, so
+ *   it is not counted - two classes both implementing `Comparable` are not
+ *   siblings, and a class throwing in `compareTo` must not pair with an
+ *   unrelated `Comparable` implementer.
+ * - Where it declares none the subject defines, siblings fall back to other
+ *   types in the same directory - the peer notion `dependency-asymmetry` also
+ *   uses (`directoryOf`), so the two probes agree on what a sibling is.
  * - A type is never its own sibling. An overload pair inside one class differing
  *   in refusing-vs-returning may be a real finding, but it is not the one this
  *   probe claims to make, and its own title says "siblings".
@@ -100,10 +106,11 @@ const ownerScopeOf = (method: SyntaxNode, path: string): OwnerScope => {
  * an id collision because this probe carries no `claims`, so the gate confirms it
  * as-is and the false finding reaches rank marked verified.
  */
-const isSibling = (refuser: OwnerScope, returner: OwnerScope): boolean => {
+const isSibling = (refuser: OwnerScope, returner: OwnerScope, declared: Set<string>): boolean => {
   if (refuser.key === returner.key) return false;
-  if (refuser.supertypes.size > 0) {
-    return [...refuser.supertypes].some((s) => returner.supertypes.has(s));
+  const shapes = [...refuser.supertypes].filter((s) => declared.has(s));
+  if (shapes.length > 0) {
+    return shapes.some((s) => returner.supertypes.has(s));
   }
   return refuser.directory === returner.directory;
 };
@@ -116,6 +123,7 @@ export const throwWhereSiblingsReturn: Probe = {
     // Collect by method name across the tree, carrying each method's owning type
     // so siblings can be bounded rather than paired by bare name globally.
     const returning = new Map<string, OwnerScope[]>();
+    const declared = new Set<string>();
     const refusing: {
       path: string;
       name: string;
@@ -129,6 +137,7 @@ export const throwWhereSiblingsReturn: Probe = {
       const source = ctx.read(path);
       if (source === null) continue;
       const root = await parseJava(source);
+      for (const name of declaredTypeNames(root)) declared.add(name);
       for (const method of findAll(root, "method_declaration")) {
         const name = nameOf(method);
         const body = method.childForFieldName("body");
@@ -150,7 +159,7 @@ export const throwWhereSiblingsReturn: Probe = {
     const siblingTypes = (r: (typeof refusing)[number]): Set<string> => {
       const keys = new Set<string>();
       for (const returner of returning.get(r.name) ?? []) {
-        if (isSibling(r.scope, returner)) keys.add(returner.key);
+        if (isSibling(r.scope, returner, declared)) keys.add(returner.key);
       }
       return keys;
     };

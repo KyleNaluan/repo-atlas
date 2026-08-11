@@ -119,6 +119,26 @@ export const enclosingTypeNames = (node: SyntaxNode): string[] => {
   return names;
 };
 
+/**
+ * The simple names of every type declaration in a parse tree.
+ *
+ * A sibling comparison keys on shared supertypes, but a supertype is only a
+ * shape the subject itself designed when the subject declares it. A JDK or
+ * third-party interface (`Comparable`, `Runnable`) is shared by types that
+ * decided nothing together, so callers intersect a supertype set with this to
+ * keep only the supertypes the tree actually defines.
+ */
+export const declaredTypeNames = (root: SyntaxNode): string[] => {
+  const names: string[] = [];
+  walk(root, (n) => {
+    if (TYPE_DECLARATION.test(n.type)) {
+      const name = nameOf(n);
+      if (name) names.push(name);
+    }
+  });
+  return names;
+};
+
 /** The nearest enclosing type declaration of a node, or null if it is top-level. */
 export const enclosingTypeNode = (node: SyntaxNode): SyntaxNode | null => {
   for (let cur = node.parent; cur; cur = cur.parent) {

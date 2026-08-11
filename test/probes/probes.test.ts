@@ -462,11 +462,13 @@ describe("throw-where-siblings-return", () => {
     expect(await candidatesFrom("throw-where-siblings-return", ctx)).toEqual([]);
   }, 60_000);
 
-  it("pairs implementations of a shared supertype even across directories", async () => {
+  it("pairs implementations of a supertype the subject declares, even across directories", async () => {
     // The shared shape is what makes the asymmetry a design: one Grader refuses
     // where its fellow Graders return. The supertype binds them even though they
-    // live in different directories.
+    // live in different directories - but only because the subject itself
+    // declares Grader, so the shape is one it designed.
     const ctx = contextFor({
+      "i/Grader.java": "interface Grader { Object grade(); }\n",
       "a/Self.java": "class Self implements Grader { Object grade() { throw new UnsupportedOperationException(); } }\n",
       "b/AnswerKey.java": "class AnswerKey implements Grader { Object grade() { return null; } }\n",
       "c/TestCase.java": "class TestCase implements Grader { Object grade() { return this; } }\n",
@@ -476,6 +478,18 @@ describe("throw-where-siblings-return", () => {
     expect(found[0]!.node.title).toContain("Self.grade");
     // Two sibling implementations return, and the count reflects that.
     expect(found[0]!.node.type === "mechanism" && found[0]!.node.what).toContain("2 other");
+  }, 60_000);
+
+  it("does not pair two classes that share only a supertype the subject never declares", async () => {
+    // A supertype the tree does not declare - a JDK interface like Comparable -
+    // is shared by types that decided nothing together. A class throwing in
+    // compareTo must not pair with an unrelated Comparable implementer in another
+    // directory: they share no shape the subject designed, so no candidate.
+    const ctx = contextFor({
+      "x/A.java": "class A implements Comparable { int compareTo(Object o) { throw new UnsupportedOperationException(); } }\n",
+      "y/B.java": "class B implements Comparable { int compareTo(Object o) { return 0; } }\n",
+    });
+    expect(await candidatesFrom("throw-where-siblings-return", ctx)).toEqual([]);
   }, 60_000);
 
   it("pairs directory peers when neither declares a supertype", async () => {

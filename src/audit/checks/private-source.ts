@@ -53,11 +53,14 @@ export const shingles = (words: string[], k = SHINGLE_K): Set<string> => {
 };
 
 /**
- * A file the walk could not fold into the corpus even though it wanted to: too
- * large for the cap, or unreadable. Tracked rather than dropped, because a
+ * A path the walk could not fold into the corpus even though it wanted to: too
+ * large for the cap, unreadable, an unlistable directory, or a stat that threw
+ * (a broken symlink, a vanished entry). Tracked rather than dropped, because a
  * corpus missing a file is a partial corpus, and a partial corpus can never
  * clear a truth gate - a leaked passage living in a skipped file would never be
- * shingled, and passing on it would be absence communicated by silence.
+ * shingled, and passing on it would be absence communicated by silence. A throw
+ * out of the walk is the same hollow-coverage failure arriving as a crash, so
+ * every filesystem call the walk makes records a skip instead of propagating.
  *
  * SKIP_DIRS and binaries are not skips in this sense: they are deliberate
  * exclusions of things that cannot carry shingleable prose, not text the walk
@@ -71,10 +74,23 @@ const readCorpus = (
   let files = 0;
   let bytes = 0;
   const walk = (dir: string) => {
-    for (const entry of readdirSync(dir)) {
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      skipped.push(dir);
+      return;
+    }
+    for (const entry of entries) {
       if (SKIP_DIRS.has(entry)) continue;
       const path = join(dir, entry);
-      const stat = statSync(path);
+      let stat: ReturnType<typeof statSync>;
+      try {
+        stat = statSync(path);
+      } catch {
+        skipped.push(path);
+        continue;
+      }
       if (stat.isDirectory()) {
         walk(path);
         continue;

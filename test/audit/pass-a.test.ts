@@ -12,7 +12,7 @@
  * its own mutant, and only its own, is what tells them apart.
  */
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { readFileSync, writeFileSync, mkdtempSync, truncateSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, truncateSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,7 +22,7 @@ import { disposeHighlighter } from "../../src/render/highlight.js";
 import { memoryDiagramCache } from "../../src/render/cache.js";
 import { audit } from "../../src/audit/run.js";
 import { runPassA } from "../../src/audit/pass-a.js";
-import { resolveFileEvidence } from "../../src/audit/checks/evidence.js";
+import { eachEvidence, resolveFileEvidence } from "../../src/audit/checks/evidence.js";
 import { checkPreconditions } from "../../src/audit/preconditions.js";
 import { checksInPass, GATES, REGISTER } from "../../src/audit/register.js";
 import type { AuditContext } from "../../src/audit/types.js";
@@ -319,6 +319,46 @@ describe("L2 when the graph cites files but none carry a line range", () => {
   });
 });
 
+describe("L2 when the graph declares ranges but their paths do not resolve", () => {
+  // L2's population is the ranges DECLARED in the graph, not the ones the check
+  // managed to examine. A graph that declares ranges whose paths are missing at
+  // the pinned SHA must not have L2 claim "no ranges to resolve" - that would
+  // mis-describe the audit's own coverage to the very reader debugging the
+  // failed run (#8). L1 stays unaffected: it examined the paths and fails.
+  const reroute = (atlas: Atlas, pick: (path: string) => boolean): Atlas => {
+    const a = structuredClone(atlas);
+    eachEvidence(a, (e) => {
+      if (e.kind === "file" && pick(e.path)) e.path = `does-not-exist/${e.path}`;
+    });
+    return a;
+  };
+
+  it("(b) all paths missing: L1 fails and L2 names the unresolved paths, not 'no ranges'", () => {
+    const ctx: AuditContext = { ...clean, atlas: reroute(clean.atlas, () => true) };
+    const [l1, l2] = resolveFileEvidence(ctx);
+    expect(l1.outcome).toBe("failed");
+    expect(l2.outcome).toBe("not_applicable");
+    expect(l2.reason).toMatch(/could not be checked because their paths did not resolve/);
+    expect(l2.reason).not.toMatch(/none carry a line range/);
+  });
+
+  it("(c) partially resolvable: L2 reports only the ranges it actually examined", () => {
+    const examinedAll = resolveFileEvidence(clean)[1].count ?? 0;
+    const ranged = new Set<string>();
+    eachEvidence(clean.atlas, (e) => {
+      if (e.kind === "file" && e.line_start !== undefined) ranged.add(e.path);
+    });
+    const one = [...ranged][0]!;
+    const ctx: AuditContext = { ...clean, atlas: reroute(clean.atlas, (p) => p === one) };
+    const [l1, l2] = resolveFileEvidence(ctx);
+    expect(l1.outcome).toBe("failed");
+    expect(l2.outcome).toBe("passed");
+    expect(l2.count ?? 0).toBeGreaterThan(0);
+    // Fewer ranges examined than the clean run: L2 never claims coverage it lost.
+    expect(l2.count ?? 0).toBeLessThan(examinedAll);
+  });
+});
+
 describe("P1 cannot pass on an incomplete corpus", () => {
   it("reports not_applicable, naming the skip, when a private file could not be read in full", () => {
     // A partial corpus can never support a passing truth gate: a leaked passage
@@ -343,6 +383,31 @@ describe("P1 cannot pass on an incomplete corpus", () => {
     expect(result?.outcome).toBe("not_applicable");
     expect(result?.reason).toMatch(/could not be read in full/);
     expect(result?.reason).toContain("too-big.txt");
+  });
+
+  it("records a stat that throws as a skip rather than crashing the audit", () => {
+    // A broken symlink makes statSync throw ENOENT mid-walk. Left uncaught that
+    // propagates out of readCorpus -> privateSourceCheck -> runPassA -> audit()
+    // and crashes the whole run: the same hollow-coverage failure arriving as a
+    // throw instead of a false pass. It must be recorded as a skip, which per
+    // the incomplete-corpus rule already makes a passing P1 unreachable.
+    const corpusRoot = mkdtempSync(join(tmpdir(), "repo-atlas-private-broken-"));
+    writeFileSync(join(corpusRoot, "readable.txt"), "some harmless words in here\n", "utf8");
+    symlinkSync(join(corpusRoot, "does-not-exist"), join(corpusRoot, "broken-link"));
+
+    const atlas = structuredClone(clean.atlas);
+    atlas.record.private_source = {
+      declared: true,
+      repo: "KyleNaluan/swe-prep-content",
+      readable_at_harvest: true,
+    };
+    const ctx: AuditContext = { ...clean, atlas, privateClone: corpusRoot };
+    expect(() => audit(ctx)).not.toThrow();
+    const result = byId(ctx).get("P1");
+    expect(result?.outcome).not.toBe("passed");
+    expect(result?.outcome).toBe("not_applicable");
+    expect(result?.reason).toMatch(/could not be read in full/);
+    expect(result?.reason).toContain("broken-link");
   });
 });
 

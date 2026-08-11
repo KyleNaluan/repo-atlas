@@ -65,16 +65,28 @@ export const resolveFileEvidence = (ctx: AuditContext): [CheckResult, CheckResul
   if (entries.length === 0) return noFileEvidence();
   const missing: string[] = [];
   const outOfRange: string[] = [];
-  let ranges = 0;
+  // L2's population is the line ranges DECLARED in the graph, counted
+  // independently of whether their path resolved. Deciding applicability from
+  // the ranges the check managed to examine mis-describes a graph that declared
+  // ranges whose paths simply did not resolve at this SHA - it would report "no
+  // ranges to resolve" while pointing the reader of a failed audit the wrong way
+  // (#8: the audit must never mis-describe its own coverage).
+  let declaredRanges = 0;
+  let examinedRanges = 0;
+  const unresolvedRanges: string[] = [];
 
   for (const { owner, e } of entries) {
+    if (e.line_start !== undefined) declaredRanges += 1;
     const contents = blobAt(ctx.clone, ctx.atlas.subject.sha, e.path);
     if (contents === null) {
       missing.push(`${owner}: ${e.path} does not exist at ${ctx.atlas.subject.sha}`);
+      if (e.line_start !== undefined) {
+        unresolvedRanges.push(`${owner}: ${e.path}:${e.line_start}`);
+      }
       continue;
     }
     if (e.line_start === undefined) continue;
-    ranges += 1;
+    examinedRanges += 1;
     const lines = lineCount(contents);
     const end = e.line_end ?? e.line_start;
     if (e.line_start < 1 || end < e.line_start || end > lines) {
@@ -84,21 +96,35 @@ export const resolveFileEvidence = (ctx: AuditContext): [CheckResult, CheckResul
     }
   }
 
-  return [
+  const l1 =
     missing.length === 0
       ? passed(spec("L1"), entries.length)
-      : failed(spec("L1"), missing, entries.length),
-    // L1 examined a real population (the file paths) and reports its outcome. L2
-    // is different: if not one cited entry carries a line range, L2 resolved
-    // nothing, so it had no population and cannot claim a pass (#8). It reports
-    // not_applicable by name rather than a hollow passed(0), the same ruling as
-    // the both-empty case above, one granularity finer.
-    ranges === 0
-      ? notApplicable(spec("L2"), "the graph cites files but none carry a line range to resolve")
-      : outOfRange.length === 0
-        ? passed(spec("L2"), ranges)
-        : failed(spec("L2"), outOfRange, ranges),
-  ];
+      : failed(spec("L1"), missing, entries.length);
+
+  // L1 examined a real population (the file paths) and reports its outcome. L2's
+  // applicability keys off the ranges DECLARED, not the ranges examined:
+  // - No entry declares a range: L2 had no population, so not_applicable by name
+  //   rather than a hollow passed(0) - the both-empty ruling, one finer (#8).
+  // - Ranges declared but not one of their paths resolved: L2 examined nothing,
+  //   so it still cannot claim a pass, and its reason must be the real one - the
+  //   unresolved paths - never "no ranges exist" (see L1 for those paths).
+  // - Otherwise L2 reports on the ranges it actually examined; the count never
+  //   claims coverage it did not have.
+  let l2: CheckResult;
+  if (declaredRanges === 0) {
+    l2 = notApplicable(spec("L2"), "the graph cites files but none carry a line range to resolve");
+  } else if (examinedRanges === 0) {
+    l2 = notApplicable(
+      spec("L2"),
+      `${declaredRanges} declared line range(s) could not be checked because their paths did not resolve at ${ctx.atlas.subject.sha}; see L1: ${unresolvedRanges.slice(0, 20).join("; ")}`,
+    );
+  } else if (outOfRange.length === 0) {
+    l2 = passed(spec("L2"), examinedRanges);
+  } else {
+    l2 = failed(spec("L2"), outOfRange, examinedRanges);
+  }
+
+  return [l1, l2];
 };
 
 /**

@@ -392,6 +392,37 @@ describe("scale and density from the pinned tree", () => {
     expect(detectPrivateSplit(plain.path, plain.sha, "o/r").declared).toBe(false);
   });
 
+  it("does not treat a gitignored content directory as a declared split", () => {
+    // A .gitignore entry says "do not commit this", not "a private source
+    // exists". Recording declared:true for an ordinary repo that ignores a build
+    // or content directory makes #8's P1 print a sentence about a private source
+    // the engine never established. declared:false is the honest default.
+    const ignored = buildRepo({
+      "README.md": "Just a repository. Nothing private here.\n",
+      ".gitignore": "content/\nnode_modules/\n",
+      "a.ts": "export {};\n",
+    });
+    expect(detectPrivateSplit(ignored.path, ignored.sha, "o/r").declared).toBe(false);
+  });
+
+  it("counts a non-ASCII source filename in the file, line, and citation totals", () => {
+    // git ls-tree quotes paths with non-ASCII bytes ("caf\303\251.ts"), and the
+    // surrounding quotes defeat both the extension test and the cat-file lookup -
+    // so an accented filename would silently drop out of every measured figure.
+    // core.quotePath=false at the git invocation keeps the path verbatim.
+    const accented = buildRepo({
+      "café.ts": "export const x = 1;\n// see #12 for why\n",
+      "naïve.java": "class Naive {}\n",
+    });
+    const scale = measureScale(accented.path, accented.sha);
+    expect(scale.files).toBe(2);
+    expect(scale.lines).toBe(3);
+    expect(countSourceFilesCitingIssues(accented.path, accented.sha)).toEqual({
+      citing: 1,
+      of: 2,
+    });
+  });
+
   it("refuses to measure a shallow clone rather than reporting the slice it holds", () => {
     expect(new ShallowCloneError("/x").message).toMatch(/looks like an answer and is not one/);
   });

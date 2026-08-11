@@ -25,7 +25,7 @@ export class ShallowCloneError extends Error {
 }
 
 const git = (repo: string, args: string[]): string =>
-  execFileSync("git", args, {
+  execFileSync("git", ["-c", "core.quotePath=false", ...args], {
     cwd: repo,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
@@ -266,10 +266,13 @@ export const densitySignals = (
 /**
  * Whether the subject declares a public/private split.
  *
- * Detected from the tree's own declarations rather than guessed: a gitignored
- * sibling path named in the README or in a config, or an explicitly private
- * companion repository. The private side is NEVER read - this records only that
- * it exists, which is what #8's P1 needs to choose between its three states.
+ * Detected from the tree's own declarations rather than guessed: a companion
+ * repository named in the README and described there as private. A .gitignore
+ * entry is deliberately NOT treated as a declaration - it says "do not commit
+ * this", not "a private source exists" - so declared:false is the honest default
+ * when the README names nothing. The private side is NEVER read - this records
+ * only that it exists, which is what #8's P1 needs to choose between its three
+ * states.
  */
 export const detectPrivateSplit = (
   repo: string,
@@ -277,7 +280,6 @@ export const detectPrivateSplit = (
   subjectRepo: string,
 ): PrivateSplit => {
   const readme = blob(repo, sha, "README.md") ?? "";
-  const gitignore = blob(repo, sha, ".gitignore") ?? "";
   const owner = subjectRepo.split("/")[0] ?? "";
 
   // A companion repository named in the README and described as private.
@@ -299,14 +301,6 @@ export const detectPrivateSplit = (
       note:
         "declared in the subject's README as a separate private repository; harvest does not read " +
         "the private side, so no content from it can reach the artifact",
-    };
-  }
-
-  if (declaresPrivate || /content|solutions/i.test(gitignore)) {
-    return {
-      declared: true,
-      readable_at_harvest: false,
-      note: "the subject declares content it deliberately does not carry; harvest does not read it",
     };
   }
 

@@ -108,7 +108,6 @@ export interface ModelPassOptions {
 
 const runJudgements = async (
   id: string,
-  name: string,
   nodes: AtlasNode[],
   question: string,
   options: ModelPassOptions,
@@ -123,14 +122,24 @@ const runJudgements = async (
     return passed(spec(id), 0);
   }
 
+  // Evidence is resolved BEFORE the judge try, deliberately. Resolution reads
+  // git (blobAt), which can throw a GitError - a claim about the audit's own
+  // filesystem, never about the model. Caught by the try below it would be
+  // mislabelled as the model becoming unreachable; left outside, a git failure
+  // propagates as itself, exactly the misattribution discipline this pass keeps.
+  const judgements = nodes.map((node) => ({
+    node,
+    evidence: node.evidence
+      .map((e) => ({ citation: citationOf(e), text: options.resolve(e) }))
+      .filter((e): e is { citation: string; text: string } => e.text !== undefined),
+  }));
+
+  const judge = options.judge;
   const findings: string[] = [];
   let judged = 0;
   try {
-    for (const node of nodes) {
-      const evidence = node.evidence
-        .map((e) => ({ citation: citationOf(e), text: options.resolve(e) }))
-        .filter((e): e is { citation: string; text: string } => e.text !== undefined);
-      const verdict = await options.judge({ node, evidence }, question);
+    for (const { node, evidence } of judgements) {
+      const verdict = await judge({ node, evidence }, question);
       if (!verdict.supported) findings.push(`${node.id}: ${verdict.note}`);
       judged += 1;
     }
@@ -155,7 +164,6 @@ const runJudgements = async (
     );
   }
 
-  void name;
   return findings.length === 0
     ? passed(spec(id), nodes.length)
     : // A warning-class check reports its findings in full; the run still ships.
@@ -163,10 +171,10 @@ const runJudgements = async (
 };
 
 export const proseSupport = (nodes: AtlasNode[], options: ModelPassOptions): Promise<CheckResult> =>
-  runJudgements("M1", "prose support", nodes, PROSE_QUESTION, options);
+  runJudgements("M1", nodes, PROSE_QUESTION, options);
 
 export const absenceWitness = (
   nodes: AtlasNode[],
   options: ModelPassOptions,
 ): Promise<CheckResult> =>
-  runJudgements("M2", "absence witness", nodes.filter(isAbsenceShaped), ABSENCE_QUESTION, options);
+  runJudgements("M2", nodes.filter(isAbsenceShaped), ABSENCE_QUESTION, options);

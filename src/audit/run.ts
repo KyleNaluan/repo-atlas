@@ -26,7 +26,7 @@ import type { IssueSource } from "./checks/issue-resolution.js";
 import type { ModelPassOptions } from "./checks/model.js";
 import { NoBrowserError } from "./browser.js";
 import { checksInPass, REGISTER, type PassName } from "./register.js";
-import { notRun, type AuditContext, type CheckResult } from "./types.js";
+import { isBlocking, notRun, type AuditContext, type CheckResult } from "./types.js";
 import type { AuditStatus } from "../schema/types.js";
 import type { ViewportMeasurement } from "./checks/visual.js";
 
@@ -157,7 +157,7 @@ export const runAudit = async (
   const a = runPassA(ctx);
   // Pass A decides whether pass B is worth running: there is no point launching
   // a browser to look at an artifact whose evidence does not resolve.
-  if (a.some((c) => c.outcome === "failed" && (c.class === "gate" || c.aborted))) {
+  if (a.some(isBlocking)) {
     return assemble(a, ["A"], pre.notes);
   }
 
@@ -204,22 +204,11 @@ export const runAudit = async (
 
   // Pass B gates decide whether the later passes are worth running, for the same
   // reason pass A decides about pass B.
-  const blocked = b.checks.some((c) => c.outcome === "failed" && (c.class === "gate" || c.aborted));
-  if (!blocked) {
-    if (options.issues) {
-      const c = await runPassC(ctx, options.issues);
-      checks.push(...c.checks);
-      notes.push(...c.notes);
-      passes.push("C");
-    }
-    // Pass D last: the only expensive pass, never spent on a doomed artifact.
-    // It owns its own boundary and cannot throw - see checks/model.ts, where a
-    // model that dies mid-sweep reports not run rather than handing the run a
-    // throw this function would be obliged to call a precondition failure.
-    if (options.model) {
-      checks.push(...(await runPassD(ctx, options.model)));
-      passes.push("D");
-    }
+  if (!b.checks.some(isBlocking)) {
+    const later = await runLaterPasses(ctx, options);
+    checks.push(...later.checks);
+    notes.push(...later.notes);
+    passes.push(...later.passes);
   }
 
   return {
@@ -227,4 +216,47 @@ export const runAudit = async (
     measurements: b.measurements,
     screenshots: b.screenshots,
   };
+};
+
+/**
+ * Passes C then D, each gating the next. The blocking rule that runs between
+ * them is the whole point: a gate failure or abort in pass C means the artifact
+ * has already failed, so the model pass - the only expensive one - is not spent
+ * on it. M1/M2 then report `not_run` by name with the honest reason rather than
+ * rendering advisory warnings on an artifact that cannot ship.
+ *
+ * Pass D owns its own boundary and cannot throw a check result - see
+ * checks/model.ts, where a model that dies mid-sweep reports not run rather than
+ * handing the run a throw this function would be obliged to call a precondition
+ * failure.
+ */
+export const runLaterPasses = async (
+  ctx: AuditContext,
+  options: Pick<RunAuditOptions, "issues" | "model">,
+): Promise<{ checks: CheckResult[]; passes: PassName[]; notes: string[] }> => {
+  const checks: CheckResult[] = [];
+  const notes: string[] = [];
+  const passes: PassName[] = [];
+
+  if (options.issues) {
+    const c = await runPassC(ctx, options.issues);
+    checks.push(...c.checks);
+    notes.push(...c.notes);
+    passes.push("C");
+  }
+
+  if (options.model) {
+    if (checks.some(isBlocking)) {
+      checks.push(
+        ...checksInPass("D").map((s) =>
+          notRun(s, "an earlier gate failed, so the model pass was not spent"),
+        ),
+      );
+    } else {
+      checks.push(...(await runPassD(ctx, options.model)));
+    }
+    passes.push("D");
+  }
+
+  return { checks, passes, notes };
 };

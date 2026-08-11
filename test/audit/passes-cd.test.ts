@@ -29,6 +29,7 @@ import {
   type Judge,
 } from "../../src/audit/checks/model.js";
 import { runPassD } from "../../src/audit/pass-d.js";
+import { runLaterPasses } from "../../src/audit/run.js";
 import { GATES } from "../../src/audit/register.js";
 import type { AuditContext, CheckResult } from "../../src/audit/types.js";
 import type { Atlas, AtlasNode, EdgeNode } from "../../src/schema/types.js";
@@ -303,6 +304,53 @@ describe("the model can never decide whether an artifact ships", () => {
       expect(c.reason).toMatch(/never decides whether an artifact ships/);
     }
     expect(checks.some(isGateFailure)).toBe(false);
+  });
+
+  it("does not spend the model pass when pass C's L3 gate has already failed", async () => {
+    // Pass D is the only expensive pass, so a doomed artifact must never reach it.
+    // A cited issue that does not resolve against a cache that would know is an L3
+    // gate failure - the artifact has already failed - and M1/M2 must then report
+    // not_run with the honest reason, not warnings, and the judge must never run.
+    let judgeCalls = 0;
+    const judge: Judge = async () => {
+      judgeCalls += 1;
+      return { supported: true, note: "n" };
+    };
+    const { checks, passes } = await runLaterPasses(ctx, {
+      issues: { cached: fullCache().slice(1) },
+      model: { judge, resolve: () => "evidence text" },
+    });
+
+    expect(judgeCalls).toBe(0);
+    const l3 = checks.find((c) => c.id === "L3")!;
+    expect(l3.outcome).toBe("failed");
+    for (const id of ["M1", "M2"]) {
+      const c = checks.find((x) => x.id === id)!;
+      expect(c.outcome, id).toBe("not_run");
+      expect(c.aborted, id).toBeUndefined();
+      expect(c.reason, id).toMatch(/an earlier gate failed, so the model pass was not spent/);
+    }
+    expect(passes).toEqual(["C", "D"]);
+  });
+
+  it("spends the model pass when pass C's L3 gate passes", async () => {
+    // The other direction, so the guard above is the block and not a dead path: a
+    // clean L3 leaves pass D free to run and the judge is called.
+    let judgeCalls = 0;
+    const judge: Judge = async () => {
+      judgeCalls += 1;
+      return { supported: true, note: "n" };
+    };
+    const { checks } = await runLaterPasses(ctx, {
+      issues: { cached: fullCache() },
+      model: { judge, resolve: () => "evidence text" },
+    });
+
+    expect(judgeCalls).toBeGreaterThan(0);
+    expect(checks.find((c) => c.id === "L3")!.outcome).toBe("passed");
+    for (const id of ["M1", "M2"]) {
+      expect(checks.find((x) => x.id === id)!.outcome).toBe("passed");
+    }
   });
 
   it("drops a partial sweep rather than enumerating it as the whole set", async () => {

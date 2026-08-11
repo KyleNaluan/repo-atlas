@@ -81,3 +81,18 @@ describe("repo-atlas validate", () => {
     expect(await main(["validate"])).toBe(64);
   });
 });
+
+describe("repo-atlas audit", () => {
+  it("exits EX_USAGE without the inputs it cannot invent", async () => {
+    // The audit needs the artifact, the graph and a clone at the pinned SHA.
+    // Defaulting any of them would be the audit guessing at what it is checking.
+    expect(await main(["audit"])).toBe(64);
+    expect(await main(["audit", "x.html"])).toBe(64);
+    expect(await main(["audit", "x.html", "--atlas", "a.json"])).toBe(64);
+  });
+
+  it("documents that a missing precondition is its own outcome", async () => {
+    expect(await main(["audit", "--help"])).toBe(0);
+    expect(out.join("\n")).toMatch(/never a pass and never a silent skip/);
+  });
+});

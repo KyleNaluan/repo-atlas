@@ -43,6 +43,13 @@ After any change to `src/schema/types.ts`, run `npm run schema:gen` and commit t
 - **`prose()` requires a provenance argument.** There is no unstamped overload, because the moment one exists the check it protects becomes advisory. The renderer's own sentences use the `chrome` template instead.
 - **`src/render/theme.ts` is one big template literal** - a backtick anywhere in it, including in a comment, silently truncates the stylesheet.
 
+## The audit's two standing rules
+
+- **No check ships without a mutant fixture proving it fails** (#8). `test/mutants/` holds one deliberately-broken artifact per check, and `test/audit/pass-a.test.ts` asserts each check rejects its own mutant and only its own. A check that has never been watched fail is a check nobody knows works.
+- **A check that could not run says so by name.** `not_applicable` and `not_run` carry a mandatory reason, and neither ever counts as passing. The audit reports all twenty checks even though only some passes are built, for the same reason #6 forbids communicating absence by silence.
+
+Audit tests build a synthetic subject (`test/audit/subject.ts`): a real git repo holding exactly the files the reference graph cites, with the graph re-pinned to its commit. That keeps L1/L2 hermetic - no network, no 40 MB checkout - while still exercising the real `git cat-file` comparison.
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.

@@ -531,6 +531,35 @@ describe("tuned-config-properties", () => {
     const ctx = contextFor({ "application.yml": "# the timeout\ntimeout: PT10S\n" });
     expect(await candidatesFrom("tuned-config-properties", ctx)).toEqual([]);
   }, 60_000);
+
+  it("emits one candidate for a setting introduced by a multi-line rationale", async () => {
+    // A setting is the unit of finding: a rationale spread over several comment
+    // lines is one tuning, and each of those lines must not mint its own node.
+    // The merged block is carried as the note so no rationale is lost.
+    const ctx = contextFor({
+      "application.yml":
+        "# We measured this under load.\n" +
+        "# Found that PT10S is the sweet spot.\n" +
+        "timeout: PT10S\n",
+    });
+    const found = await candidatesFrom("tuned-config-properties", ctx);
+    expect(found).toHaveLength(1);
+    const note = found[0]!.node.evidence[0]?.note ?? "";
+    expect(note).toContain("We measured this under load.");
+    expect(note).toContain("Found that PT10S is the sweet spot.");
+  }, 60_000);
+
+  it("still emits two candidates for two distinct tuned settings in one file", async () => {
+    const ctx = contextFor({
+      "application.yml":
+        "# measured: 10s is the p99 under load\n" +
+        "timeout: PT10S\n" +
+        "# tuned: the pool was sized by benchmark\n" +
+        "poolSize: 32\n",
+    });
+    const found = await candidatesFrom("tuned-config-properties", ctx);
+    expect(found).toHaveLength(2);
+  }, 60_000);
 });
 
 describe("ci-policy-guards", () => {

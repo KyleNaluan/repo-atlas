@@ -11,7 +11,7 @@
  * the reading therefore shows which of the three moved.
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { modelWriter } from "../write/model-writer.js";
 import {
   promptDigest,
@@ -22,7 +22,7 @@ import {
   type WrittenFile,
 } from "../write/write.js";
 import { RESOLUTION_HEADING } from "../harvest/issues.js";
-import { treeFiles } from "../harvest/tree.js";
+import { fileAt, treeFiles } from "../harvest/tree.js";
 import type { Harvest } from "../harvest/types.js";
 
 const USAGE = `usage: repo-atlas write --harvest <harvest.json> --clone <path> [-o <written.json>]
@@ -110,14 +110,13 @@ export const writeCommand = async (argv: string[]): Promise<number> => {
   }
 
   const readmePath = flag(argv, "--readme") ?? "README.md";
-  let readme = "";
-  try {
-    readme = readFileSync(join(resolve(clone), readmePath), "utf8");
-  } catch {
-    // Left empty on purpose. The prompt's own rule is that an unreadable README
-    // cannot support a product sentence, so the writer reports it inadmissible
-    // rather than this command guessing on its behalf.
-  }
+  // Read at the pinned SHA, the same source treeFiles reads the listing from, so
+  // the summarized bytes and the {path, sha} citation proseFrom stamps agree by
+  // construction rather than by a clean-checkout precondition holding. A README
+  // absent at that SHA is left empty on purpose: the prompt's own rule is that an
+  // unreadable README cannot support a product sentence, so the writer reports it
+  // inadmissible rather than this command guessing from the working tree.
+  const readme = fileAt(resolve(clone), harvest.subject.sha, readmePath) ?? "";
   const prose = await writer.prose(
     {
       readme,

@@ -51,13 +51,16 @@ const TEST_PATH = /(^|\/)(test|tests|spec|__tests__)(\/|$)|\.(test|spec)\./i;
 export const isSourceFile = (path: string): boolean =>
   SOURCE_EXTENSIONS.test(path) && !TEST_PATH.test(path);
 
-const blob = (repo: string, sha: string, path: string): string | null => {
+/** A blob's text at a commit, or null when the path is absent at that SHA. */
+export const fileAt = (repo: string, sha: string, path: string): string | null => {
   try {
     return git(repo, ["cat-file", "-p", `${sha}:${path}`]);
   } catch {
     return null;
   }
 };
+
+const blob = fileAt;
 
 const countLines = (text: string): number => {
   if (text.length === 0) return 0;

@@ -2,11 +2,11 @@
  * `repo-atlas audit <artifact.html> --atlas <atlas.json> --clone <path>`
  *
  * The deterministic passes in this build: pass A (static gates) plus pass B, the
- * browser gates loaded over a live DOM with the network disabled. The stamping
- * mechanic and the model pass land in later stages, and until they do the audit
- * reports every check it did not run BY NAME rather than omitting it - an audit
- * that quietly reports on some of the twenty checks is the exact failure this
- * stage exists to prevent.
+ * browser gates loaded over a live DOM with the network disabled. The result is
+ * stamped into the reserved slot and a failed artifact is quarantined; the model
+ * pass lands in a later stage, and until it does the audit reports every check it
+ * did not run BY NAME rather than omitting it - an audit that quietly reports on
+ * some of the twenty checks is the exact failure this stage exists to prevent.
  */
 import { resolve } from "node:path";
 import { readFileSync, writeFileSync, rmSync } from "node:fs";

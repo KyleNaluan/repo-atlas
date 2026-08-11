@@ -1035,7 +1035,7 @@
         },
         "content_hash": {
           "type": "string",
-          "description": "sha256 of the artifact with the audit slot's content replaced by the fixed placeholder."
+          "description": "sha256 of the artifact with the audit slot's content replaced by the fixed placeholder. Absent on a failed run, whose quarantined copy is not the file the engine emitted, so a hash claim about it would point at nothing usable."
         },
         "audited_at": {
           "type": "string"

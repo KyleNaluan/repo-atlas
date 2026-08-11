@@ -208,13 +208,27 @@ describe("the provenance record is written for every subject", () => {
 
   it("reports the decision section partial when the record yielded some and lost others", () => {
     // The one section carrying a third state (#6), because it is the only one
-    // making a claim about a record rather than about the tree.
+    // making a claim about a record rather than about the tree. Partial is driven
+    // by an absent cut of a decision - a candidate with no admissible evidence -
+    // not by the gate's verdict on a shipped node.
     const kept = node({ type: "decision", id: "d-1" });
-    const lost = node({ type: "decision", id: "d-2" });
+    const lost = node({ type: "decision", id: "d-2", confidence: "absent" });
     const atlas = build([kept], {
-      gated: [...gatedFor([kept]), ...gatedFor([lost], "unresolved")],
+      gated: [...gatedFor([kept]), ...gatedFor([lost])],
     });
     expect(atlas.record.section_presence["decisions"]).toBe("partial");
+  });
+
+  it("does not report partial off an unresolved decision that shipped as attested", () => {
+    // The gate demotes an unresolved candidate to `attested` and ships it (#7);
+    // a verdict is not a survival signal, so a shipped node is never an absent cut.
+    const kept = node({ type: "decision", id: "d-1" });
+    const shipped = node({ type: "decision", id: "d-2", confidence: "attested" });
+    const atlas = build([kept, shipped], {
+      gated: gatedFor([kept, shipped], "unresolved"),
+    });
+    expect(atlas.record.section_presence["decisions"]).toBe("present");
+    expect(atlas.record.confidence_ledger).toMatchObject({ attested: 1, absent_cut: 0 });
   });
 
   it("reports the decision section present when nothing decision-shaped was lost", () => {
@@ -225,9 +239,9 @@ describe("the provenance record is written for every subject", () => {
   it("counts the ledger off what shipped and what evidence lost", () => {
     const verified = node({ type: "mechanism", id: "m-1", confidence: "verified" });
     const attested = node({ type: "mechanism", id: "m-2", confidence: "attested" });
-    const lost = node({ type: "edge", id: "e-1" });
+    const lost = node({ type: "edge", id: "e-1", confidence: "absent" });
     const atlas = build([verified, attested], {
-      gated: [...gatedFor([verified, attested]), ...gatedFor([lost], "overturned")],
+      gated: [...gatedFor([verified, attested]), ...gatedFor([lost])],
     });
     expect(atlas.record.confidence_ledger).toEqual({ verified: 1, attested: 1, absent_cut: 1 });
   });
@@ -248,8 +262,8 @@ describe("the provenance record is written for every subject", () => {
   it("withholds the claim text of an absent cut, reporting only type and reason", () => {
     // #7's absent-cut-disclosure ruling: printing the claim would reintroduce,
     // in the provenance section, the unevidenced assertion the cut removed.
-    const lost = node({ type: "edge", id: "e-1", statement: "SOMETHING UNPROVEN" } as never);
-    const cuts = absentCutsOf(gatedFor([lost], "unresolved"));
+    const lost = node({ type: "edge", id: "e-1", confidence: "absent", statement: "SOMETHING UNPROVEN" } as never);
+    const cuts = absentCutsOf(gatedFor([lost]));
     expect(cuts).toHaveLength(1);
     expect(JSON.stringify(cuts)).not.toContain("SOMETHING UNPROVEN");
     expect(cuts[0]!.candidate_type).toBe("edge");

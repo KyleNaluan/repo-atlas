@@ -110,20 +110,35 @@ const presenceOf = (
 };
 
 /**
- * A candidate the gate could not confirm is an absent cut: cut, never hedged
- * (#3). The record reports the count, the type and why the evidence failed, and
+ * An absent cut is a candidate whose node carries `absent` confidence: no
+ * admissible evidence at this SHA, so it is cut outright, never hedged (#3's
+ * cut-not-hedged meaning).
+ *
+ * The discriminator is confidence, never the gate's verdict. The gate ships
+ * every candidate it sees - confirmed as-is, unresolved demoted to `attested`,
+ * overturned replaced by a `divergence` edge (#7) - so a verdict is not a
+ * survival signal and reading it as one would report a shipped node as cut. An
+ * unresolved candidate that clears the floor ships and counts as attested; it is
+ * not an absent cut.
+ *
+ * On probe-only input this list is legitimately empty: probes emit `verified`
+ * and `attested` candidates and the gate never manufactures `absent`, so nothing
+ * in the current pipeline is cut for want of evidence. The list is populated by a
+ * source that produces record-shaped candidates whose evidence did not hold.
+ *
+ * The record reports the count, the type and why the evidence failed, and
  * deliberately withholds the claim text (#7's `absent-cut-disclosure` ruling) -
  * printing the claim would reintroduce, in the provenance section, exactly the
  * unevidenced assertion the cut removed from the body.
  */
 export const absentCutsOf = (gated: GatedCandidate[]): AbsentCut[] =>
   gated
-    .filter((g) => g.verdict !== "confirmed")
+    .filter((g) => g.node.confidence === "absent")
     .map((g) => ({
       id: g.node.id,
       candidate_type: g.node.type,
       reason: g.finding,
-      note: `${g.verdict} by the existence gate (${g.probe_id})`,
+      note: `no admissible evidence at this SHA (${g.probe_id})`,
     }));
 
 /**
@@ -179,6 +194,18 @@ export const assemble = (input: AssembleInput): Atlas => {
     throw new AssembleError(
       "the synopsis statement and the annotated tree are required; an artifact whose product " +
         "sentence is blank asserts nothing and admits nothing (#6)",
+    );
+  }
+  // An `absent` node has no admissible evidence and is cut outright, never
+  // hedged (#3). Rank owns that deletion; a ranked node still carrying absent
+  // confidence would have it reach a section, which no stage may allow.
+  const absentRanked = ranked.nodes.filter((n) => n.confidence === "absent");
+  if (absentRanked.length > 0) {
+    throw new AssembleError(
+      `${absentRanked.length} ranked node${absentRanked.length === 1 ? "" : "s"} ` +
+        `carr${absentRanked.length === 1 ? "ies" : "y"} absent confidence and must never reach a ` +
+        `section (#3): ${absentRanked.slice(0, 5).map((n) => n.id).join(", ")}` +
+        `${absentRanked.length > 5 ? ", ..." : ""}`,
     );
   }
 

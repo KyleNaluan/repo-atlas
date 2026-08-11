@@ -319,7 +319,11 @@ export interface AuditRecord {
   status: AuditStatus;
   /** `precondition` when the clone/SHA/worktree preconditions failed (#8, section 3). */
   failure_kind?: "gate" | "precondition";
-  /** sha256 of the artifact with the audit slot's content replaced by the fixed placeholder. */
+  /**
+   * sha256 of the artifact with the audit slot's content replaced by the fixed
+   * placeholder. Absent on a failed run, whose quarantined copy is not the file
+   * the engine emitted, so a hash claim about it would point at nothing usable.
+   */
   content_hash?: string;
   audited_at?: string;
   checks?: AuditCheckResult[];

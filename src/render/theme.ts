@@ -203,9 +203,9 @@ figcaption{color:var(--ink2);font-size:13.5px;margin-top:10px;max-width:92ch}
    state change cannot silently change the page's shape around them. */
 #audit-statement{margin-top:20px;border:1px solid var(--line);border-left:3px solid var(--line2);
   border-radius:8px;padding:14px 16px;background:#111722}
-#audit-statement.st-not-run,#audit-statement.st-warn{border-left-color:var(--amber);background:#191408}
-#audit-statement.st-passed{border-left-color:var(--green);background:#0f1a15}
-#audit-statement.st-failed{border-left-color:var(--red);background:#1c1113}
+#audit-statement:has(.st-not-run),#audit-statement:has(.st-warn){border-left-color:var(--amber);background:#191408}
+#audit-statement:has(.st-passed){border-left-color:var(--green);background:#0f1a15}
+#audit-statement:has(.st-failed){border-left-color:var(--red);background:#1c1113}
 #audit-statement p{margin:0 0 8px;max-width:96ch}
 #audit-statement p:last-child{margin-bottom:0}
 #audit-statement ul{margin:6px 0 10px;padding-left:20px;color:var(--ink2)}

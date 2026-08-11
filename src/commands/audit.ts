@@ -2,18 +2,21 @@
  * `repo-atlas audit <artifact.html> --atlas <atlas.json> --clone <path>`
  *
  * The deterministic passes in this build: pass A (static gates) plus pass B, the
- * browser gates loaded over a live DOM with the network disabled. The stamping
- * mechanic and the model pass land in later stages, and until they do the audit
- * reports every check it did not run BY NAME rather than omitting it - an audit
- * that quietly reports on some of the twenty checks is the exact failure this
- * stage exists to prevent.
+ * browser gates loaded over a live DOM with the network disabled. The result is
+ * stamped into the reserved slot and a failed artifact is quarantined; the model
+ * pass lands in a later stage, and until it does the audit reports every check it
+ * did not run BY NAME rather than omitting it - an audit that quietly reports on
+ * some of the twenty checks is the exact failure this stage exists to prevent.
  */
 import { resolve } from "node:path";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, rmSync } from "node:fs";
 import { loadAtlas } from "../schema/validate.js";
 import { audit, runAudit, type AuditOutcome } from "../audit/run.js";
 import { GATES } from "../audit/register.js";
+import { declaredViewports } from "../audit/pass-b.js";
+import { quarantinePath, stampAudit, withFailureBanner } from "../artifact/stamp.js";
 import type { AuditContext, CheckResult } from "../audit/types.js";
+import type { AuditRecord } from "../schema/types.js";
 
 const USAGE = `usage: repo-atlas audit <artifact.html> --atlas <atlas.json> --clone <path> [--private-clone <path>]
 
@@ -26,6 +29,18 @@ options:
   --private-clone <path>   a readable checkout of the declared-private source, if there is one
   --screenshots <dir>      write one full-page screenshot per declared viewport
   --no-browser             run only the static passes; the browser gates report as not run
+  --out <path>             where the audited artifact is emitted (default: in place)
+  --allow-failed           emit a failed artifact, with a banner, for local development
+  --no-write-atlas         do not mirror the result into the atlas.json record
+
+The audit is the only writer of the reserved slot that holds its own result. It
+hashes the page with that slot blanked, runs its passes, rewrites only the slot,
+and asserts the hash is unchanged - so the statement's claim that "this page,
+excluding this box, hashes to X" is one anyone can check.
+
+A hard-gate failure is never emitted at the output path. The failed copy goes to
+<out>.failed.html with a banner and the command exits non-zero. --allow-failed
+emits it anyway for local development; CI must never set it.
 
 Pass B loads the artifact in a browser with the network disabled. It needs a
 Chrome-family browser on the machine; set CHROME_PATH if it is somewhere
@@ -133,6 +148,74 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
   const gatesPassed = outcome.checks.filter(
     (c) => c.class === "gate" && c.outcome === "passed",
   ).length;
+
+  // The stamp. The audit is the only writer of these slots, and it proves it:
+  // stampAudit refuses to write if the page outside them moved.
+  const auditedAt = new Date().toISOString();
+  let stamped: ReturnType<typeof stampAudit>;
+  try {
+    stamped = stampAudit({
+      artifact: ctx.artifact,
+      status: outcome.status,
+      checks: outcome.checks,
+      auditedAt,
+      subjectSha: ctx.atlas.subject.sha,
+      ...(outcome.notes.length === 0 ? {} : { notes: outcome.notes }),
+    });
+  } catch (e) {
+    // An artifact with no reserved slot, or one the stamp would move, leaves the
+    // audit's result nowhere to live. That is a precondition-class failure - a
+    // claim about what the audit was given, never about the subject - and it is
+    // reported rather than thrown, so the run still ends in a defined state.
+    console.error("failed: precondition");
+    console.error(`  - ${e instanceof Error ? e.message : String(e)}`);
+    return 78; // EX_CONFIG
+  }
+
+  const outPath = resolve(flag(argv, "--out") ?? artifactPath);
+  const allowFailed = argv.includes("--allow-failed");
+  const failed = outcome.status === "failed";
+  let emittedTo = outPath;
+
+  if (failed && !allowFailed) {
+    // #8 point 9: a failed artifact does not ship. It goes to a name that cannot
+    // be mistaken for the deliverable, so a downstream consumer of the output
+    // path can never pick one up by accident, and the banner is a second line of
+    // defence rather than the mechanism - a banner is the first thing lost when
+    // the reader screenshots a section or shares the file.
+    emittedTo = quarantinePath(outPath);
+    writeFileSync(emittedTo, withFailureBanner(stamped.artifact), "utf8");
+    // The unaudited render is still sitting at the output path; leaving it there
+    // would put an artifact the audit rejected exactly where the deliverable
+    // belongs.
+    if (resolve(artifactPath) === outPath) rmSync(outPath, { force: true });
+  } else {
+    writeFileSync(outPath, failed ? withFailureBanner(stamped.artifact) : stamped.artifact, "utf8");
+  }
+
+  if (argv.includes("--no-write-atlas") === false) {
+    const record: AuditRecord = {
+      status: outcome.status,
+      ...(outcome.failure_kind === undefined ? {} : { failure_kind: outcome.failure_kind }),
+      ...(failed ? {} : { content_hash: stamped.contentHash }),
+      audited_at: auditedAt,
+      checks: outcome.checks.map((c) => ({
+        id: c.id,
+        name: c.name,
+        class: c.class,
+        outcome: c.outcome,
+        ...(c.count === undefined ? {} : { count: c.count }),
+        ...(c.findings === undefined ? {} : { findings: c.findings }),
+        ...(c.reason === undefined ? {} : { reason: c.reason }),
+      })),
+      ...((outcome.measurements?.length ?? 0) > 0 ? { viewports: declaredViewports() } : {}),
+    };
+    const mirrored = { ...ctx.atlas, record: { ...ctx.atlas.record, audit: record } };
+    writeFileSync(atlasPath, `${JSON.stringify(mirrored, null, 2)}\n`, "utf8");
+  }
+
+  console.log(`  stamp ${stamped.contentHash}`);
+  console.log(`  emit  ${emittedTo}${failed && !allowFailed ? " (quarantined; not the deliverable)" : ""}`);
   console.log(`${outcome.status}: ${gatesPassed} of ${GATES.length} hard gates passed`);
-  return outcome.status === "failed" ? 1 : 0;
+  return failed ? 1 : 0;
 };

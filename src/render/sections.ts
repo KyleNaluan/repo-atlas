@@ -40,7 +40,7 @@ import {
 import { commitUrl, renderEvidence, treeUrl } from "./links.js";
 import { renderFlow, type DiagramCache } from "./diagram.js";
 import { highlight } from "./highlight.js";
-import { badge, notRunStatement } from "../artifact/statement.js";
+import { badge, statement } from "../artifact/statement.js";
 import {
   allExtraEvidence,
   anchorOf,
@@ -749,8 +749,8 @@ export const sectionRecord = (atlas: Atlas, surviving: AtlasNode[]): Safe => {
       </details>
 
       <h4>${chrome`Audit`}</h4>
-      <div id="audit-statement" class="st-not-run" data-atlas-audit="statement">
-        ${notRunStatement()}
+      <div id="audit-statement" data-atlas-audit="statement">
+        ${statement({ status: "not_run", checks: [], contentHash: "", auditedAt: "", subjectSha: atlas.subject.sha })}
       </div>
     </section>`;
 };

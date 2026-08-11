@@ -23,15 +23,10 @@
  * G2 audits the record that stage leaves. A scorer that could delete would be a
  * second authority over what ships.
  */
-import { createHash } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { AtlasNode } from "../schema/types.js";
 import type { ScoredNode } from "./rank.js";
 import type { ScoreRequest } from "./scorer.js";
-
-/** The rubric's identity, so a pinned score set cannot outlive the rubric it was made under. */
-export const rubricDigest = (rubric: string): string =>
-  createHash("sha256").update(rubric, "utf8").digest("hex").slice(0, 16);
 
 /**
  * What the model is shown of each node.
@@ -126,18 +121,34 @@ export const parseScores = (text: string): RawScore[] => {
   return parsed.scores;
 };
 
-export interface ModelScorerOptions {
-  /** Overridable so a test can drive the scorer without the SDK. */
-  ask?: (prompt: string) => Promise<string>;
+/** A scorer reply, and which model the SDK reported producing it. */
+export interface ScorerReply {
+  text: string;
+  /** The model identity the SDK reported, or undefined if it reported none. */
   model?: string;
 }
 
-const askViaSdk = async (prompt: string): Promise<string> => {
+export interface ModelScorerOptions {
+  /** Overridable so a test can drive the scorer without the SDK. */
+  ask?: (prompt: string) => Promise<string>;
+}
+
+/** The model(s) the SDK charged the run to, joined if it used more than one. */
+const modelOf = (message: unknown): string | undefined => {
+  const usage = (message as { modelUsage?: Record<string, unknown> }).modelUsage;
+  if (usage === undefined || usage === null) return undefined;
+  const names = Object.keys(usage);
+  return names.length > 0 ? names.join(", ") : undefined;
+};
+
+export const askViaSdk = async (prompt: string): Promise<ScorerReply> => {
   // No tools: the scorer orders what was established and may not add to it.
   const run = query({ prompt, options: { maxTurns: 1, allowedTools: [] } });
   for await (const message of run) {
     if (message.type === "result") {
-      if ("result" in message && typeof message.result === "string") return message.result;
+      if ("result" in message && typeof message.result === "string") {
+        return { text: message.result, model: modelOf(message) };
+      }
       throw new ScorerError(`the scorer run ended without a result: ${JSON.stringify(message).slice(0, 200)}`);
     }
   }
@@ -148,7 +159,7 @@ export const modelScorer =
   (options: ModelScorerOptions = {}) =>
   async (request: ScoreRequest): Promise<ScoredNode[]> => {
     if (request.nodes.length === 0) return [];
-    const ask = options.ask ?? askViaSdk;
+    const ask = options.ask ?? (async (prompt: string) => (await askViaSdk(prompt)).text);
     const raw = parseScores(await ask(PROMPT(request.rubric, request.nodes.map(summarise))));
 
     const byId = new Map(raw.map((r) => [r.id, r]));
@@ -160,6 +171,18 @@ export const modelScorer =
       throw new ScorerError(
         `the scorer returned no score for ${missing.length} node${missing.length === 1 ? "" : "s"}: ` +
           `${missing.slice(0, 5).join(", ")}${missing.length > 5 ? ", ..." : ""}`,
+      );
+    }
+
+    // A present-but-non-numeric score is not a zero either: Math.round would turn
+    // it into NaN, which survives every check above and is then cut at the floor
+    // (NaN >= floor is false), deleting the node while the record says it was
+    // weighed - the very failure the missing-check exists to refuse.
+    const nonNumeric = request.nodes.filter((n) => !Number.isFinite(byId.get(n.id)!.score)).map((n) => n.id);
+    if (nonNumeric.length > 0) {
+      throw new ScorerError(
+        `the scorer returned a non-numeric score for ${nonNumeric.length} node${nonNumeric.length === 1 ? "" : "s"}: ` +
+          `${nonNumeric.slice(0, 5).join(", ")}${nonNumeric.length > 5 ? ", ..." : ""}`,
       );
     }
 

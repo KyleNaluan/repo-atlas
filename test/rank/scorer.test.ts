@@ -15,11 +15,12 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { modelScorer, parseScores, rubricDigest, ScorerError } from "../../src/rank/model-scorer.js";
+import { modelScorer, parseScores, ScorerError } from "../../src/rank/model-scorer.js";
 import { INTERVIEW, rubricText } from "../../src/rank/profile.js";
 import { rank } from "../../src/rank/rank.js";
 import {
   assertScoresFresh,
+  rubricDigest,
   scoresFromFile,
   StaleScoresError,
   type ScoreFile,
@@ -68,7 +69,7 @@ describe("the pinned score set", () => {
     // The guard that stops a pinned measurement rotting: a rubric can be reworded
     // without its version moving, and scores made against the old wording would
     // then be reused as though they measured the new one.
-    expect(() => assertScoresFresh(pinned, rubricText(INTERVIEW), rubricDigest)).not.toThrow();
+    expect(() => assertScoresFresh(pinned, rubricText(INTERVIEW))).not.toThrow();
     expect(pinned.rubric_sha256).toBe(rubricDigest(rubricText(INTERVIEW)));
   });
 
@@ -94,7 +95,7 @@ describe("the pinned score set", () => {
 /* --------------------------------------------- the ground truth */
 
 describe("the rubric reproduces the human ranking", () => {
-  const result = rank(scoresFromFile(pinned, INTERVIEW)(atlas.nodes), INTERVIEW);
+  const result = rank(scoresFromFile(pinned, INTERVIEW, rubricText(INTERVIEW))(atlas.nodes), INTERVIEW);
 
   it("selects the same five deep dives the human did, in the same order", () => {
     // This is #9's named ground-truth fixture, checked against real model scores
@@ -153,6 +154,16 @@ describe("the model scorer", () => {
     const partial = JSON.stringify({ scores: [{ id: "a", score: 5 }] });
     await expect(
       modelScorer({ ask: askReturning(partial) })({ nodes, profile: INTERVIEW, rubric: "r" }),
+    ).rejects.toThrow(ScorerError);
+  });
+
+  it("refuses when a node came back with a non-numeric score", async () => {
+    // A present-but-non-numeric score is not a zero. Rounding it yields NaN, which
+    // survives the missing-check and is then cut at the floor, deleting the node
+    // while the record says it was weighed - the same failure as an absent score.
+    const bad = JSON.stringify({ scores: [{ id: "a", score: "high" }, { id: "b", score: 2 }] });
+    await expect(
+      modelScorer({ ask: askReturning(bad) })({ nodes, profile: INTERVIEW, rubric: "r" }),
     ).rejects.toThrow(ScorerError);
   });
 
@@ -224,14 +235,12 @@ describe("reading the scorer's reply", () => {
 
 describe("a pinned measurement cannot go quietly stale", () => {
   it("refuses scores made under a rubric that has since been edited", () => {
-    expect(() => assertScoresFresh(pinned, "a rubric someone rewrote", rubricDigest)).toThrow(
-      StaleScoresError,
-    );
+    expect(() => assertScoresFresh(pinned, "a rubric someone rewrote")).toThrow(StaleScoresError);
   });
 
   it("names both digests and what to do about it", () => {
     try {
-      assertScoresFresh(pinned, "edited", rubricDigest);
+      assertScoresFresh(pinned, "edited");
       throw new Error("expected a failure");
     } catch (e) {
       expect((e as Error).message).toContain(pinned.rubric_sha256!);
@@ -239,10 +248,18 @@ describe("a pinned measurement cannot go quietly stale", () => {
     }
   });
 
+  it("refuses a stale set through the loader itself, not only the standalone check", () => {
+    // The guarantee is the loader's, so no caller can rank under a stale set by
+    // forgetting to run the check first.
+    expect(() => scoresFromFile(pinned, INTERVIEW, "a rubric someone rewrote")).toThrow(
+      StaleScoresError,
+    );
+  });
+
   it("accepts a set that predates the digest field rather than failing closed on it", () => {
     // The field is additive; a score file written before it existed is readable,
     // and its version check still applies.
     const { rubric_sha256: _drop, ...older } = pinned;
-    expect(() => assertScoresFresh(older as ScoreFile, "anything", rubricDigest)).not.toThrow();
+    expect(() => assertScoresFresh(older as ScoreFile, "anything")).not.toThrow();
   });
 });

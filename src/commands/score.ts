@@ -17,8 +17,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { readFileSync } from "node:fs";
 import { profile, rubricText } from "../rank/profile.js";
-import { modelScorer, rubricDigest } from "../rank/model-scorer.js";
-import type { ScoreFile } from "../rank/scorer.js";
+import { askViaSdk, modelScorer } from "../rank/model-scorer.js";
+import { rubricDigest, type ScoreFile } from "../rank/scorer.js";
 import type { GatedCandidate } from "../gate/gate.js";
 
 const USAGE = `usage: repo-atlas score --gated <gated.json> [-o <scores.json>]
@@ -62,13 +62,26 @@ export const scoreCommand = async (argv: string[]): Promise<number> => {
   const nodes = gated.map((g) => g.node);
 
   console.log(`scoring ${nodes.length} nodes under ${p.name}/${p.rubric_version} (one call, no tools)`);
-  const scored = await modelScorer()({ nodes, profile: p, rubric });
+
+  // Record the model the SDK actually used, taken from the run rather than a
+  // hardcoded string, so refreshing the fixture shows which of the rubric or the
+  // model moved. Only the rubric is digest-pinned; the model is pinned by being
+  // written here beside it.
+  let usedModel: string | undefined;
+  const scored = await modelScorer({
+    ask: async (prompt) => {
+      const reply = await askViaSdk(prompt);
+      usedModel = reply.model;
+      return reply.text;
+    },
+  })({ nodes, profile: p, rubric });
 
   const file: ScoreFile = {
     profile: p.name,
     rubric_version: p.rubric_version,
     rubric_sha256: rubricDigest(rubric),
     generated_at: new Date().toISOString(),
+    ...(usedModel === undefined ? {} : { model: usedModel }),
     scores: scored.map((s) => ({
       id: s.node.id,
       score: s.score,
@@ -84,6 +97,7 @@ export const scoreCommand = async (argv: string[]): Promise<number> => {
   for (const s of file.scores) spread.set(s.score, (spread.get(s.score) ?? 0) + 1);
   console.log(`wrote ${file.scores.length} scores -> ${output}`);
   console.log(`  rubric ${p.rubric_version} (${file.rubric_sha256})`);
+  console.log(`  model  ${file.model ?? "(not reported by the SDK)"}`);
   console.log(
     `  spread ${[...spread.entries()].sort((a, b) => b[0] - a[0]).map(([v, n]) => `${v}:${n}`).join(" ")}`,
   );

@@ -5,17 +5,16 @@
  * what survives together with the record of what did not.
  *
  * `--scores` is required in this build. Scoring is judgement and #2 puts it
- * behind a model; how that call is credentialed and how its ground-truth test is
- * verified in CI is an open decision, so the scorer is not wired here and the
- * command says so rather than pretending the stage is complete. Everything on
- * this side of that seam is built, tested and reproducible.
+ * behind a model, run by the separate `repo-atlas score` command whose output is
+ * pinned as a committed fixture; this stage stays deterministic and credential-
+ * free, verifying the machinery against those scores. Supply `--scores` and the
+ * whole of this side of the seam runs end to end.
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { profile, rubricText } from "../rank/profile.js";
 import { rank } from "../rank/rank.js";
-import { rubricDigest } from "../rank/model-scorer.js";
-import { assertScoresFresh, scoresFromFile, type ScoreFile } from "../rank/scorer.js";
+import { scoresFromFile, type ScoreFile } from "../rank/scorer.js";
 import { EMPTY_OVERRIDES, validateOverrides, type Overrides } from "../rank/overrides.js";
 import type { GatedCandidate } from "../gate/gate.js";
 import type { AtlasNode } from "../schema/types.js";
@@ -35,9 +34,10 @@ options:
 This stage is the only place deletion happens. The renderer renders everything it
 is handed, or it becomes a second authority over what survives.
 
-Scoring itself is not wired in this build: it is judgement, it belongs behind a
-model under the versioned rubric, and how that is credentialed in CI is still
-being decided. Supply --scores and the deterministic half runs end to end.`;
+Scoring itself is judgement and lives in \`repo-atlas score\`, which calls a model
+under the versioned rubric and writes the scores. This stage stays deterministic
+and needs no credential: pass its pinned output as --scores. A score set whose
+rubric has since been edited is refused rather than silently reused.`;
 
 const flag = (argv: string[], ...names: string[]): string | undefined => {
   for (const name of names) {
@@ -68,13 +68,11 @@ export const rankCommand = async (argv: string[]): Promise<number> => {
       ? EMPTY_OVERRIDES
       : validateOverrides(JSON.parse(readFileSync(overridesPath, "utf8")) as Overrides);
 
-  // A pinned score set is a measurement of the rubric it was made under. If that
-  // rubric has since been edited, reusing them would rank under scores nobody
-  // ever made against this text.
-  assertScoresFresh(scoreFile, rubricText(p), rubricDigest);
-
+  // The loader itself refuses a score set whose rubric has since been edited: a
+  // pinned set is a measurement of the rubric it was made under, and reusing it
+  // after an edit would rank under scores nobody ever made against this text.
   const nodes: AtlasNode[] = gatedFile.gated.map((g) => g.node);
-  const scored = scoresFromFile(scoreFile, p)(nodes);
+  const scored = scoresFromFile(scoreFile, p, rubricText(p))(nodes);
   const result = rank(scored, p, overrides);
 
   const output = resolve(flag(argv, "-o", "--out") ?? "out/ranked.json");

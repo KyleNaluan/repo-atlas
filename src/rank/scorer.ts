@@ -18,13 +18,21 @@
  *
  * A pinned measurement rots silently unless something notices, so the file
  * records the rubric it was produced under - by version AND by digest - and the
- * loader refuses a set whose rubric has since changed. Reusing scores made under
- * an edited rubric would be exactly the "verified, not asserted" failure this
- * project exists to refuse, one level up.
+ * loader refuses a set whose rubric has since changed. That check lives in the
+ * loader itself, not in a caller that must remember to run it: `scoresFromFile`
+ * takes the rubric text and refuses a stale set, so no path into ranking can
+ * route around it. Reusing scores made under an edited rubric would be exactly
+ * the "verified, not asserted" failure this project exists to refuse, one level
+ * up.
  */
+import { createHash } from "node:crypto";
 import type { AtlasNode } from "../schema/types.js";
 import type { Profile } from "./profile.js";
 import type { ScoredNode } from "./rank.js";
+
+/** The rubric's identity, so a pinned score set cannot outlive the rubric it was made under. */
+export const rubricDigest = (rubric: string): string =>
+  createHash("sha256").update(rubric, "utf8").digest("hex").slice(0, 16);
 
 export interface ScoreRequest {
   nodes: AtlasNode[];
@@ -48,8 +56,13 @@ export interface ScoreFile {
   rubric_version: string;
   /** Digest of the rubric text these scores were produced under. */
   rubric_sha256?: string;
-  /** When the pinned set was produced, and by what. Provenance, not input. */
+  /** When the pinned set was produced. Provenance, not input. */
   generated_at?: string;
+  /**
+   * The model the SDK reported for the run, so refreshing the fixture shows
+   * whether the rubric or the model moved. Absent on a set produced before this
+   * was recorded, or when the SDK reports no usable identity.
+   */
   model?: string;
   scores: { id: string; score: number; because?: string }[];
 }
@@ -105,19 +118,20 @@ export class StaleScoresError extends Error {
  * moving, and scores made against the old wording would then be silently reused
  * as though they measured the new one.
  */
-export const assertScoresFresh = (file: ScoreFile, rubric: string, digest: (s: string) => string) => {
+export const assertScoresFresh = (file: ScoreFile, rubric: string) => {
   if (file.rubric_sha256 === undefined) return;
-  const current = digest(rubric);
+  const current = rubricDigest(rubric);
   if (file.rubric_sha256 !== current) throw new StaleScoresError(file.rubric_sha256, current);
 };
 
-export const scoresFromFile = (file: ScoreFile, p: Profile) => {
+export const scoresFromFile = (file: ScoreFile, p: Profile, rubric: string) => {
   if (file.profile !== p.name) {
     throw new ProfileMismatchError(file.profile, p.name);
   }
   if (file.rubric_version !== p.rubric_version) {
     throw new RubricMismatchError(file.rubric_version, p.rubric_version);
   }
+  assertScoresFresh(file, rubric);
   const byId = new Map(file.scores.map((s) => [s.id, s]));
   return (nodes: AtlasNode[]): ScoredNode[] => {
     const missing = nodes.filter((n) => !byId.has(n.id)).map((n) => n.id);

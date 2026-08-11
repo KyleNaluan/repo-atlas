@@ -65,9 +65,9 @@ The existence gate runs in **both directions** (#7 point 7), and the single-dire
 
 `src/rank/rank.ts` is the **only** place deletion happens. Both mechanisms are required - floor and per-section budgets - and every cut is recorded with id, score and reason for #8's G2.
 
-Scoring sits behind the `Scorer` seam in `src/rank/scorer.ts`. `repo-atlas score` runs the model scorer locally through an authenticated CLI; its output is **committed** as `test/fixtures/swe-prep.scores.json`, so CI verifies the deterministic machinery against real scores without holding a credential. CI never calls a model.
+Scoring sits behind the `Scorer` seam in `src/rank/scorer.ts`. `repo-atlas score` runs the model scorer locally through an authenticated CLI; its output is **committed** as `test/fixtures/swe-prep.scores.json`, so CI verifies the deterministic machinery against real scores without holding a credential. CI never calls a model. The score file records the model the SDK reported for the run beside the rubric digest, so refreshing the fixture shows which of the two moved; the digest helper lives in `scorer.ts` (no SDK import) so the credential-free rank path never loads the model SDK.
 
-Refresh the pinned scores with `repo-atlas score` after any rubric change. The loader refuses a score set whose **rubric digest** no longer matches - a rubric can be reworded without its version moving, and reusing scores made against the old wording would be the "verified, not asserted" failure one level up.
+Refresh the pinned scores with `repo-atlas score` after any rubric change. `scoresFromFile` - the loader, not a caller that must remember - refuses a score set whose **rubric digest** no longer matches: it takes the rubric text and checks freshness itself, so no path into ranking can route around it. A rubric can be reworded without its version moving, and reusing scores made against the old wording would be the "verified, not asserted" failure one level up.
 
 The scorer gets one call for the whole graph (ranking is comparative, and a per-call cost multiplied by node count is real), no tools (it orders what was established and may not add to it), and no evidence in its prompt (the rubric says evidence is a gate, not a score).
 

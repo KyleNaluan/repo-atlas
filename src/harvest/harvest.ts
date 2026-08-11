@@ -10,14 +10,17 @@
  *    admissible as - so #8's audit can decide the private-source check's
  *    applicability from data rather than from a guess about the subject.
  */
+import { getRepo } from "./gh.js";
 import { harvestIssues, hasResolutionComment } from "./issues.js";
 import {
+  assertNotShallow,
   currentBranch,
   densitySignals,
   detectPrivateSplit,
   headSha,
   indexMemoryFiles,
   measureScale,
+  scanSource,
 } from "./tree.js";
 import { HARVEST_VERSION, type Harvest, type HarvestSource } from "./types.js";
 import type { HarvestedIssue } from "./types.js";
@@ -31,8 +34,28 @@ export interface HarvestOptions {
   sha?: string;
   /** The date the run reads the subject, recorded in the artifact. */
   readOn: string;
+  /** An explicit override; otherwise visibility is read from the repository. */
   visibility?: string;
 }
+
+/**
+ * The subject's visibility, established rather than assumed.
+ *
+ * The artifact renders this next to the repository link, so a hardcoded default
+ * would present an unverified claim about the subject - exactly what the engine's
+ * one rule forbids. It is read from the repository's own `private` flag; if that
+ * cannot be determined, the fact is recorded as unestablished rather than
+ * silently reported as public.
+ */
+const UNDETERMINED_VISIBILITY = "visibility not established";
+
+const determineVisibility = async (repo: string): Promise<string> => {
+  try {
+    return (await getRepo(repo)).private ? "private" : "public";
+  } catch {
+    return UNDETERMINED_VISIBILITY;
+  }
+};
 
 const ratio = (issue: HarvestedIssue): number | null => {
   const body = Buffer.byteLength(issue.body, "utf8");
@@ -79,16 +102,28 @@ const sources = (
 };
 
 export const harvest = async (options: HarvestOptions): Promise<Harvest> => {
+  // Assert the clone is complete before spending any network round on it: a
+  // shallow clone would yield plausible-but-wrong scale figures, and there is no
+  // reason to harvest issues only to discover the tree cannot be measured.
+  assertNotShallow(options.clone);
+
   const sha = options.sha ?? headSha(options.clone);
+  const scan = scanSource(options.clone, sha);
   const issues = await harvestIssues(options.repo);
+  const visibility = options.visibility ?? (await determineVisibility(options.repo));
   const closed = issues.filter((i) => i.state === "closed");
   const memory = indexMemoryFiles(options.clone, sha);
 
-  const density = densitySignals(options.clone, sha, {
-    closedIssues: closed.length,
-    closedIssuesWithResolution: closed.filter(hasResolutionComment).length,
-    ratios: closed.map(ratio).filter((r): r is number => r !== null),
-  });
+  const density = densitySignals(
+    options.clone,
+    sha,
+    {
+      closedIssues: closed.length,
+      closedIssuesWithResolution: closed.filter(hasResolutionComment).length,
+      ratios: closed.map(ratio).filter((r): r is number => r !== null),
+    },
+    scan,
+  );
 
   const [owner, name] = options.repo.split("/");
   return {
@@ -100,10 +135,10 @@ export const harvest = async (options: HarvestOptions): Promise<Harvest> => {
       branch: currentBranch(options.clone),
       sha,
       read_on: options.readOn,
-      visibility: options.visibility ?? "public",
+      visibility,
     },
     issues,
-    scale: measureScale(options.clone, sha),
+    scale: measureScale(options.clone, sha, scan),
     density,
     sources: sources(issues, memory),
     private_split: detectPrivateSplit(options.clone, sha, options.repo),

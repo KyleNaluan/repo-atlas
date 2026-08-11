@@ -66,12 +66,38 @@ const countLines = (text: string): number => {
   return lines.length;
 };
 
-export const measureScale = (repo: string, sha: string): ScaleCounts => {
-  assertNotShallow(repo);
+/**
+ * One pass over the source tree.
+ *
+ * The line count (#7 scale) and the issue-citation count (#6 signal 3) both need
+ * every source blob, and reading the tree twice spawns a `git cat-file` per file
+ * per reader. This reads each blob once and derives both, so a caller that needs
+ * both figures - the harvest does - pays for a single pass. It is threaded into
+ * `measureScale` and `countSourceFilesCitingIssues` so both stay independently
+ * callable without either re-reading the tree.
+ */
+export interface SourceScan {
+  files: number;
+  lines: number;
+  citing: number;
+}
+
+export const scanSource = (repo: string, sha: string): SourceScan => {
   const files = treeFiles(repo, sha).filter(isSourceFile);
   let lines = 0;
-  for (const path of files) lines += countLines(blob(repo, sha, path) ?? "");
+  let citing = 0;
+  for (const path of files) {
+    const text = blob(repo, sha, path);
+    lines += countLines(text ?? "");
+    if (text !== null && /(?:^|[^\w])#\d+/.test(text)) citing += 1;
+  }
+  return { files: files.length, lines, citing };
+};
 
+const measureHistory = (
+  repo: string,
+  sha: string,
+): Pick<ScaleCounts, "commits" | "first_commit" | "last_commit" | "days"> => {
   const commits = Number(git(repo, ["rev-list", "--count", sha]).trim());
   const dates = git(repo, ["log", "--format=%ad", "--date=short", sha])
     .split("\n")
@@ -85,7 +111,13 @@ export const measureScale = (repo: string, sha: string): ScaleCounts => {
         ) + 1
       : null;
 
-  return { files: files.length, lines, commits, first_commit: first, last_commit: last, days };
+  return { commits, first_commit: first, last_commit: last, days };
+};
+
+export const measureScale = (repo: string, sha: string, scan?: SourceScan): ScaleCounts => {
+  assertNotShallow(repo);
+  const source = scan ?? scanSource(repo, sha);
+  return { files: source.files, lines: source.lines, ...measureHistory(repo, sha) };
 };
 
 /** #4: project memory is indexed for navigation, never quoted as evidence. */
@@ -115,14 +147,10 @@ export const findAdrDirectory = (repo: string, sha: string): string | null => {
 export const countSourceFilesCitingIssues = (
   repo: string,
   sha: string,
+  scan?: SourceScan,
 ): { citing: number; of: number } => {
-  const files = treeFiles(repo, sha).filter(isSourceFile);
-  let citing = 0;
-  for (const path of files) {
-    const text = blob(repo, sha, path);
-    if (text !== null && /(?:^|[^\w])#\d+/.test(text)) citing += 1;
-  }
-  return { citing, of: files.length };
+  const source = scan ?? scanSource(repo, sha);
+  return { citing: source.citing, of: source.files };
 };
 
 export interface DensityInputs {
@@ -136,9 +164,10 @@ export const densitySignals = (
   repo: string,
   sha: string,
   inputs: DensityInputs,
+  scan?: SourceScan,
 ): DensitySignals => {
   const adr = findAdrDirectory(repo, sha);
-  const citing = countSourceFilesCitingIssues(repo, sha);
+  const citing = countSourceFilesCitingIssues(repo, sha, scan);
   const mean =
     inputs.ratios.length === 0
       ? 0

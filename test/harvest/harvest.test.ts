@@ -22,7 +22,12 @@ import {
   IncompleteHarvestError,
   isIssue,
 } from "../../src/harvest/issues.js";
-import { memoryIssueCache, resolveComment, resolveIssue } from "../../src/harvest/cache.js";
+import {
+  fileIssueCache,
+  memoryIssueCache,
+  resolveComment,
+  resolveIssue,
+} from "../../src/harvest/cache.js";
 import {
   countSourceFilesCitingIssues,
   detectPrivateSplit,
@@ -200,6 +205,44 @@ describe("the cache key", () => {
     cache.put("o/r", issue());
     expect(cache.get("o/r", issue())?.number).toBe(2);
     expect(cache.all("o/r")).toHaveLength(1);
+  });
+
+  it("keeps exactly one entry per issue when a comment is edited (in-memory)", () => {
+    // A comment edit writes a new, comment-sensitive key. The audit's cache-first
+    // lookup must never then see two versions of the same issue number.
+    const cache = memoryIssueCache();
+    cache.put("o/r", issue());
+    const edited = issue({
+      updated_at: "2026-08-09T00:00:00Z",
+      comments: [
+        { ...issue().comments[0]!, body: "## Resolution: revised", updated_at: "2026-08-09T00:00:00Z" },
+      ],
+    });
+    cache.put("o/r", edited);
+    const all = cache.all("o/r");
+    expect(all).toHaveLength(1);
+    expect(all[0]!.comments[0]!.body).toBe("## Resolution: revised");
+  });
+
+  it("keeps exactly one entry per issue when a comment is edited (on disk)", () => {
+    const root = mkdtempSync(join(tmpdir(), "repo-atlas-cache-"));
+    const cache = fileIssueCache(root);
+    cache.put("o/r", issue());
+    const edited = issue({
+      updated_at: "2026-08-09T00:00:00Z",
+      comments: [
+        { ...issue().comments[0]!, body: "## Resolution: revised", updated_at: "2026-08-09T00:00:00Z" },
+      ],
+    });
+    cache.put("o/r", edited);
+
+    // Only one file survives for the number, and it carries the current body.
+    const all = cache.all("o/r");
+    expect(all).toHaveLength(1);
+    expect(all[0]!.comments[0]!.body).toBe("## Resolution: revised");
+    // The audit resolves the specific comment through the cache; it must get the
+    // CURRENT body, never the superseded one.
+    expect(resolveComment(all, 2, 5181222288)?.body).toBe("## Resolution: revised");
   });
 });
 

@@ -38,7 +38,7 @@ import {
   ShallowCloneError,
   subjectRemote,
 } from "../../src/harvest/tree.js";
-import { listComments } from "../../src/harvest/gh.js";
+import { listComments, statusOf } from "../../src/harvest/gh.js";
 import type { HarvestedIssue } from "../../src/harvest/types.js";
 
 /* ------------------------------------------------------------ fixtures */
@@ -105,6 +105,24 @@ const stubComments = (n: number) => async () =>
     updated_at: "2026-08-02T00:00:00Z",
     user: { login: "u" },
   }));
+
+describe("a gh failure says whether it is an answer or a silence", () => {
+  // The audit turns on this: a 404 means the issue does not exist, so a citation
+  // to it is false; anything else means the audit could not ask, which is a claim
+  // about the audit and never about the artifact.
+  it("reads the status out of what gh actually prints", () => {
+    expect(statusOf("gh: Not Found (HTTP 404)")).toBe(404);
+    expect(statusOf("gh: Bad credentials (HTTP 401)")).toBe(401);
+    expect(statusOf("gh: API rate limit exceeded (HTTP 403)")).toBe(403);
+  });
+
+  it("reports no status when there was none to read", () => {
+    // A network failure never reaches HTTP at all. Guessing 404 here would turn
+    // an unreachable GitHub into a verdict that the artifact cites nothing real.
+    expect(statusOf("dial tcp: lookup api.github.com: no such host")).toBeUndefined();
+    expect(statusOf("")).toBeUndefined();
+  });
+});
 
 describe("harvest completeness is verified, not assumed", () => {
   it("accepts a fetch that returns as many comments as GitHub reports", async () => {

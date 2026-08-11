@@ -20,6 +20,10 @@
 import { checkPreconditions } from "./preconditions.js";
 import { runPassA } from "./pass-a.js";
 import { runPassB, type PassBOptions } from "./pass-b.js";
+import { runPassC } from "./pass-c.js";
+import { runPassD } from "./pass-d.js";
+import type { IssueSource } from "./checks/issue-resolution.js";
+import type { ModelPassOptions } from "./checks/model.js";
 import { NoBrowserError } from "./browser.js";
 import { checksInPass, REGISTER, type PassName } from "./register.js";
 import { notRun, type AuditContext, type CheckResult } from "./types.js";
@@ -27,7 +31,7 @@ import type { AuditStatus } from "../schema/types.js";
 import type { ViewportMeasurement } from "./checks/visual.js";
 
 /** Passes that exist in this build at all. The rest report `not_run` by name. */
-const IMPLEMENTED: PassName[] = ["A", "B"];
+const IMPLEMENTED: PassName[] = ["A", "B", "C", "D"];
 
 export interface AuditOutcome {
   status: AuditStatus;
@@ -129,6 +133,10 @@ export const audit = (ctx: AuditContext): AuditOutcome => {
 export interface RunAuditOptions extends PassBOptions {
   /** The file on disk. Pass B loads it in a browser, so it needs the path. */
   artifactPath: string;
+  /** Cached issues for pass C, and an optional fetch for a cache miss. */
+  issues?: IssueSource;
+  /** The model pass. Omitted means no model was available; it never fails a run. */
+  model?: ModelPassOptions;
 }
 
 /**
@@ -153,13 +161,9 @@ export const runAudit = async (
     return assemble(a, ["A"], pre.notes);
   }
 
+  let b;
   try {
-    const b = await runPassB(options.artifactPath, ctx.atlas, options);
-    return {
-      ...assemble([...a, ...b.checks], ["A", "B"], [...pre.notes, ...b.notes]),
-      measurements: b.measurements,
-      screenshots: b.screenshots,
-    };
+    b = await runPassB(options.artifactPath, ctx.atlas, options);
   } catch (error) {
     // The boundary rule, which has swung both ways and needs stating, not two
     // instances: a throw that prevents the audit from ESTABLISHING something is a
@@ -193,4 +197,34 @@ export const runAudit = async (
       ),
     };
   }
+
+  const passes: PassName[] = ["A", "B"];
+  const checks = [...a, ...b.checks];
+  const notes = [...pre.notes, ...b.notes];
+
+  // Pass B gates decide whether the later passes are worth running, for the same
+  // reason pass A decides about pass B.
+  const blocked = b.checks.some((c) => c.outcome === "failed" && (c.class === "gate" || c.aborted));
+  if (!blocked) {
+    if (options.issues) {
+      const c = await runPassC(ctx, options.issues);
+      checks.push(...c.checks);
+      notes.push(...c.notes);
+      passes.push("C");
+    }
+    // Pass D last: the only expensive pass, never spent on a doomed artifact.
+    // It owns its own boundary and cannot throw - see checks/model.ts, where a
+    // model that dies mid-sweep reports not run rather than handing the run a
+    // throw this function would be obliged to call a precondition failure.
+    if (options.model) {
+      checks.push(...(await runPassD(ctx, options.model)));
+      passes.push("D");
+    }
+  }
+
+  return {
+    ...assemble(checks, passes, notes),
+    measurements: b.measurements,
+    screenshots: b.screenshots,
+  };
 };

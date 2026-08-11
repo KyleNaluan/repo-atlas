@@ -1,12 +1,16 @@
 /**
  * `repo-atlas audit <artifact.html> --atlas <atlas.json> --clone <path>`
  *
- * The deterministic passes in this build: pass A (static gates) plus pass B, the
- * browser gates loaded over a live DOM with the network disabled. The result is
- * stamped into the reserved slot and a failed artifact is quarantined; the model
- * pass lands in a later stage, and until it does the audit reports every check it
- * did not run BY NAME rather than omitting it - an audit that quietly reports on
- * some of the twenty checks is the exact failure this stage exists to prevent.
+ * All four passes: A (static gates), B (browser gates over a live DOM with the
+ * network disabled), C (issue citations, cache-first) and D (the model). The
+ * result is stamped into the reserved slot and a failed artifact is quarantined.
+ * Every check that did not run is reported BY NAME with its reason rather than
+ * omitted - an audit that quietly reports on some of the twenty checks is the
+ * exact failure this stage exists to prevent.
+ *
+ * Pass D can only ever add warnings. A model that is unreachable, or that dies
+ * mid-sweep, reports as not run; it never fails the artifact, because making
+ * emission depend on model availability is the non-reproducibility #8 rejected.
  */
 import { resolve } from "node:path";
 import { readFileSync, writeFileSync, rmSync } from "node:fs";
@@ -15,13 +19,19 @@ import { audit, runAudit, type AuditOutcome } from "../audit/run.js";
 import { GATES } from "../audit/register.js";
 import { declaredViewports } from "../audit/pass-b.js";
 import { quarantinePath, stampAudit, withFailureBanner } from "../artifact/stamp.js";
+import { fileIssueCache } from "../harvest/cache.js";
+import { GhError, getIssue } from "../harvest/gh.js";
+import { harvestIssue } from "../harvest/issues.js";
+import { sdkJudge } from "../audit/judge.js";
+import { blobAt } from "../audit/git.js";
 import type { AuditContext, CheckResult } from "../audit/types.js";
 import type { AuditRecord } from "../schema/types.js";
 
 const USAGE = `usage: repo-atlas audit <artifact.html> --atlas <atlas.json> --clone <path> [--private-clone <path>]
 
-Runs the deterministic gates over a rendered artifact: pass A (static) and, by
-default, pass B (browser). Pass --no-browser to run pass A alone.
+Runs the gates over a rendered artifact: pass A (static), pass B (browser), pass
+C (issue citations, cache-first) and pass D (the model, advisory). Pass
+--no-browser to run pass A alone.
 
 options:
   --atlas <path>           the atlas.json the artifact was rendered from (required)
@@ -32,6 +42,9 @@ options:
   --out <path>             where the audited artifact is emitted (default: in place)
   --allow-failed           emit a failed artifact, with a banner, for local development
   --no-write-atlas         do not mirror the result into the atlas.json record
+  --repo <owner/name>      the subject repo, so pass C can read the harvest cache
+                           (default: the subject recorded in the atlas)
+  --no-model               skip pass D; its checks report as not run, never as failed
 
 The audit is the only writer of the reserved slot that holds its own result. It
 hashes the page with that slot blanked, runs its passes, rewrites only the slot,
@@ -95,6 +108,7 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
         ? {}
         : { privateClone: resolve(flag(argv, "--private-clone")!) }),
     };
+    const repo = flag(argv, "--repo") ?? `${ctx.atlas.subject.owner}/${ctx.atlas.subject.repo}`;
     outcome = argv.includes("--no-browser")
       ? audit(ctx)
       : await runAudit(ctx, {
@@ -102,6 +116,39 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
           ...(flag(argv, "--screenshots") === undefined
             ? {}
             : { screenshotDir: resolve(flag(argv, "--screenshots")!) }),
+          issues: {
+            cached: fileIssueCache().all(repo),
+            // Cache-first, network only on a miss (#8). A 404 is the answer -
+            // that issue does not exist, so the citation is false - while any
+            // other failure is the audit unable to ask, which pass C's own
+            // boundary turns into a precondition failure rather than a verdict
+            // about the artifact.
+            fetch: async (n) => {
+              let issue;
+              try {
+                issue = await getIssue(repo, n);
+              } catch (e) {
+                if (e instanceof GhError && e.status === 404) return undefined;
+                throw e;
+              }
+              return harvestIssue(repo, issue);
+            },
+          },
+          // No model means pass D reports as not run rather than failing: an
+          // unreachable model must never decide whether an artifact ships.
+          ...(argv.includes("--no-model")
+            ? {}
+            : {
+                model: {
+                  judge: sdkJudge,
+                  resolve: (e) =>
+                    e.kind === "file"
+                      ? (blobAt(ctx.clone, ctx.atlas.subject.sha, e.path) ?? undefined)
+                      : e.kind === "command"
+                        ? e.output_excerpt
+                        : undefined,
+                },
+              }),
         });
   } catch (e) {
     // The per-check boundary means audit() does not throw for a check failure;

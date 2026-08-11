@@ -23,7 +23,7 @@ import { fileIssueCache } from "../harvest/cache.js";
 import { GhError, getIssue } from "../harvest/gh.js";
 import { harvestIssue } from "../harvest/issues.js";
 import { sdkJudge } from "../audit/judge.js";
-import { blobAt, sliceLines } from "../audit/git.js";
+import { evidenceResolver } from "../audit/checks/evidence.js";
 import type { AuditContext, CheckResult } from "../audit/types.js";
 import type { AuditRecord } from "../schema/types.js";
 
@@ -109,6 +109,7 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
         : { privateClone: resolve(flag(argv, "--private-clone")!) }),
     };
     const repo = flag(argv, "--repo") ?? `${ctx.atlas.subject.owner}/${ctx.atlas.subject.repo}`;
+    const cachedIssues = fileIssueCache().all(repo);
     outcome = argv.includes("--no-browser")
       ? audit(ctx)
       : await runAudit(ctx, {
@@ -117,7 +118,7 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
             ? {}
             : { screenshotDir: resolve(flag(argv, "--screenshots")!) }),
           issues: {
-            cached: fileIssueCache().all(repo),
+            cached: cachedIssues,
             // Cache-first, network only on a miss (#8). A 404 is the answer -
             // that issue does not exist, so the citation is false - while any
             // other failure is the audit unable to ask, which pass C's own
@@ -141,20 +142,10 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
             : {
                 model: {
                   judge: sdkJudge,
-                  // Resolve a file citation to its CITED SPAN, not the whole file:
-                  // the line range is what pins the claim (git.ts), and the judge
-                  // truncates long text, so handing it the file head would grade a
-                  // citation past that head against the wrong region. Fall back to
-                  // the whole blob only when the citation names no line range.
-                  resolve: (e) => {
-                    if (e.kind === "command") return e.output_excerpt;
-                    if (e.kind !== "file") return undefined;
-                    const blob = blobAt(ctx.clone, ctx.atlas.subject.sha, e.path);
-                    if (blob === null) return undefined;
-                    return e.line_start === undefined
-                      ? blob
-                      : sliceLines(blob, e.line_start, e.line_end);
-                  },
+                  // Cache-first, exhaustive over Evidence: file citations to their
+                  // cited span, issue citations to the cited comment or issue body
+                  // from the harvest cache. See evidenceResolver.
+                  resolve: evidenceResolver(ctx, cachedIssues),
                 },
               }),
         });

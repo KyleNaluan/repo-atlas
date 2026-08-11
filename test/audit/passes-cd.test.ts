@@ -29,6 +29,7 @@ import {
   type Judge,
 } from "../../src/audit/checks/model.js";
 import { runPassD } from "../../src/audit/pass-d.js";
+import { evidenceResolver } from "../../src/audit/checks/evidence.js";
 import { GitError } from "../../src/audit/git.js";
 import { runLaterPasses } from "../../src/audit/run.js";
 import { GATES } from "../../src/audit/register.js";
@@ -173,6 +174,10 @@ describe("pass C resolves issue citations, cache first", () => {
 /* ------------------------------------------------------- pass D */
 
 const judgeAll = (supported: boolean): Judge => async () => ({ supported, note: "n" });
+// A node whose evidence all resolves is judged; one whose evidence resolves to
+// nothing is named but not weighed. These two isolate the two paths: resolveText
+// so every node reaches the judge, resolveNothing so none does.
+const resolveText = { resolve: () => "evidence text" };
 const resolveNothing = { resolve: () => undefined };
 
 describe("pass D judges each node alone", () => {
@@ -196,7 +201,7 @@ describe("pass D judges each node alone", () => {
       judged += 1;
       return { supported: true, note: "n" };
     };
-    await absenceWitness(atlas.nodes, { judge, ...resolveNothing });
+    await absenceWitness(atlas.nodes, { judge, ...resolveText });
     const shaped = atlas.nodes.filter(isAbsenceShaped).length;
     expect(judged).toBe(shaped);
     expect(shaped).toBeGreaterThan(0);
@@ -224,7 +229,7 @@ describe("pass D judges each node alone", () => {
   it("enumerates every unsupported verdict in full, never a count", async () => {
     const result = await proseSupport(atlas.nodes.slice(0, 3), {
       judge: async (request) => ({ supported: false, note: `${request.node.id} overclaims` }),
-      ...resolveNothing,
+      ...resolveText,
     });
     expect(result.outcome).toBe("failed");
     expect(result.findings).toHaveLength(3);
@@ -278,6 +283,54 @@ describe("pass D judges each node alone", () => {
     expect(prose.length).toBeGreaterThan(2);
     expect(prose.join(" ")).not.toContain("http");
   });
+
+  it("resolves issue evidence to text from the harvest cache, comment id first", () => {
+    // A decision node's support IS its cited resolution comment; the resolver must
+    // hand that text to the judge, not drop it and invite a spurious overclaim.
+    const cached = [cachedIssue(2, [7])];
+    const resolve = evidenceResolver(ctx, cached);
+    // A comment id resolves to that comment's body; no comment id, the issue body.
+    expect(resolve({ kind: "issue", number: 2, comment_id: 7 })).toBe("## Resolution: x");
+    expect(resolve({ kind: "issue", number: 2 })).toBe("b");
+    // A cache miss - issue or comment - resolves to nothing, for the guard to name.
+    expect(resolve({ kind: "issue", number: 99 })).toBeUndefined();
+    expect(resolve({ kind: "issue", number: 2, comment_id: 999 })).toBeUndefined();
+    // Command evidence is its captured excerpt; the switch is exhaustive over kinds.
+    expect(resolve({ kind: "command", cmd: "x", output_excerpt: "captured" })).toBe("captured");
+  });
+
+  it("names but does not judge a node whose evidence all fails to resolve", async () => {
+    // A verdict against "(none resolved)" is meaningless in either direction, so
+    // the node is named in the reason and left out of the count rather than
+    // weighed against nothing - the same evidence-fidelity discipline as L2.
+    const withEvidence = atlas.nodes.find((n) => n.evidence.length > 0)!;
+    let judged = 0;
+    const judge: Judge = async () => {
+      judged += 1;
+      return { supported: true, note: "n" };
+    };
+    const result = await proseSupport([withEvidence], { judge, ...resolveNothing });
+    expect(judged).toBe(0);
+    expect(result.outcome).toBe("passed");
+    expect(result.count).toBe(0);
+    expect(result.reason).toMatch(/named but not weighed/);
+    expect(result.reason).toContain(withEvidence.id);
+  });
+
+  it("still judges a node that genuinely cites no evidence", async () => {
+    // "This node cites nothing" is itself something the model can weigh; only a
+    // node whose citations FAILED to resolve is withheld, never one with none.
+    const bare = { ...atlas.nodes[0]!, evidence: [] } as AtlasNode;
+    let seen = -1;
+    const judge: Judge = async (request) => {
+      seen = request.evidence.length;
+      return { supported: true, note: "n" };
+    };
+    const result = await proseSupport([bare], { judge, ...resolveNothing });
+    expect(seen).toBe(0);
+    expect(result.count).toBe(1);
+    expect(result.reason).toBeUndefined();
+  });
 });
 
 /* ------------------------------- the property #21 asks to be provable */
@@ -292,14 +345,14 @@ describe("the model can never decide whether an artifact ships", () => {
 
   it("produces no gate failure however the judge answers", async () => {
     for (const answer of [true, false]) {
-      const checks = await runPassD(ctx, { judge: judgeAll(answer), ...resolveNothing });
+      const checks = await runPassD(ctx, { judge: judgeAll(answer), ...resolveText });
       expect(checks.some(isGateFailure), `judge answering ${answer}`).toBe(false);
       expect(checks.every((c) => c.class === "warning")).toBe(true);
     }
   });
 
   it("produces no gate failure when the judge refuses every node", async () => {
-    const checks = await runPassD(ctx, { judge: judgeAll(false), ...resolveNothing });
+    const checks = await runPassD(ctx, { judge: judgeAll(false), ...resolveText });
     expect(checks.every((c) => c.outcome === "failed")).toBe(true);
     expect(checks.some(isGateFailure)).toBe(false);
   });
@@ -322,7 +375,7 @@ describe("the model can never decide whether an artifact ships", () => {
       if (calls > 2) throw new Error("model unavailable");
       return { supported: true, note: "n" };
     };
-    const checks = await runPassD(ctx, { judge: throwing, ...resolveNothing });
+    const checks = await runPassD(ctx, { judge: throwing, ...resolveText });
     for (const c of checks) {
       expect(c.outcome).toBe("not_run");
       expect(c.aborted).toBeUndefined();
@@ -386,7 +439,7 @@ describe("the model can never decide whether an artifact ships", () => {
       if ((calls += 1) > 2) throw new Error("gone");
       return { supported: false, note: "overclaims" };
     };
-    const [m1] = await runPassD(ctx, { judge: throwing, ...resolveNothing });
+    const [m1] = await runPassD(ctx, { judge: throwing, ...resolveText });
     expect(m1!.findings).toBeUndefined();
     expect(m1!.reason).toMatch(/after judging 2 of \d+ nodes/);
   });

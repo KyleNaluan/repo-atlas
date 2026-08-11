@@ -361,7 +361,7 @@ describeBrowser("the whole deterministic suite", () => {
     const outcome = await runAudit(ctx, {
       artifactPath,
       issues: { cached: cacheFor(ctx.atlas) },
-      model: { judge: async () => ({ supported: false, note: "overclaims" }), resolve: () => undefined },
+      model: { judge: async () => ({ supported: false, note: "overclaims" }), resolve: () => "evidence text" },
     });
     expect(outcome.status).toBe("passed_with_warnings");
     expect(outcome.failure_kind).toBeUndefined();

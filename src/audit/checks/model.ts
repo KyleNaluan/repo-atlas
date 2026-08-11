@@ -26,7 +26,7 @@
  * supposed to support it.
  */
 import { spec } from "../register.js";
-import { notRun, passed, type CheckResult } from "../types.js";
+import { failed, notRun, passed, type CheckResult } from "../types.js";
 import type { AtlasNode, Evidence } from "../../schema/types.js";
 
 export interface JudgeRequest {
@@ -146,11 +146,25 @@ const runJudgements = async (
     );
   }
 
+  // A node whose evidence entries ALL failed to resolve is named but NOT judged.
+  // The judge would see "(none resolved)" and a verdict against nothing is
+  // meaningless in either direction: under PROSE_QUESTION empty text reads as an
+  // overclaim, and an absence claim citing an unreadable comment cannot be
+  // witnessed at all - either way a spurious warning shown to a human as real. A
+  // node with genuinely no evidence at all is a different case and is still
+  // judged, because "this node cites nothing" is itself a thing the model weighs.
+  const unresolved = judgements.filter(
+    (j) => j.node.evidence.length > 0 && j.evidence.length === 0,
+  );
+  const toJudge = judgements.filter(
+    (j) => j.node.evidence.length === 0 || j.evidence.length > 0,
+  );
+
   const judge = options.judge;
   const findings: string[] = [];
   let judged = 0;
   try {
-    for (const { node, evidence } of judgements) {
+    for (const { node, evidence } of toJudge) {
       const verdict = await judge({ node, evidence }, question);
       if (!verdict.supported) findings.push(`${node.id}: ${verdict.note}`);
       judged += 1;
@@ -171,15 +185,30 @@ const runJudgements = async (
     const message = cause instanceof Error ? cause.message : String(cause);
     return notRun(
       spec(id),
-      `the model became unreachable after judging ${judged} of ${nodes.length} node${nodes.length === 1 ? "" : "s"} (${message}), ` +
+      `the model became unreachable after judging ${judged} of ${toJudge.length} node${toJudge.length === 1 ? "" : "s"} (${message}), ` +
         `and the model pass never decides whether an artifact ships`,
     );
   }
 
-  return findings.length === 0
-    ? passed(spec(id), nodes.length)
-    : // A warning-class check reports its findings in full; the run still ships.
-      { ...passed(spec(id), nodes.length), outcome: "failed" as const, findings };
+  // The count is the nodes actually weighed, not the nodes handed in: a check
+  // that names a reduced population never lets it read as full coverage (#8). The
+  // nodes named but not weighed are reported by their ids alongside, because
+  // silence is never how absence is communicated (#6).
+  const weighed = toJudge.length;
+  const base =
+    findings.length === 0
+      ? passed(spec(id), weighed)
+      : // A warning-class check reports its findings in full; the run still ships.
+        failed(spec(id), findings, weighed);
+  return unresolved.length === 0
+    ? base
+    : {
+        ...base,
+        reason:
+          `${unresolved.length} node${unresolved.length === 1 ? "" : "s"} named but not weighed: ` +
+          `their cited evidence did not resolve to any readable text ` +
+          `(${unresolved.map((j) => j.node.id).join(", ")})`,
+      };
 };
 
 export const proseSupport = (nodes: AtlasNode[], options: ModelPassOptions): Promise<CheckResult> =>

@@ -5,9 +5,11 @@
  * and a false citation is the artifact making a claim that is not true. That is
  * the whole classification rule.
  */
-import { blobAt, lineCount } from "../git.js";
+import { blobAt, lineCount, sliceLines } from "../git.js";
 import { spec } from "../register.js";
 import { failed, notApplicable, passed, type AuditContext, type CheckResult } from "../types.js";
+import { resolveComment, resolveIssue } from "../../harvest/cache.js";
+import type { HarvestedIssue } from "../../harvest/types.js";
 import type { Atlas, AtlasNode, Evidence, FileEvidence } from "../../schema/types.js";
 
 /**
@@ -48,6 +50,49 @@ export const nodeEvidence = (n: AtlasNode): Evidence[] => {
   if (n.type === "flow") for (const s of n.steps) if (s.evidence) out.push(s.evidence);
   return out;
 };
+
+/**
+ * Resolve one evidence citation to the text the model pass (D) hands its judge.
+ *
+ * One exhaustive switch over Evidence, deliberately: a future evidence kind is a
+ * compile error here (the `never` guard), never a silent `undefined` that would
+ * hand a node to the judge with its support quietly dropped.
+ *
+ * - file: the CITED SPAN, not the whole file. The line range is what pins the
+ *   claim (git.ts), and the judge truncates long text, so handing it the file
+ *   head would grade a citation past that head against the wrong region. The
+ *   whole blob is the fallback only when no line range is named.
+ * - issue: the harvest cache, cache-first per #8 - the named comment's body when
+ *   a comment id is cited, the issue body otherwise. A decision node's support
+ *   IS its cited resolution comment, so dropping it would show the judge nothing
+ *   and invite a spurious overclaim warning. A cache miss returns undefined and
+ *   the model pass names the node as not weighed rather than judging it blind.
+ * - command: the excerpt captured at harvest, which is the evidence itself.
+ *
+ * undefined means "this citation did not resolve to readable text"; the caller
+ * decides what an unresolved citation means, never this function.
+ */
+export const evidenceResolver =
+  (ctx: AuditContext, cached: HarvestedIssue[]) =>
+  (e: Evidence): string | undefined => {
+    switch (e.kind) {
+      case "command":
+        return e.output_excerpt;
+      case "file": {
+        const blob = blobAt(ctx.clone, ctx.atlas.subject.sha, e.path);
+        if (blob === null) return undefined;
+        return e.line_start === undefined ? blob : sliceLines(blob, e.line_start, e.line_end);
+      }
+      case "issue":
+        return e.comment_id === undefined
+          ? resolveIssue(cached, e.number)?.body
+          : resolveComment(cached, e.number, e.comment_id)?.body;
+      default: {
+        const _exhaustive: never = e;
+        return _exhaustive;
+      }
+    }
+  };
 
 /** Every file evidence entry in the graph, with the node that carries it. */
 export const fileEvidence = (atlas: Atlas): { owner: string; e: FileEvidence }[] => {

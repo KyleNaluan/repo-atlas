@@ -8,24 +8,52 @@
 import { blobAt, lineCount } from "../git.js";
 import { spec } from "../register.js";
 import { failed, notApplicable, passed, type AuditContext, type CheckResult } from "../types.js";
-import type { AtlasNode, Evidence, FileEvidence } from "../../schema/types.js";
+import type { Atlas, AtlasNode, Evidence, FileEvidence } from "../../schema/types.js";
+
+/**
+ * The one traversal of the evidence-bearing locations (synopsis, shape,
+ * node.evidence, decision.implemented_by, mechanism.code_excerpt, flow.steps).
+ *
+ * L1/L2 coverage and the synthetic subject the tests build both resolve
+ * citations at exactly these locations, so they share this walk rather than
+ * keeping two copies in step by hand: a future schema addition that adds an
+ * evidence-bearing field is added here once, and neither side can silently drift
+ * from the other and stop materialising a cited file the check still resolves.
+ */
+export const eachEvidence = (atlas: Atlas, visit: (e: Evidence, owner: string) => void): void => {
+  const walk = (owner: string, list: Evidence[]) => {
+    for (const e of list) visit(e, owner);
+  };
+  walk("synopsis", atlas.synopsis.evidence);
+  walk("shape", atlas.shape.evidence);
+  for (const n of atlas.nodes) {
+    walk(n.id, n.evidence);
+    if (n.type === "decision") walk(n.id, n.implemented_by);
+    if (n.type === "mechanism" && n.code_excerpt) walk(n.id, [n.code_excerpt.evidence]);
+    if (n.type === "flow") for (const s of n.steps) if (s.evidence) walk(n.id, [s.evidence]);
+  }
+};
 
 /** Every file evidence entry in the graph, with the node that carries it. */
-export const fileEvidence = (atlas: AuditContext["atlas"]): { owner: string; e: FileEvidence }[] => {
+export const fileEvidence = (atlas: Atlas): { owner: string; e: FileEvidence }[] => {
   const out: { owner: string; e: FileEvidence }[] = [];
-  const add = (owner: string, list: Evidence[]) => {
-    for (const e of list) if (e.kind === "file") out.push({ owner, e });
-  };
-  add("synopsis", atlas.synopsis.evidence);
-  add("shape", atlas.shape.evidence);
-  for (const n of atlas.nodes) {
-    add(n.id, n.evidence);
-    if (n.type === "decision") add(n.id, n.implemented_by);
-    if (n.type === "mechanism" && n.code_excerpt) add(n.id, [n.code_excerpt.evidence]);
-    if (n.type === "flow") for (const s of n.steps) if (s.evidence) add(n.id, [s.evidence]);
-  }
+  eachEvidence(atlas, (e, owner) => {
+    if (e.kind === "file") out.push({ owner, e });
+  });
   return out;
 };
+
+/**
+ * The graph carries no file evidence at all, so neither L1 (paths) nor L2
+ * (ranges) has anything to resolve. This stage's contract is that a check which
+ * could not run never counts as passing and that absence is never communicated
+ * by silence (#8), so both report not_applicable by name with a reason rather
+ * than a hollow pass. The decision-poor subject in #10 can produce exactly this.
+ */
+const noFileEvidence = (): [CheckResult, CheckResult] => [
+  notApplicable(spec("L1"), "the graph cites no files, so there is no path to resolve"),
+  notApplicable(spec("L2"), "the graph cites no files, so there is no line range to resolve"),
+];
 
 /**
  * L1 and L2 run as one pass over the tree because they read the same blob: the
@@ -34,6 +62,7 @@ export const fileEvidence = (atlas: AuditContext["atlas"]): { owner: string; e: 
  */
 export const resolveFileEvidence = (ctx: AuditContext): [CheckResult, CheckResult] => {
   const entries = fileEvidence(ctx.atlas);
+  if (entries.length === 0) return noFileEvidence();
   const missing: string[] = [];
   const outOfRange: string[] = [];
   let ranges = 0;
@@ -146,9 +175,3 @@ export const presentTenseClaims = (ctx: AuditContext): CheckResult => {
     ? passed(spec("E2"), behavioural)
     : failed(spec("E2"), problems, behavioural);
 };
-
-/** Reported when a subject's graph carries no file evidence at all. */
-export const noFileEvidence = (ctx: AuditContext): CheckResult | null =>
-  fileEvidence(ctx.atlas).length === 0
-    ? notApplicable(spec("L1"), "the graph cites no files, so there is nothing to resolve")
-    : null;

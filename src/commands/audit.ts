@@ -81,7 +81,10 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
   for (const c of outcome.checks) console.log(line(c));
   for (const c of outcome.checks) {
     for (const f of c.findings ?? []) console.log(`        ${c.id}: ${f}`);
-    if (c.reason && c.outcome === "not_applicable") console.log(`        ${c.id}: ${c.reason}`);
+    // Both not_applicable and not_run carry a mandatory reason, and neither is a
+    // pass; report every check it did not run BY NAME and with its reason,
+    // rather than dropping the reason and communicating absence by silence.
+    if (c.reason) console.log(`        ${c.id}: ${c.reason}`);
   }
 
   const gatesPassed = outcome.checks.filter(

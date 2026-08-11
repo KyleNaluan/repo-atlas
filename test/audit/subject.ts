@@ -18,22 +18,11 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { Atlas, Evidence } from "../../src/schema/types.js";
+import type { Atlas } from "../../src/schema/types.js";
+import { eachEvidence } from "../../src/audit/checks/evidence.js";
 
 const git = (cwd: string, args: string[]): string =>
   execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-
-const eachFileEvidence = (atlas: Atlas, visit: (e: Evidence) => void): void => {
-  const walk = (list: Evidence[]) => list.forEach(visit);
-  walk(atlas.synopsis.evidence);
-  walk(atlas.shape.evidence);
-  for (const n of atlas.nodes) {
-    walk(n.evidence);
-    if (n.type === "decision") walk(n.implemented_by);
-    if (n.type === "mechanism" && n.code_excerpt) walk([n.code_excerpt.evidence]);
-    if (n.type === "flow") for (const s of n.steps) if (s.evidence) walk([s.evidence]);
-  }
-};
 
 export interface SyntheticSubject {
   /** Path to the git worktree, at the commit the returned atlas is pinned to. */
@@ -48,7 +37,7 @@ export const buildSyntheticSubject = (source: Atlas): SyntheticSubject => {
 
   // Every cited path exists, and is long enough for every range cited into it.
   const longest = new Map<string, number>();
-  eachFileEvidence(atlas, (e) => {
+  eachEvidence(atlas, (e) => {
     if (e.kind !== "file") return;
     const end = e.line_end ?? e.line_start ?? 1;
     longest.set(e.path, Math.max(longest.get(e.path) ?? 0, end));
@@ -81,7 +70,7 @@ export const buildSyntheticSubject = (source: Atlas): SyntheticSubject => {
   const sha = git(root, ["rev-parse", "HEAD"]).trim();
 
   atlas.subject.sha = sha;
-  eachFileEvidence(atlas, (e) => {
+  eachEvidence(atlas, (e) => {
     if (e.kind === "file") e.sha = sha;
   });
 

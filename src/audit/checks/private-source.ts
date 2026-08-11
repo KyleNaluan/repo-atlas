@@ -52,8 +52,22 @@ export const shingles = (words: string[], k = SHINGLE_K): Set<string> => {
   return out;
 };
 
-const readCorpus = (root: string): { files: number; bytes: number; shingles: Map<string, string> } => {
+/**
+ * A file the walk could not fold into the corpus even though it wanted to: too
+ * large for the cap, or unreadable. Tracked rather than dropped, because a
+ * corpus missing a file is a partial corpus, and a partial corpus can never
+ * clear a truth gate - a leaked passage living in a skipped file would never be
+ * shingled, and passing on it would be absence communicated by silence.
+ *
+ * SKIP_DIRS and binaries are not skips in this sense: they are deliberate
+ * exclusions of things that cannot carry shingleable prose, not text the walk
+ * failed to read.
+ */
+const readCorpus = (
+  root: string,
+): { files: number; bytes: number; skipped: string[]; shingles: Map<string, string> } => {
   const index = new Map<string, string>();
+  const skipped: string[] = [];
   let files = 0;
   let bytes = 0;
   const walk = (dir: string) => {
@@ -65,11 +79,15 @@ const readCorpus = (root: string): { files: number; bytes: number; shingles: Map
         walk(path);
         continue;
       }
-      if (bytes + stat.size > MAX_BYTES) continue;
+      if (bytes + stat.size > MAX_BYTES) {
+        skipped.push(path);
+        continue;
+      }
       let text: string;
       try {
         text = readFileSync(path, "utf8");
       } catch {
+        skipped.push(path);
         continue;
       }
       // A NUL byte means this is not text; shingling a binary is noise.
@@ -80,7 +98,7 @@ const readCorpus = (root: string): { files: number; bytes: number; shingles: Map
     }
   };
   walk(root);
-  return { files, bytes, shingles: index };
+  return { files, bytes, skipped, shingles: index };
 };
 
 /** The artifact's visible text: what a reader can actually see. */
@@ -126,7 +144,20 @@ export const privateSourceCheck = (ctx: AuditContext): CheckResult => {
     if (source) hits.push(`"${s}" appears in the declared-private source ${source}`);
   }
 
-  return hits.length === 0
-    ? passed(spec("P1"), corpus.shingles.size)
-    : failed(spec("P1"), hits.slice(0, 20), hits.length);
+  if (hits.length > 0) return failed(spec("P1"), hits.slice(0, 20), hits.length);
+
+  // No hits, but a passing verdict is only honest against the whole corpus. If
+  // any private file was skipped, a leak could be hiding in it, so P1 reports
+  // not_applicable by name - naming the skipped files - rather than a pass it
+  // did not earn. Absence is never communicated by silence (#6, #8).
+  if (corpus.skipped.length > 0) {
+    const shown = corpus.skipped.slice(0, 5).join(", ");
+    const more = corpus.skipped.length > 5 ? `, and ${corpus.skipped.length - 5} more` : "";
+    return notApplicable(
+      spec("P1"),
+      `${corpus.skipped.length} private file(s) could not be read in full (size cap or unreadable), so the corpus is incomplete and no leak check can be trusted: ${shown}${more}`,
+    );
+  }
+
+  return passed(spec("P1"), corpus.shingles.size);
 };

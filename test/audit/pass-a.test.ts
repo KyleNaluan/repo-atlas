@@ -12,7 +12,7 @@
  * its own mutant, and only its own, is what tells them apart.
  */
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, truncateSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,10 +22,11 @@ import { disposeHighlighter } from "../../src/render/highlight.js";
 import { memoryDiagramCache } from "../../src/render/cache.js";
 import { audit } from "../../src/audit/run.js";
 import { runPassA } from "../../src/audit/pass-a.js";
+import { resolveFileEvidence } from "../../src/audit/checks/evidence.js";
 import { checkPreconditions } from "../../src/audit/preconditions.js";
 import { checksInPass, GATES, REGISTER } from "../../src/audit/register.js";
 import type { AuditContext } from "../../src/audit/types.js";
-import type { Atlas } from "../../src/schema/types.js";
+import type { Atlas, Evidence } from "../../src/schema/types.js";
 import { buildPrivateCorpus, buildSyntheticSubject } from "./subject.js";
 import { MUTANTS } from "../mutants/index.js";
 
@@ -233,6 +234,73 @@ describe("the private-source check has three states, and none of them is silence
     const outcome = audit({ ...clean, atlas });
     expect(outcome.checks.find((c) => c.id === "P1")?.outcome).toBe("not_applicable");
     expect(outcome.checks.find((c) => c.id === "P1")?.outcome).not.toBe("passed");
+  });
+});
+
+describe("L1/L2 when the graph cites no file evidence at all", () => {
+  // A check that could not run never counts as passing, and absence is never
+  // communicated by silence (#8): a file-free graph must report not_applicable
+  // for both L1 and L2, not a hollow pass. The decision-poor subject in #10 can
+  // produce exactly this graph.
+  const stripFileEvidence = (atlas: Atlas): Atlas => {
+    const a = structuredClone(atlas);
+    const noFile = (list: Evidence[]) => list.filter((e) => e.kind !== "file");
+    a.synopsis.evidence = noFile(a.synopsis.evidence);
+    a.shape.evidence = noFile(a.shape.evidence);
+    for (const n of a.nodes) {
+      n.evidence = noFile(n.evidence);
+      if (n.type === "decision") n.implemented_by = noFile(n.implemented_by);
+      if (n.type === "mechanism" && n.code_excerpt?.evidence.kind === "file") delete n.code_excerpt;
+      if (n.type === "flow") for (const s of n.steps) if (s.evidence?.kind === "file") delete s.evidence;
+    }
+    return a;
+  };
+
+  const bare = (): AuditContext => ({ ...clean, atlas: stripFileEvidence(clean.atlas) });
+
+  it("reports not_applicable for both, each with a reason", () => {
+    const [l1, l2] = resolveFileEvidence(bare());
+    expect(l1.id).toBe("L1");
+    expect(l1.outcome).toBe("not_applicable");
+    expect(l1.reason).toMatch(/no path to resolve/);
+    expect(l2.id).toBe("L2");
+    expect(l2.outcome).toBe("not_applicable");
+    expect(l2.reason).toMatch(/no line range to resolve/);
+  });
+
+  it("counts neither as a passing gate", () => {
+    // Mirrors the exact predicate the verdict uses to tally hard gates passed.
+    const passingGates = resolveFileEvidence(bare()).filter(
+      (c) => c.class === "gate" && c.outcome === "passed",
+    );
+    expect(passingGates).toEqual([]);
+  });
+});
+
+describe("P1 cannot pass on an incomplete corpus", () => {
+  it("reports not_applicable, naming the skip, when a private file could not be read in full", () => {
+    // A partial corpus can never support a passing truth gate: a leaked passage
+    // in a skipped file would never be shingled. A clean artifact against a
+    // corpus with a skipped file must come back not_applicable, not passed.
+    const corpusRoot = mkdtempSync(join(tmpdir(), "repo-atlas-private-partial-"));
+    writeFileSync(join(corpusRoot, "readable.txt"), "some harmless words in here\n", "utf8");
+    // A sparse file past the 32 MB cap: no disk cost, but stat.size forces the
+    // real size-cap skip inside readCorpus.
+    const big = join(corpusRoot, "too-big.txt");
+    writeFileSync(big, "");
+    truncateSync(big, 33 * 1024 * 1024);
+
+    const atlas = structuredClone(clean.atlas);
+    atlas.record.private_source = {
+      declared: true,
+      repo: "KyleNaluan/swe-prep-content",
+      readable_at_harvest: true,
+    };
+    const result = byId({ ...clean, atlas, privateClone: corpusRoot }).get("P1");
+    expect(result?.outcome).not.toBe("passed");
+    expect(result?.outcome).toBe("not_applicable");
+    expect(result?.reason).toMatch(/could not be read in full/);
+    expect(result?.reason).toContain("too-big.txt");
   });
 });
 

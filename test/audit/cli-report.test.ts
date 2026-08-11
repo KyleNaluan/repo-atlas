@@ -29,7 +29,8 @@ import { runAudit, type AuditOutcome } from "../../src/audit/run.js";
 import { REGISTER } from "../../src/audit/register.js";
 import { failed, passed, notRun } from "../../src/audit/types.js";
 import { VIEWPORTS, type ViewportMeasurement } from "../../src/audit/checks/visual.js";
-import type { Atlas } from "../../src/schema/types.js";
+import { contentHash, withSlotsBlanked } from "../../src/artifact/audit-slot.js";
+import type { Atlas, AuditRecord } from "../../src/schema/types.js";
 
 const dir = mkdtempSync(join(tmpdir(), "repo-atlas-cli-report-"));
 
@@ -123,8 +124,10 @@ const passAGateFailed: AuditOutcome = {
   notes: [],
 };
 
-const recordedViewports = (): number[] | undefined =>
-  (JSON.parse(readFileSync(atlasFixture, "utf8")) as Atlas).record.audit?.viewports;
+const recordedAudit = (): AuditRecord =>
+  (JSON.parse(readFileSync(atlasFixture, "utf8")) as Atlas).record.audit;
+
+const recordedViewports = (): number[] | undefined => recordedAudit().viewports;
 
 describe("repo-atlas audit reports what it established", () => {
   it("prints only the precondition problems on a pre-flight failure and exits 78", async () => {
@@ -182,5 +185,38 @@ describe("record.viewports records only the widths the layout checks ran at", ()
     const code = await auditCommand([...argv, "--out", join(dir, "failed-out.html")]);
     expect(code).toBe(1);
     expect(recordedViewports()).toBeUndefined();
+  });
+});
+
+describe("record.content_hash describes only a file a consumer can verify", () => {
+  it("records a content_hash on a passing run that reproduces by blanking the emitted file's slots", async () => {
+    vi.mocked(runAudit).mockResolvedValue(passing);
+    const emitted = join(dir, "passed-out.html");
+    const code = await auditCommand([...argv, "--out", emitted]);
+    expect(code).toBe(0);
+    const hash = recordedAudit().content_hash;
+    expect(hash).toBeDefined();
+    // The whole point of the recorded hash: a consumer blanks the slots of the
+    // emitted file and reproduces it. On a passing run no banner is added.
+    expect(contentHash(readFileSync(emitted, "utf8"))).toBe(hash);
+    expect(withSlotsBlanked(readFileSync(emitted, "utf8"))).not.toContain("Audit: FAILED");
+  });
+
+  it("records no content_hash on a quarantined run, since no verifiable file is emitted", async () => {
+    // The emitted .failed.html carries the failure banner outside the audit
+    // slots, so blanking its slots reproduces no recorded hash - and on
+    // quarantine there is no deliverable at the output path at all. A hash that
+    // matches no file on disk is worse than no hash.
+    vi.mocked(runAudit).mockResolvedValue(passAGateFailed);
+    const code = await auditCommand([...argv, "--out", join(dir, "quarantined-out.html")]);
+    expect(code).toBe(1);
+    expect(recordedAudit().content_hash).toBeUndefined();
+  });
+
+  it("records no content_hash even under --allow-failed, because the emitted copy still carries the banner", async () => {
+    vi.mocked(runAudit).mockResolvedValue(passAGateFailed);
+    const code = await auditCommand([...argv, "--out", join(dir, "allowed-out.html"), "--allow-failed"]);
+    expect(code).toBe(1);
+    expect(recordedAudit().content_hash).toBeUndefined();
   });
 });

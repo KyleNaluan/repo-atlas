@@ -197,7 +197,7 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
     const record: AuditRecord = {
       status: outcome.status,
       ...(outcome.failure_kind === undefined ? {} : { failure_kind: outcome.failure_kind }),
-      content_hash: stamped.contentHash,
+      ...(failed ? {} : { content_hash: stamped.contentHash }),
       audited_at: auditedAt,
       checks: outcome.checks.map((c) => ({
         id: c.id,

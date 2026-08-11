@@ -73,7 +73,7 @@ const abortedChecks = (checks: CheckResult[]): CheckResult[] =>
   checks.filter((c) => c.outcome === "failed" && c.aborted === true);
 
 const warningsFailed = (checks: CheckResult[]): CheckResult[] =>
-  checks.filter((c) => c.class === "warning" && c.outcome === "failed");
+  checks.filter((c) => c.class === "warning" && c.outcome === "failed" && c.aborted !== true);
 
 /** Checks that did not run or did not apply, with the reason each gave. */
 const unchecked = (checks: CheckResult[]): CheckResult[] =>
@@ -219,8 +219,9 @@ const passedWithWarningsStatement = (input: StatementInput): Safe => {
 const failedStatement = (input: StatementInput): Safe => {
   const gates = gatesFailed(input.checks);
   const aborts = abortedChecks(input.checks);
+  const warned = warningsFailed(input.checks);
   const blocking = [...gates, ...aborts];
-  const findings = blocking.flatMap((c) => c.findings ?? []);
+  const findings = [...blocking, ...warned].flatMap((c) => c.findings ?? []);
   return join([
     html`<p>
       <b>Audit: FAILED. Do not rely on this document.</b>
@@ -244,6 +245,16 @@ const failedStatement = (input: StatementInput): Safe => {
           </p>
           <ul>
             ${findingList(aborts)}
+          </ul>`,
+    warned.length === 0
+      ? html``
+      : html`<p>
+            ${warned.length} advisory ${plural(warned.length, "check", "checks")} did not pass; none
+            of them is why this document was not cleared, but each is a defect this page still
+            carries:
+          </p>
+          <ul>
+            ${findingList(warned)}
           </ul>`,
     findings.length === 0
       ? html`<p>

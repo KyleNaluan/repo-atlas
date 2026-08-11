@@ -242,6 +242,40 @@ describe("the four statement states", () => {
     expect(t).not.toContain("No individual finding was recorded");
   });
 
+  it("names a non-aborted warning that failed on a failed run, distinctly from the gate failure", () => {
+    // A gate fails the run; a warning-class check fails without aborting. The
+    // warning is neither a gate failure nor an abort, and its outcome is failed
+    // rather than not_run, so it belongs to none of the other lists - yet
+    // passed_with_warnings would enumerate it. The failed state must be no less
+    // informative about the same data.
+    const checks = [
+      ...allPassed,
+      failed(spec("L1"), ["AttemptService.java:141-150 does not exist"]),
+      failed(spec("V3"), ["at 390px, below WCAG AA: span.dim at 3.10:1, needs 4.5:1"]),
+    ];
+    const t = text("failed", checks);
+    // The headline counts only the hard failure; the warning is advisory.
+    expect(t).toContain("1 hard check did not pass");
+    expect(t).toContain("makes at least one claim that could not be verified");
+    expect(t).toContain("AttemptService.java:141-150 does not exist");
+    // The warning is enumerated, in its own distinctly-worded section.
+    expect(t).toContain("advisory");
+    expect(t).toContain("span.dim at 3.10:1");
+    expect(t).not.toContain("No individual finding was recorded");
+  });
+
+  it("still reports no-finding fallback only when nothing at all was recorded", () => {
+    // A gate that failed with no finding, and no warning either: the run named
+    // no failure, which is itself the defect the fallback exists to surface.
+    const bare: CheckResult = {
+      id: "L1",
+      name: spec("L1").name,
+      class: "gate",
+      outcome: "failed",
+    };
+    expect(text("failed", [bare])).toContain("No individual finding was recorded");
+  });
+
   it("does not print a hash claim on a failed artifact", () => {
     // The failed copy is not the file the engine emitted, so a hash claim about
     // "the file that was checked" would point at something nobody should use.

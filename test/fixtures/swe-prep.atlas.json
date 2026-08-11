@@ -1475,27 +1475,33 @@
       {
         "id": "m-answer-tells",
         "score": 3.8,
-        "reason": "section budget: deep dives capped at 5 by the interview profile; ranked sixth"
+        "reason": "section budget: deep dives capped at 5 by the interview profile; ranked sixth",
+        "kind": "budget",
+        "section": "mechanisms"
       },
       {
         "id": "m-option-shuffler",
         "score": 1.9,
-        "reason": "below the interview_value floor of 3"
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor"
       },
       {
         "id": "m-warmup-interleaving",
         "score": 2.4,
-        "reason": "below the interview_value floor of 3"
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor"
       },
       {
         "id": "f-endpoint-inventory",
         "score": 1.2,
-        "reason": "below the interview_value floor of 3; reference material, explicitly bottom-marked by the rubric"
+        "reason": "below the interview_value floor of 3; reference material, explicitly bottom-marked by the rubric",
+        "kind": "floor"
       },
       {
         "id": "f-package-tour",
         "score": 1.0,
-        "reason": "below the interview_value floor of 3; the annotated tree carries the same information"
+        "reason": "below the interview_value floor of 3; the annotated tree carries the same information",
+        "kind": "floor"
       }
     ],
     "budgets": {

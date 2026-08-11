@@ -1,0 +1,3 @@
+The decision trail - absent from the record. No decision record with admissible evidence was found in this repository. Nothing here was reconstructed from commit messages: a commit message restating a ticket title is not a decision record.
+
+Deep dives - nothing surfaced. No mechanism cleared the confidence gate and the value floor. The probe library ran; it found nothing it could evidence.

@@ -263,11 +263,23 @@ export interface AbsentCut {
   note?: string;
 }
 
-/** A node deleted by the rank stage: floor or section budget, always recorded (#9). */
+/**
+ * A node deleted by the rank stage: floor or section budget, always recorded (#9).
+ *
+ * `kind` and `section` are structure over the same fact `reason` states in
+ * prose. The renderer has to report "N further mechanisms were cut to keep this
+ * section at 5" below the last deep dive, and deriving that by string-matching
+ * the reason text would make a rendered sentence depend on how a prompt happened
+ * to word itself.
+ */
 export interface Deletion {
   id: string;
   score: number;
   reason: string;
+  /** `floor`: below the interview_value floor. `budget`: cut to fit a section budget. */
+  kind?: "floor" | "budget";
+  /** The section budget that cut it, for `kind: "budget"`. */
+  section?: string;
 }
 
 /**

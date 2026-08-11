@@ -974,6 +974,18 @@
         },
         "reason": {
           "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "floor",
+            "budget"
+          ],
+          "description": "`floor`: below the interview_value floor. `budget`: cut to fit a section budget."
+        },
+        "section": {
+          "type": "string",
+          "description": "The section budget that cut it, for `kind: \"budget\"`."
         }
       },
       "required": [
@@ -982,7 +994,7 @@
         "reason"
       ],
       "additionalProperties": false,
-      "description": "A node deleted by the rank stage: floor or section budget, always recorded (#9)."
+      "description": "A node deleted by the rank stage: floor or section budget, always recorded (#9).\n\n`kind` and `section` are structure over the same fact `reason` states in prose. The renderer has to report \"N further mechanisms were cut to keep this section at 5\" below the last deep dive, and deriving that by string-matching the reason text would make a rendered sentence depend on how a prompt happened to word itself."
     },
     "PrivateSourceRecord": {
       "type": "object",

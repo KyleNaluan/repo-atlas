@@ -45,8 +45,8 @@ export const STAGES: Stage[] = [
   {
     name: "render",
     summary: "atlas.json -> one self-contained HTML artifact (#7)",
-    implemented: false,
-    run: notBuilt,
+    implemented: true,
+    run: async (argv) => (await import("./commands/render.js")).renderCommand(argv),
   },
   {
     name: "audit",

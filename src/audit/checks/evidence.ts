@@ -26,12 +26,27 @@ export const eachEvidence = (atlas: Atlas, visit: (e: Evidence, owner: string) =
   };
   walk("synopsis", atlas.synopsis.evidence);
   walk("shape", atlas.shape.evidence);
-  for (const n of atlas.nodes) {
-    walk(n.id, n.evidence);
-    if (n.type === "decision") walk(n.id, n.implemented_by);
-    if (n.type === "mechanism" && n.code_excerpt) walk(n.id, [n.code_excerpt.evidence]);
-    if (n.type === "flow") for (const s of n.steps) if (s.evidence) walk(n.id, [s.evidence]);
-  }
+  for (const n of atlas.nodes) walk(n.id, nodeEvidence(n));
+};
+
+/**
+ * Every evidence-bearing location a single node carries: NodeBase.evidence,
+ * plus the type-specific slots the schema gives certain nodes -
+ * DecisionNode.implemented_by, MechanismNode.code_excerpt.evidence, and
+ * FlowNode.steps[].evidence.
+ *
+ * This is the definition of "the evidence a node has". E1 asks whether a stamped
+ * owner carries any evidence at all, and `eachEvidence` (hence L1/L2) walks the
+ * same locations, so a Decision whose provenance lives entirely in
+ * implemented_by is evidenced by one definition rather than counted as evidenced
+ * by one check and unevidenced by another.
+ */
+export const nodeEvidence = (n: AtlasNode): Evidence[] => {
+  const out: Evidence[] = [...n.evidence];
+  if (n.type === "decision") out.push(...n.implemented_by);
+  if (n.type === "mechanism" && n.code_excerpt) out.push(n.code_excerpt.evidence);
+  if (n.type === "flow") for (const s of n.steps) if (s.evidence) out.push(s.evidence);
+  return out;
 };
 
 /** Every file evidence entry in the graph, with the node that carries it. */

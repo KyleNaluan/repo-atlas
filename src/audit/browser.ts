@@ -21,6 +21,7 @@
  * the page could still reach the network measures the page's luck.
  */
 import { existsSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { launch, type Browser, type Page } from "puppeteer-core";
 
 /** Where a Chrome-family browser usually lives, per platform. */
@@ -134,7 +135,7 @@ export const openArtifact = async (
     else void request.abort();
   });
 
-  await page.goto(`file://${path}`, { waitUntil: "load", timeout: 30_000 });
+  await page.goto(pathToFileURL(path).href, { waitUntil: "load", timeout: 30_000 });
 
   return {
     page,

@@ -17,13 +17,23 @@ import { fileURLToPath } from "node:url";
 import { render } from "../../src/render/render.js";
 import { disposeHighlighter } from "../../src/render/highlight.js";
 import { memoryDiagramCache } from "../../src/render/cache.js";
-import { browserAvailable, findBrowser, NoBrowserError } from "../../src/audit/browser.js";
+import {
+  browserAvailable,
+  findBrowser,
+  NoBrowserError,
+  openArtifact,
+} from "../../src/audit/browser.js";
 import { runPassB } from "../../src/audit/pass-b.js";
-import { oneFile } from "../../src/audit/checks/browser-gates.js";
+import { oneFile, provenanceWalk } from "../../src/audit/checks/browser-gates.js";
 import { runAudit } from "../../src/audit/run.js";
 import { VIEWPORTS } from "../../src/audit/checks/visual.js";
 import { checksInPass, GATES } from "../../src/audit/register.js";
-import type { Atlas } from "../../src/schema/types.js";
+import type {
+  Atlas,
+  DecisionNode,
+  FlowNode,
+  MechanismNode,
+} from "../../src/schema/types.js";
 import type { AuditContext } from "../../src/audit/types.js";
 import { buildSyntheticSubject } from "./subject.js";
 import { BROWSER_MUTANTS } from "../mutants/browser.js";
@@ -120,6 +130,81 @@ describeBrowser("pass B on a clean artifact", () => {
       result.checks.map((c) => `${c.id}:${c.outcome}`),
     );
   }, 240_000);
+});
+
+describeBrowser("E1 traces a node's evidence through every slot the schema gives it", () => {
+  // The DOM stamps a node's prose with its id whether the node's evidence lives
+  // in node.evidence or in a type-specific slot. E1 must read the same locations,
+  // or it fails an honest artifact whose provenance is real but slot-bound. The
+  // page is rendered once and re-checked against mutated atlases, since part-3
+  // reads the atlas for the lookup, not the DOM.
+  const evidenced = (path: string, sha: string) => ({ kind: "file" as const, path, sha });
+
+  it("passes when a decision is evidenced only through implemented_by", async () => {
+    const loaded = await openArtifact(artifactPath);
+    try {
+      const atlas = structuredClone(ctx.atlas);
+      const d = atlas.nodes.find(
+        (n): n is DecisionNode => n.type === "decision" && n.confidence !== "absent",
+      )!;
+      d.evidence = [];
+      d.implemented_by = [evidenced("impl.ts", atlas.subject.sha)];
+      const e1 = await provenanceWalk(loaded.page, atlas);
+      expect(e1.outcome, (e1.findings ?? []).join("; ")).toBe("passed");
+    } finally {
+      await loaded.close();
+    }
+  }, 120_000);
+
+  it("passes when a mechanism is evidenced only through its code excerpt", async () => {
+    const loaded = await openArtifact(artifactPath);
+    try {
+      const atlas = structuredClone(ctx.atlas);
+      const m = atlas.nodes.find(
+        (n): n is MechanismNode => n.type === "mechanism" && n.confidence !== "absent",
+      )!;
+      m.evidence = [];
+      m.code_excerpt = { language: "ts", text: "x", evidence: evidenced("m.ts", atlas.subject.sha) };
+      const e1 = await provenanceWalk(loaded.page, atlas);
+      expect(e1.outcome, (e1.findings ?? []).join("; ")).toBe("passed");
+    } finally {
+      await loaded.close();
+    }
+  }, 120_000);
+
+  it("passes when a flow is evidenced only through its steps", async () => {
+    const loaded = await openArtifact(artifactPath);
+    try {
+      const atlas = structuredClone(ctx.atlas);
+      const f = atlas.nodes.find(
+        (n): n is FlowNode => n.type === "flow" && n.confidence !== "absent",
+      )!;
+      f.evidence = [];
+      f.steps = f.steps.map((s) => ({ ...s, evidence: evidenced("f.ts", atlas.subject.sha) }));
+      const e1 = await provenanceWalk(loaded.page, atlas);
+      expect(e1.outcome, (e1.findings ?? []).join("; ")).toBe("passed");
+    } finally {
+      await loaded.close();
+    }
+  }, 120_000);
+
+  it("still fails a node that carries no evidence in any slot", async () => {
+    // The honesty case: the fix must not weaken part-3 into always passing.
+    const loaded = await openArtifact(artifactPath);
+    try {
+      const atlas = structuredClone(ctx.atlas);
+      const d = atlas.nodes.find(
+        (n): n is DecisionNode => n.type === "decision" && n.confidence !== "absent",
+      )!;
+      d.evidence = [];
+      d.implemented_by = [];
+      const e1 = await provenanceWalk(loaded.page, atlas);
+      expect(e1.outcome).toBe("failed");
+      expect(e1.findings?.some((f) => f.includes("carries no evidence"))).toBe(true);
+    } finally {
+      await loaded.close();
+    }
+  }, 120_000);
 });
 
 describeBrowser("every pass B gate rejects its own mutant", () => {

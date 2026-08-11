@@ -11,9 +11,11 @@
  */
 import { statSync, readdirSync } from "node:fs";
 import { dirname, basename } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { Page } from "puppeteer-core";
 import { spec } from "../register.js";
 import { failed, passed, type CheckResult } from "../types.js";
+import { nodeEvidence } from "./evidence.js";
 import type { Atlas } from "../../schema/types.js";
 import type { LoadedPage } from "../browser.js";
 
@@ -24,7 +26,8 @@ import type { LoadedPage } from "../browser.js";
  * never executes; this catches a request S1's regexes do not know how to spell.
  */
 export const oneRequest = (loaded: LoadedPage, artifactPath: string): CheckResult => {
-  const foreign = loaded.requests.filter((url) => url !== `file://${artifactPath}`);
+  const artifactUrl = pathToFileURL(artifactPath).href;
+  const foreign = loaded.requests.filter((url) => url !== artifactUrl);
   return foreign.length === 0 && loaded.requests.length === 1
     ? passed(spec("S2"), loaded.requests.length)
     : failed(
@@ -203,7 +206,7 @@ export const provenanceWalk = async (page: Page, atlas: Atlas): Promise<CheckRes
     if (node.confidence === "absent") {
       problems.push(`a passage claims provenance from ${owner}, which the confidence gate cut`);
     }
-    if (node.evidence.length === 0) {
+    if (nodeEvidence(node).length === 0) {
       problems.push(`a passage claims provenance from ${owner}, which carries no evidence`);
     }
   }

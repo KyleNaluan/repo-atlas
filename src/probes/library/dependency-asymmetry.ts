@@ -31,10 +31,22 @@ export const dependencyAsymmetry: Probe = {
       for (const decl of findAll(root, "class_declaration")) {
         const name = nameOf(decl);
         if (name === null) continue;
+        // A nested type is not a directory peer of top-level classes: comparing
+        // an inner helper against its file's siblings would synthesise a seam the
+        // record never drew. Peers are compared with peers, so only top-level
+        // classes join the sibling set.
+        if (enclosingTypeNames(decl).length > 0) continue;
         const fullName = [...enclosingTypeNames(decl), name].join(".");
+        // Only the class's OWN fields, not its inner classes'. `findAll` would
+        // descend into nested types and attribute their fields here, making this
+        // class appear to hold a collaborator that is really its inner class's -
+        // a boundary the probe never established. Direct body children only.
+        const body = decl.childForFieldName("body");
         const fields = new Set<string>();
-        for (const field of findAll(decl, "field_declaration")) {
-          const type = field.childForFieldName("type")?.text;
+        for (let i = 0; body && i < body.namedChildCount; i += 1) {
+          const child = body.namedChild(i);
+          if (child?.type !== "field_declaration") continue;
+          const type = child.childForFieldName("type")?.text;
           if (type) fields.add(type.replace(/<.*>$/, ""));
         }
         const list = byDir.get(directory(path)) ?? [];

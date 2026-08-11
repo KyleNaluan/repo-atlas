@@ -12,7 +12,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { assertUniqueCandidateIds, PROBES, runProbes, treeContext } from "../../src/probes/registry.js";
+import { dedupeCandidateIds, PROBES, runProbes, treeContext } from "../../src/probes/registry.js";
 import { gate, gateCandidate } from "../../src/gate/gate.js";
 import {
   detectToolchains,
@@ -120,7 +120,7 @@ describe("the probe manifest", () => {
     // A subject with no Java must not look identical to one where every Java
     // probe ran and found nothing. Those are different findings (#5).
     const ctx = contextFor({ "app.ts": "export const x = 1;\n" });
-    const outcomes = await runProbes(ctx);
+    const { outcomes } = await runProbes(ctx);
     const skipped = outcomes.filter((o) => o.status === "not_applicable");
     expect(skipped.map((o) => o.probe_id).sort()).toEqual([
       "dependency-asymmetry",
@@ -139,7 +139,7 @@ describe("the probe manifest", () => {
 
   it("emits nothing rather than erroring when a probe finds nothing", async () => {
     const ctx = contextFor({ "Empty.java": "class Empty {}\n" });
-    const outcomes = await runProbes(ctx);
+    const { outcomes } = await runProbes(ctx);
     expect(outcomes.every((o) => o.status === "ran" || o.status === "not_applicable")).toBe(true);
   }, 60_000);
 
@@ -154,7 +154,7 @@ describe("the probe manifest", () => {
       "main/application.yml": "# measured: 10s is the p99 under load\ntimeout: PT10S\n",
       "test/application.yml": "# measured: 5s is enough for the suite\ntimeout: PT5S\n",
     });
-    const outcomes = await runProbes(ctx);
+    const { outcomes } = await runProbes(ctx);
     const ids = outcomes.flatMap((o) => (o.status === "ran" ? o.candidates.map((c) => c.node.id) : []));
     expect(ids.length).toBeGreaterThan(0);
     expect(new Set(ids).size).toBe(ids.length);
@@ -179,7 +179,7 @@ describe("the probe manifest", () => {
         "# tuned: the pool was sized by benchmark\n" +
         "timeout: PT20S\n",
     });
-    const outcomes = await runProbes(ctx);
+    const { outcomes } = await runProbes(ctx);
     const byProbe = new Map(outcomes.map((o) => [o.probe_id, o]));
     const refuse = byProbe.get("throw-where-siblings-return");
     const tuned = byProbe.get("tuned-config-properties");
@@ -191,13 +191,16 @@ describe("the probe manifest", () => {
     expect(new Set(ids).size).toBe(ids.length);
   }, 60_000);
 
-  it("fails the run loudly, naming the duplicate, if two candidates share an id", () => {
+  it("drops the colliding candidates and reports them by name, rather than crashing the run", () => {
     // The structural backstop behind per-probe discriminators: a duplicate id is
-    // a silent wrong answer in the audit's element-id lookups, so the run must
-    // refuse rather than emit it. Two probes each producing "m-dup" collide.
-    const node = {
+    // a silent wrong answer in the audit's element-id lookups, so it must never
+    // reach the artifact. But one defective probe must not make an entire subject
+    // unprobeable, so the colliding candidates are dropped and reported - NOT
+    // silently - while everything else survives. Two probes each producing
+    // "m-dup" collide; a third candidate is untouched.
+    const node = (id: string) => ({
       type: "mechanism" as const,
-      id: "m-dup",
+      id,
       title: "t",
       what: "w",
       why_interesting: "y",
@@ -206,12 +209,24 @@ describe("the probe manifest", () => {
       evidence: [],
       confidence: "verified" as const,
       interview_value: 0,
-    };
+    });
     const outcomes: ProbeOutcome[] = [
-      { probe_id: "probe-one", status: "ran", candidates: [{ probe_id: "probe-one", node }] },
-      { probe_id: "probe-two", status: "ran", candidates: [{ probe_id: "probe-two", node }] },
+      {
+        probe_id: "probe-one",
+        status: "ran",
+        candidates: [
+          { probe_id: "probe-one", node: node("m-dup") },
+          { probe_id: "probe-one", node: node("m-keep") },
+        ],
+      },
+      { probe_id: "probe-two", status: "ran", candidates: [{ probe_id: "probe-two", node: node("m-dup") }] },
     ];
-    expect(() => assertUniqueCandidateIds(outcomes)).toThrow(/m-dup.*probe-one.*probe-two/);
+    const { outcomes: cleaned, collisions } = dedupeCandidateIds(outcomes);
+    // Reported by name, with every probe that minted it.
+    expect(collisions).toEqual([{ id: "m-dup", probes: ["probe-one", "probe-two"] }]);
+    // Only the colliding candidates are dropped; the untouched one survives.
+    const survivors = cleaned.flatMap((o) => (o.status === "ran" ? o.candidates.map((c) => c.node.id) : []));
+    expect(survivors).toEqual(["m-keep"]);
   });
 });
 
@@ -241,7 +256,7 @@ describe("library-wide naming invariants", () => {
   const SELECTOR_SAFE = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
   it("mints only selector-safe candidate ids across the whole run", async () => {
-    const outcomes = await runProbes(contextFor(nestedTree));
+    const { outcomes } = await runProbes(contextFor(nestedTree));
     const ids = outcomes.flatMap((o) => (o.status === "ran" ? o.candidates.map((c) => c.node.id) : []));
     expect(ids.length).toBeGreaterThan(0);
     for (const id of ids) expect(id).toMatch(SELECTOR_SAFE);
@@ -250,7 +265,7 @@ describe("library-wide naming invariants", () => {
   }, 60_000);
 
   it("carries the full enclosing type path into both id and title, so they cannot drift", async () => {
-    const outcomes = await runProbes(contextFor(nestedTree));
+    const { outcomes } = await runProbes(contextFor(nestedTree));
     const titleFor = (probe: string): string[] =>
       outcomes
         .filter((o) => o.status === "ran")
@@ -417,6 +432,33 @@ describe("dependency-asymmetry", () => {
     expect(found).toHaveLength(1);
     expect(found[0]!.node.id).toMatch(/^[A-Za-z][A-Za-z0-9_-]*$/);
   }, 60_000);
+
+  it("does not attribute an inner class's field to its enclosing class", async () => {
+    // One's Db field lives on its inner Helper, not on One itself. Walking the
+    // whole subtree would let One appear to hold Db, so "every sibling holds Db"
+    // would read true and the probe would assert a boundary that does not exist.
+    // Only One's own body counts, so held(Db) never reaches every-sibling.
+    const ctx = contextFor({
+      "g/One.java": "class One { class Helper { private Db db; } }\n",
+      "g/Two.java": "class Two { private Db db; }\n",
+      "g/Three.java": "class Three { private Db db; }\n",
+      "g/Four.java": "class Four { private String key; }\n",
+    });
+    expect(await candidatesFrom("dependency-asymmetry", ctx)).toEqual([]);
+  }, 60_000);
+
+  it("does not count a nested helper as a directory sibling", async () => {
+    // Outer.Helper is not a peer of the top-level classes in its directory.
+    // Counting it as one would make it the odd sibling ("Helper holds no Runner,
+    // and every sibling does"), a seam the record never drew. Nested types are
+    // excluded from the sibling set, so no finding is synthesised.
+    const ctx = contextFor({
+      "g/One.java": "class One { private Runner runner; }\n",
+      "g/Two.java": "class Two { private Runner runner; }\n",
+      "g/Outer.java": "class Outer { private Runner runner; class Helper { private String key; } }\n",
+    });
+    expect(await candidatesFrom("dependency-asymmetry", ctx)).toEqual([]);
+  }, 60_000);
 });
 
 describe("repeated-sql-predicates", () => {
@@ -492,6 +534,42 @@ describe("ci-policy-guards", () => {
       ".github/workflows/ci.yml": "jobs:\n  a:\n    steps:\n      - run: npm test\n",
     });
     expect(await candidatesFrom("ci-policy-guards", ctx)).toEqual([]);
+  }, 60_000);
+
+  it("keeps two jobs' identically-named policy steps distinct by construction", async () => {
+    // GitHub step names are not unique: two jobs in one workflow commonly carry
+    // the same policy step. Both match on their name line and resolve the same
+    // step name, so without a job scope both would mint one id and trip the
+    // run-level uniqueness guard. The job scopes the id; a same-job repeat falls
+    // back to an occurrence index.
+    const ctx = contextFor({
+      ".github/workflows/ci.yml":
+        "jobs:\n" +
+        "  build:\n    steps:\n      - name: Block a leaked credential\n        run: ./scripts/guard.sh\n" +
+        "  test:\n    steps:\n      - name: Block a leaked credential\n        run: ./scripts/guard.sh\n",
+    });
+    const found = await candidatesFrom("ci-policy-guards", ctx);
+    expect(found).toHaveLength(2);
+    const ids = found.map((c) => c.node.id);
+    expect(new Set(ids).size).toBe(2);
+    // The job is what tells them apart.
+    expect(ids.some((id) => id.includes("build"))).toBe(true);
+    expect(ids.some((id) => id.includes("test"))).toBe(true);
+  }, 60_000);
+
+  it("disambiguates two same-named policy steps within one job", async () => {
+    // Same job, same step name: no semantic discriminator is left, so an
+    // occurrence index keeps the ids distinct rather than the churning line number.
+    const ctx = contextFor({
+      ".github/workflows/ci.yml":
+        "jobs:\n" +
+        "  build:\n    steps:\n" +
+        "      - name: Block a leaked credential\n        run: ./scripts/one.sh\n" +
+        "      - name: Block a leaked credential\n        run: ./scripts/two.sh\n",
+    });
+    const found = await candidatesFrom("ci-policy-guards", ctx);
+    expect(found).toHaveLength(2);
+    expect(new Set(found.map((c) => c.node.id)).size).toBe(2);
   }, 60_000);
 });
 

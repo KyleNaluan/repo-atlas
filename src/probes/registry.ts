@@ -69,6 +69,12 @@ export const treeContext = (harvest: Harvest, clone: string): ProbeContext => {
   };
 };
 
+/** A candidate id minted by more than one candidate, with every probe that minted it. */
+export interface CandidateIdCollision {
+  id: string;
+  probes: string[];
+}
+
 /**
  * Every candidate id is used verbatim as the rendered element id, so a duplicate
  * is not a cosmetic defect: it produces invalid HTML and breaks the audit checks
@@ -76,8 +82,18 @@ export const treeContext = (harvest: Harvest, clone: string): ProbeContext => {
  * provenance walk). Per-probe semantic discriminators keep ids readable; this
  * guard, enforced once where candidates are collected, is what makes uniqueness
  * a guarantee rather than something each future probe has to remember.
+ *
+ * On a collision it drops ONLY the colliding candidates and reports them, rather
+ * than throwing: one defective probe must not make an entire subject unprobeable,
+ * so the other probes' candidates survive to be inspected and rendered. The
+ * guarantee that matters is preserved exactly - no duplicate id reaches the
+ * artifact - and this is NOT silent dropping: `runProbes` reports every collision
+ * by name and fails the run at the end. "Dropped and reported" is a different
+ * thing from "dropped", and the difference is the whole point.
  */
-export const assertUniqueCandidateIds = (outcomes: ProbeOutcome[]): void => {
+export const dedupeCandidateIds = (
+  outcomes: ProbeOutcome[],
+): { outcomes: ProbeOutcome[]; collisions: CandidateIdCollision[] } => {
   const owners = new Map<string, string[]>();
   for (const o of outcomes) {
     if (o.status !== "ran") continue;
@@ -85,14 +101,21 @@ export const assertUniqueCandidateIds = (outcomes: ProbeOutcome[]): void => {
       owners.set(c.node.id, [...(owners.get(c.node.id) ?? []), c.probe_id]);
     }
   }
-  const collisions = [...owners].filter(([, probes]) => probes.length > 1);
-  if (collisions.length > 0) {
-    const detail = collisions.map(([id, probes]) => `${id} (from ${probes.join(", ")})`).join("; ");
-    throw new Error(`probe run minted duplicate candidate id${collisions.length === 1 ? "" : "s"}: ${detail}`);
-  }
+  const collisions = [...owners]
+    .filter(([, probes]) => probes.length > 1)
+    .map(([id, probes]) => ({ id, probes }));
+  const dropped = new Set(collisions.map((c) => c.id));
+  const cleaned = outcomes.map((o) =>
+    o.status === "ran"
+      ? { ...o, candidates: o.candidates.filter((c) => !dropped.has(c.node.id)) }
+      : o,
+  );
+  return { outcomes: cleaned, collisions };
 };
 
-export const runProbes = async (ctx: ProbeContext): Promise<ProbeOutcome[]> => {
+export const runProbes = async (
+  ctx: ProbeContext,
+): Promise<{ outcomes: ProbeOutcome[]; collisions: CandidateIdCollision[] }> => {
   const toolchains = detectToolchains(ctx.paths);
   const out: ProbeOutcome[] = [];
   for (const probe of PROBES) {
@@ -106,6 +129,5 @@ export const runProbes = async (ctx: ProbeContext): Promise<ProbeOutcome[]> => {
     }
     out.push({ probe_id: probe.id, status: "ran", candidates: await probe.run(ctx) });
   }
-  assertUniqueCandidateIds(out);
-  return out;
+  return dedupeCandidateIds(out);
 };

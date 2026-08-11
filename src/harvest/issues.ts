@@ -108,14 +108,6 @@ export const cacheKeyString = (key: IssueCacheKey): string =>
     key.latest_comment_updated_at ?? "-",
   ].join("|");
 
-/** Look a specific comment back up, which is what #8's L3 needs of the cache. */
-export const findComment = (
-  issues: HarvestedIssue[],
-  number: number,
-  commentId: number,
-): HarvestedComment | undefined =>
-  issues.find((i) => i.number === number)?.comments.find((c) => c.id === commentId);
-
 /**
  * A resolution-shaped comment: #6's primary density signal.
  *

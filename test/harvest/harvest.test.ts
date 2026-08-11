@@ -244,6 +244,37 @@ describe("the cache key", () => {
     // CURRENT body, never the superseded one.
     expect(resolveComment(all, 2, 5181222288)?.body).toBe("## Resolution: revised");
   });
+
+  it("keeps sibling repos whose names share a dash-prefix apart (on disk)", () => {
+    // `owner__thing-` is a proper prefix of `owner__thing-v2-`, so a flat
+    // dash-delimited filename would let owner/thing-v2's issue #2 leak into
+    // owner/thing's cache-first lookup. A per-repo directory forbids it.
+    const root = mkdtempSync(join(tmpdir(), "repo-atlas-cache-"));
+    const cache = fileIssueCache(root);
+    cache.put("owner/thing", issue({ comments: [{ ...issue().comments[0]!, body: "## Resolution: thing" }] }));
+    cache.put("owner/thing-v2", issue({ comments: [{ ...issue().comments[0]!, body: "## Resolution: thing-v2" }] }));
+
+    const thing = cache.all("owner/thing");
+    expect(thing).toHaveLength(1);
+    expect(resolveComment(thing, 2, 5181222288)?.body).toBe("## Resolution: thing");
+
+    const v2 = cache.all("owner/thing-v2");
+    expect(v2).toHaveLength(1);
+    expect(resolveComment(v2, 2, 5181222288)?.body).toBe("## Resolution: thing-v2");
+
+    // And get() must not hand back the sibling's entry either.
+    expect(cache.get("owner/thing", issue())?.comments[0]!.body).toBe("## Resolution: thing");
+  });
+
+  it("keeps sibling repos whose names share a dash-prefix apart (in-memory)", () => {
+    const cache = memoryIssueCache();
+    cache.put("owner/thing", issue({ comments: [{ ...issue().comments[0]!, body: "## Resolution: thing" }] }));
+    cache.put("owner/thing-v2", issue({ comments: [{ ...issue().comments[0]!, body: "## Resolution: thing-v2" }] }));
+
+    expect(cache.all("owner/thing")).toHaveLength(1);
+    expect(resolveComment(cache.all("owner/thing"), 2, 5181222288)?.body).toBe("## Resolution: thing");
+    expect(resolveComment(cache.all("owner/thing-v2"), 2, 5181222288)?.body).toBe("## Resolution: thing-v2");
+  });
 });
 
 /* ------------------------------------------------ the local tree */

@@ -53,44 +53,74 @@ export interface IssueCache {
   all(repo: string): HarvestedIssue[];
 }
 
+/**
+ * The on-disk record. The repo is stored in the file, not only in the path,
+ * because the filename is an index and the content is the record: `all()`
+ * verifies the two agree before trusting an entry, so a mislaid or hand-edited
+ * file cannot smuggle another repo's issue into a cache-first lookup.
+ */
+interface CacheRecord {
+  repo: string;
+  issue: HarvestedIssue;
+}
+
 export const fileIssueCache = (root = DEFAULT_CACHE_ROOT): IssueCache => {
-  const dir = join(root, "issues");
+  // One directory per repo. A path separator cannot appear inside a GitHub
+  // owner/name, so this is an unambiguous boundary where a dash is not: owner
+  // names carry no underscore, so `owner__name` recovers the repo exactly and
+  // `owner__swe-prep` can never be confused with `owner__swe-prep-v2`.
+  const repoDir = (repo: string): string => join(root, "issues", repo.replace("/", "__"));
   // Files for one issue number share this prefix; the trailing dash keeps
   // number 2 from matching number 20.
-  const numberPrefix = (repo: string, number: number): string =>
-    `${repo.replace("/", "__")}-${number}-`;
+  const numberPrefix = (number: number): string => `${number}-`;
   const path = (repo: string, issue: HarvestedIssue): string =>
-    join(dir, `${numberPrefix(repo, issue.number)}${digest(cacheKeyString(cacheKey(repo, issue)))}.json`);
+    join(repoDir(repo), `${numberPrefix(issue.number)}${digest(cacheKeyString(cacheKey(repo, issue)))}.json`);
+  const parse = (file: string): CacheRecord | undefined => {
+    try {
+      return JSON.parse(readFileSync(file, "utf8")) as CacheRecord;
+    } catch {
+      return undefined;
+    }
+  };
 
   return {
     get(repo, issue) {
-      try {
-        return JSON.parse(readFileSync(path(repo, issue), "utf8")) as HarvestedIssue;
-      } catch {
-        return undefined;
-      }
+      const record = parse(path(repo, issue));
+      if (record?.repo !== repo || record.issue.number !== issue.number) return undefined;
+      return record.issue;
     },
     put(repo, issue) {
+      const dir = repoDir(repo);
       mkdirSync(dir, { recursive: true });
       // Drop any superseded entry for this issue number before writing, so the
       // cache never accumulates stale versions of the same issue.
-      const prefix = numberPrefix(repo, issue.number);
+      const prefix = numberPrefix(issue.number);
       for (const f of readdirSync(dir)) {
         if (f.startsWith(prefix) && f.endsWith(".json")) rmSync(join(dir, f));
       }
-      writeFileSync(path(repo, issue), `${JSON.stringify(issue, null, 2)}\n`, "utf8");
+      const record: CacheRecord = { repo, issue };
+      writeFileSync(path(repo, issue), `${JSON.stringify(record, null, 2)}\n`, "utf8");
     },
     all(repo) {
-      const prefix = `${repo.replace("/", "__")}-`;
+      const dir = repoDir(repo);
+      let files: string[];
       try {
-        return freshestByNumber(
-          readdirSync(dir)
-            .filter((f) => f.startsWith(prefix) && f.endsWith(".json"))
-            .map((f) => JSON.parse(readFileSync(join(dir, f), "utf8")) as HarvestedIssue),
-        );
+        files = readdirSync(dir);
       } catch {
         return [];
       }
+      const issues: HarvestedIssue[] = [];
+      for (const f of files) {
+        if (!f.endsWith(".json")) continue;
+        const record = parse(join(dir, f));
+        // The filename is an index; the content is the record. Trust an entry
+        // only when the two agree - on the repo it was harvested for and on the
+        // issue number the filename claims.
+        if (record?.repo !== repo) continue;
+        if (`${record.issue.number}-` !== f.slice(0, `${record.issue.number}-`.length)) continue;
+        issues.push(record.issue);
+      }
+      return freshestByNumber(issues);
     },
   };
 };
@@ -106,7 +136,14 @@ export const memoryIssueCache = (): IssueCache => {
       for (const k of [...map.keys()]) if (k.startsWith(prefix)) map.delete(k);
       map.set(cacheKeyString(cacheKey(repo, issue)), issue);
     },
-    all: () => freshestByNumber([...map.values()]),
+    all: (repo) => {
+      // Keys begin `${repo}|`, and the `|` terminator keeps `o/r` from matching
+      // a sibling `o/r2` - the same repo-boundary guarantee the file cache gets
+      // from a directory, so `all()` never merges two repos by issue number.
+      const prefix = `${repo}|`;
+      const scoped = [...map.entries()].filter(([k]) => k.startsWith(prefix)).map(([, v]) => v);
+      return freshestByNumber(scoped);
+    },
   };
 };
 

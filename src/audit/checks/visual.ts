@@ -126,6 +126,45 @@ const measureScript = (normal: number, large: number): string => `(() => {
     return [14, 17, 22, 1];
   };
 
+  /* SVG text is painted with 'fill', not 'color'. A Graphviz <text> reads its
+     CSS 'color' as the inherited page ink, which is not what is on screen, so a
+     diagram label must be scored against its fill instead. This is a different
+     reason from the clipping loop's SVGElement skip - that one exists because
+     scrollWidth/clientWidth do not describe SVG geometry at all - so the two
+     carve-outs are not the same rule and must not be unified away. */
+  const svgForeground = (el) => {
+    const fill = getComputedStyle(el).fill;
+    if (!fill || fill === "none") return null;
+    const c = parseColor(fill);
+    return c[3] === 0 ? null : c;
+  };
+  const svgShapes = ["polygon", "ellipse", "path", "rect", "circle", "polyline"];
+  /* Graphviz emits each box as a shape and its label as siblings in one <g>, so
+     the paint behind a label is a preceding sibling shape the text sits over.
+     Require geometric containment so an edge's arrowhead polygon is not mistaken
+     for the box behind an edge label; when nothing sits behind the text - an edge
+     label over the frame rather than over a box - the caller falls back to the
+     CSS ancestor background, which is correct for that case. */
+  const svgBackground = (el, rect) => {
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    let sib = el.previousElementSibling;
+    while (sib !== null) {
+      if (svgShapes.indexOf(sib.tagName.toLowerCase()) !== -1) {
+        const r = sib.getBoundingClientRect();
+        if (r.left <= cx && cx <= r.right && r.top <= cy && cy <= r.bottom) {
+          const fill = getComputedStyle(sib).fill;
+          if (fill && fill !== "none") {
+            const c = parseColor(fill);
+            if (c[3] > 0) return c;
+          }
+        }
+      }
+      sib = sib.previousElementSibling;
+    }
+    return null;
+  };
+
   for (const el of all) {
     if (el.children.length > 0) continue;
     const text = (el.textContent || "").trim();
@@ -133,9 +172,17 @@ const measureScript = (normal: number, large: number): string => `(() => {
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) continue;
     const style = getComputedStyle(el);
-    const fg = parseColor(style.color);
-    if (fg[3] === 0) continue;
-    const bg = effectiveBackground(el);
+    let fg;
+    let bg;
+    if (el instanceof SVGElement) {
+      fg = svgForeground(el);
+      if (fg === null) continue;
+      bg = svgBackground(el, rect) || effectiveBackground(el);
+    } else {
+      fg = parseColor(style.color);
+      if (fg[3] === 0) continue;
+      bg = effectiveBackground(el);
+    }
     const lighter = Math.max(luminance(fg), luminance(bg));
     const darker = Math.min(luminance(fg), luminance(bg));
     const ratio = (lighter + 0.05) / (darker + 0.05);

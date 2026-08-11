@@ -26,7 +26,7 @@ import {
 import { runPassB } from "../../src/audit/pass-b.js";
 import { oneFile, provenanceWalk } from "../../src/audit/checks/browser-gates.js";
 import { runAudit } from "../../src/audit/run.js";
-import { VIEWPORTS } from "../../src/audit/checks/visual.js";
+import { runVisualChecks, VIEWPORTS } from "../../src/audit/checks/visual.js";
 import { checksInPass, GATES } from "../../src/audit/register.js";
 import type {
   Atlas,
@@ -229,6 +229,48 @@ describeBrowser("E1 traces a node's evidence through every slot the schema gives
     } finally {
       await loaded.close();
     }
+  }, 120_000);
+});
+
+describeBrowser("V3 scores an SVG label against its fill and the box behind it", () => {
+  // SVG text is painted with fill, not color, and the box behind a Graphviz
+  // label is a sibling shape's paint, not a CSS background. If V3 read color
+  // over the CSS background instead, a dark label on a white box would look
+  // like dark-on-dark and be flagged, and a near-white label on a white box
+  // would look like near-white-on-dark and pass - both backwards. These two
+  // cases only come out right when fill and the box are read.
+  const svgPage = (labelFill: string): string =>
+    `<!doctype html><html><head><style>body{background:#0e1116;margin:0}</style></head><body>` +
+    `<svg width="360" height="200" xmlns="http://www.w3.org/2000/svg">` +
+    `<g class="node">` +
+    `<polygon fill="#ffffff" points="30,50 330,50 330,150 30,150"></polygon>` +
+    `<text x="180" y="105" text-anchor="middle" font-size="16" fill="${labelFill}">Diagram label text</text>` +
+    `</g></svg></body></html>`;
+
+  const v3Against = async (html: string) => {
+    const svgDir = mkdtempSync(join(tmpdir(), "repo-atlas-v3-svg-"));
+    const path = join(svgDir, "svg.html");
+    writeFileSync(path, html, "utf8");
+    const loaded = await openArtifact(path);
+    try {
+      const { checks } = await runVisualChecks(loaded.page);
+      return checks.find((c) => c.id === "V3")!;
+    } finally {
+      await loaded.close();
+    }
+  };
+
+  it("reports a near-white label sitting on a white box", async () => {
+    const v3 = await v3Against(svgPage("#eeeeee"));
+    expect(v3.outcome).toBe("failed");
+    expect(v3.findings?.join("; ")).toMatch(/Diagram label text/);
+  }, 120_000);
+
+  it("passes a dark label sitting on the same white box", async () => {
+    // The discriminating case: dark ink over the box is readable, and would only
+    // be flagged if the box's white were ignored in favour of the dark page.
+    const v3 = await v3Against(svgPage("#111111"));
+    expect(v3.outcome, (v3.findings ?? []).join("; ")).toBe("passed");
   }, 120_000);
 });
 

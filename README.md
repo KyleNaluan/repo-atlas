@@ -10,10 +10,11 @@ Anything that could not be traced is cut, not hedged.
 On a repository with no decision record, the artifact says so - it never reconstructs a decision trail from commit archaeology.
 
 **Status: under construction.** The complete v1 design is closed on this tracker: issues [#1](https://github.com/KyleNaluan/repo-atlas/issues/1)-[#10](https://github.com/KyleNaluan/repo-atlas/issues/10), each with a binding `## Resolution:` comment recording the decision, the why, and the rejected alternatives.
-This build ships the `atlas.json` contract and the render stage; the extraction stages and the audit land stage by stage.
+This build ships the `atlas.json` contract, the render stage, and the audit's static pass; the extraction stages and the remaining audit passes land stage by stage.
 
 ```
 npx repo-atlas render atlas.json -o overview.html
+npx repo-atlas audit overview.html --atlas atlas.json --clone ../subject
 ```
 
 ## The pipeline
@@ -41,6 +42,21 @@ Two properties are worth stating because later stages depend on them:
 
 - **Every prose passage is stamped with where it came from.** `prose(text, provenance)` emits a `data-ev` span naming the node and field; the renderer's own sentences carry `data-chrome` and are pinned by a golden inventory. This cannot be reconstructed after the fact, which is why it is built in rather than checked for.
 - **No sentence states an audit conclusion except inside the reserved audit slot.** A freshly rendered artifact says the audit has not run, because it has not. The `audit` stage is the only writer of that slot, and the page's hash excluding the slot is what makes its statement checkable.
+
+## The audit
+
+The line that says the content was checked is the artifact's whole differentiator over a summariser, and the audit stage is the only thing that makes it true rather than decorative.
+It is twenty checks in four passes: fifteen hard gates, three computed visual warnings, and two advisory model checks.
+
+One rule decides all twenty classifications:
+
+> A check is a hard gate if and only if its failure means the artifact makes a claim that is not true.
+> A check is a warning if its failure means the artifact is worse than it should be.
+
+Evidence integrity is truth; layout is quality.
+File citations resolve locally with `git cat-file` at the pinned SHA rather than over HTTP, because GitHub returns 200 for a line range past the end of a file - the fragment never reaches the server, so a network walk is structurally blind to the part of a citation that pins the claim.
+
+The audit asserts its preconditions before any check runs - clone present, HEAD equal to the pinned SHA, worktree clean - and a missing precondition is its own failure, never a pass and never a silent skip.
 
 ## The contract
 

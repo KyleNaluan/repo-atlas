@@ -81,3 +81,35 @@ describe("repo-atlas validate", () => {
     expect(await main(["validate"])).toBe(64);
   });
 });
+
+describe("repo-atlas audit", () => {
+  it("exits EX_USAGE without the inputs it cannot invent", async () => {
+    // The audit needs the artifact, the graph and a clone at the pinned SHA.
+    // Defaulting any of them would be the audit guessing at what it is checking.
+    expect(await main(["audit"])).toBe(64);
+    expect(await main(["audit", "x.html"])).toBe(64);
+    expect(await main(["audit", "x.html", "--atlas", "a.json"])).toBe(64);
+  });
+
+  it("documents that a missing precondition is its own outcome", async () => {
+    expect(await main(["audit", "--help"])).toBe(0);
+    expect(out.join("\n")).toMatch(/never a pass and never a silent skip/);
+  });
+
+  it("exits non-zero with a message, not a stack trace, when its inputs cannot be read", async () => {
+    // The command must convert an unreadable input into a defined non-zero exit,
+    // the same discipline the per-check boundary imposes inside the run: a throw
+    // never escapes as a stack trace.
+    const code = await main([
+      "audit",
+      "does-not-exist.html",
+      "--atlas",
+      fixture("swe-prep.atlas.json"),
+      "--clone",
+      ".",
+    ]);
+    expect(code).not.toBe(0);
+    expect(err.join("\n")).toMatch(/^failed:/m);
+    expect(err.join("\n")).not.toMatch(/\bat .*\(.*:\d+:\d+\)/); // no stack frames
+  });
+});

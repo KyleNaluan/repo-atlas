@@ -1512,6 +1512,12 @@
     "audit": {
       "status": "not_run",
       "note": "This artifact was produced by the render-stage prototype. The audit stage (#2) did not run over it."
+    },
+    "private_source": {
+      "declared": true,
+      "repo": "KyleNaluan/swe-prep-content",
+      "readable_at_harvest": false,
+      "note": "The subject declares a public/private split: statements, test data and reference solutions live in a separate private repository loaded from a gitignored local path. This run read only the public side."
     }
   }
 }

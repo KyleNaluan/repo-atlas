@@ -51,8 +51,8 @@ export const STAGES: Stage[] = [
   {
     name: "audit",
     summary: "the twenty-check adversarial pass; stamps its own result into the artifact (#8)",
-    implemented: false,
-    run: notBuilt,
+    implemented: true,
+    run: async (argv) => (await import("./commands/audit.js")).auditCommand(argv),
   },
   {
     name: "run",

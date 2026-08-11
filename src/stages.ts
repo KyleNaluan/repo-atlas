@@ -44,7 +44,7 @@ export const STAGES: Stage[] = [
   },
   {
     name: "rank",
-    summary: "score interview_value under the versioned rubric; delete by floor and budget (#9)",
+    summary: "delete by floor and budget under the pinned scores (#9)",
     implemented: true,
     run: async (argv) => (await import("./commands/rank.js")).rankCommand(argv),
   },

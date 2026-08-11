@@ -23,6 +23,7 @@ import { memoryDiagramCache } from "../../src/render/cache.js";
 import { audit } from "../../src/audit/run.js";
 import { runPassA } from "../../src/audit/pass-a.js";
 import { eachEvidence, resolveFileEvidence } from "../../src/audit/checks/evidence.js";
+import { blobAt } from "../../src/audit/git.js";
 import { checkPreconditions } from "../../src/audit/preconditions.js";
 import { checksInPass, GATES, REGISTER } from "../../src/audit/register.js";
 import type { AuditContext } from "../../src/audit/types.js";
@@ -469,5 +470,29 @@ describe("git plumbing", () => {
       encoding: "utf8",
     }).trim();
     expect(head).toBe(clean.atlas.subject.sha);
+  });
+
+  it("returns null for an absent path rather than throwing, whatever the locale", () => {
+    // A path absent at the pinned SHA is a finding about the artifact: blobAt
+    // must return null so L1 records a failing citation, never re-throw. The
+    // decision keys off git's exit code, not its (translated) error text, so it
+    // holds even under a non-English locale. LC_ALL is pinned to C inside the
+    // helper regardless of the ambient value, so simulating one here only proves
+    // the message text is never consulted.
+    const prior = process.env.LC_ALL;
+    process.env.LC_ALL = "fr_FR.UTF-8";
+    try {
+      expect(() => blobAt(clean.clone, clean.atlas.subject.sha, "no/such/path.txt")).not.toThrow();
+      expect(blobAt(clean.clone, clean.atlas.subject.sha, "no/such/path.txt")).toBeNull();
+    } finally {
+      if (prior === undefined) delete process.env.LC_ALL;
+      else process.env.LC_ALL = prior;
+    }
+  });
+
+  it("treats an unresolvable SHA as a precondition failure, not an absent path", () => {
+    // A bad object is a finding about the audit, not a false citation: blobAt
+    // verifies the commit first and throws rather than reporting the path missing.
+    expect(() => blobAt(clean.clone, "0".repeat(40), "no/such/path.txt")).toThrow();
   });
 });

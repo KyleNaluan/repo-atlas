@@ -271,6 +271,11 @@ export interface AbsentCut {
  * section at 5" below the last deep dive, and deriving that by string-matching
  * the reason text would make a rendered sentence depend on how a prompt happened
  * to word itself.
+ *
+ * `unit` distinguishes a whole node cut from an interviewer question trimmed off
+ * a surviving node: both are deletions and share one auditable list (#9), but the
+ * record must count "N nodes cut" without a trimmed question inflating it. Absent
+ * means `node`, so pre-`unit` records read as node cuts unchanged.
  */
 export interface Deletion {
   id: string;
@@ -280,6 +285,8 @@ export interface Deletion {
   kind?: "floor" | "budget";
   /** The section budget that cut it, for `kind: "budget"`. */
   section?: string;
+  /** `node`: a whole node was deleted. `question`: one interviewer question was trimmed. Default `node`. */
+  unit?: "node" | "question";
 }
 
 /**

@@ -227,8 +227,23 @@ describe("the interviewer_questions budget cuts questions, not nodes", () => {
     expect(cut).toHaveLength(1);
     expect(cut[0]).toMatchObject({ kind: "budget", section: "interviewer_questions", score: 5 });
     expect(cut[0]!.id).toContain("m#interviewer_questions");
+    // A trimmed question is a deletion but not a deleted node: the discriminator
+    // is what keeps the record from counting it as one.
+    expect(cut[0]!.unit).toBe("question");
     // The node that declared it lives; only the question was trimmed.
     expect(result.nodes.map((n) => n.id)).toEqual(["m"]);
+  });
+
+  it("marks a node cut as unit node and a question cut as unit question", () => {
+    // One node falls below the floor; one question falls over the budget. The
+    // record must be able to tell the two deletions apart.
+    const weak = mechanism("weak", {});
+    const busy = mechanism("busy", { interviewer_questions: numbered(11) });
+    const result = rank([{ node: weak, score: 1 }, { node: busy, score: 5 }], INTERVIEW);
+    const nodeCut = result.deletions.find((d) => d.id === "weak");
+    const questionCut = result.deletions.find((d) => d.section === "interviewer_questions");
+    expect(nodeCut!.unit).toBe("node");
+    expect(questionCut!.unit).toBe("question");
   });
 
   it("folds a question declared by two nodes into one budget slot", () => {
@@ -353,6 +368,23 @@ describe("overrides are validated at load, so a malformed one never passes silen
     };
     expect(() => validateOverrides(bad)).toThrow(InvalidOverrideError);
     expect(() => validateOverrides(bad)).toThrow(/2 selectors/);
+  });
+
+  it("rejects an override that carries no action, naming the offending entry", () => {
+    // A selector with no pin/boost/suppress matches a node and then does nothing
+    // to it: the same silent no-op the selector rule closes, one field over.
+    const bad: Overrides = { overrides: [{ id: "a", why: "no action given" } as ProjectOverride] };
+    expect(() => validateOverrides(bad)).toThrow(InvalidOverrideError);
+    expect(() => validateOverrides(bad)).toThrow(/no action given/);
+    expect(() => validateOverrides(bad)).toThrow(/no action/);
+  });
+
+  it("rejects an override that carries more than one action", () => {
+    const bad: Overrides = {
+      overrides: [{ id: "a", pin: true, suppress: true, why: "two actions" } as ProjectOverride],
+    };
+    expect(() => validateOverrides(bad)).toThrow(InvalidOverrideError);
+    expect(() => validateOverrides(bad)).toThrow(/2 actions/);
   });
 
   it("accepts a well-formed override and still applies it", () => {

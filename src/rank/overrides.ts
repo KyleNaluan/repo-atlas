@@ -45,6 +45,7 @@ export interface Overrides {
 export const EMPTY_OVERRIDES: Overrides = { overrides: [] };
 
 const SELECTORS = ["id", "type", "probe_id"] as const;
+const ACTIONS = ["pin", "boost", "suppress"] as const;
 
 export class InvalidOverrideError extends Error {
   constructor(message: string) {
@@ -56,23 +57,37 @@ export class InvalidOverrideError extends Error {
 /**
  * Validate the override file at load, before any override touches the ranking.
  *
- * Each override must name EXACTLY ONE selector - id, type or probe_id. The
- * `matches` predicate is an OR, so an override with none silently matches nothing
- * and one with several matches on any: both make the file quietly disagree with
+ * Each override must name EXACTLY ONE selector - id, type or probe_id - and
+ * EXACTLY ONE action - pin, boost or suppress. The `matches` predicate is an OR,
+ * so an override with no selector silently matches nothing and one with several
+ * matches on any; likewise an entry with no action never pins, boosts or
+ * suppresses anything. Every one of these makes the file quietly disagree with
  * the human who wrote it, and a silent no-op is the worst outcome available for a
  * calibration record. So a malformed entry is rejected loudly and by position.
  */
 export const validateOverrides = (overrides: Overrides): Overrides => {
   overrides.overrides.forEach((o, i) => {
-    const present = SELECTORS.filter((k) => o[k] !== undefined);
-    if (present.length !== 1) {
+    const selectors = SELECTORS.filter((k) => o[k] !== undefined);
+    if (selectors.length !== 1) {
       const which =
-        present.length === 0 ? "no selector" : `${present.length} selectors (${present.join(", ")})`;
+        selectors.length === 0
+          ? "no selector"
+          : `${selectors.length} selectors (${selectors.join(", ")})`;
       throw new InvalidOverrideError(
         `override #${i + 1} (why: ${JSON.stringify(o.why)}) names ${which}; ` +
           `each override must select exactly one of id, type or probe_id, because the file is the ` +
           `human calibration record and an override that matches nothing or everything disagrees ` +
           `silently with the human who wrote it.`,
+      );
+    }
+    const actions = ACTIONS.filter((k) => (o as unknown as Record<string, unknown>)[k] !== undefined);
+    if (actions.length !== 1) {
+      const which =
+        actions.length === 0 ? "no action" : `${actions.length} actions (${actions.join(", ")})`;
+      throw new InvalidOverrideError(
+        `override #${i + 1} (why: ${JSON.stringify(o.why)}) carries ${which}; ` +
+          `each override must carry exactly one of pin, boost or suppress, because an override that ` +
+          `takes no action is a silent no-op and the file is the human calibration record.`,
       );
     }
   });

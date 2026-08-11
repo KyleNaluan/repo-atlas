@@ -986,6 +986,14 @@
         "section": {
           "type": "string",
           "description": "The section budget that cut it, for `kind: \"budget\"`."
+        },
+        "unit": {
+          "type": "string",
+          "enum": [
+            "node",
+            "question"
+          ],
+          "description": "`node`: a whole node was deleted. `question`: one interviewer question was trimmed. Default `node`."
         }
       },
       "required": [
@@ -994,7 +1002,7 @@
         "reason"
       ],
       "additionalProperties": false,
-      "description": "A node deleted by the rank stage: floor or section budget, always recorded (#9).\n\n`kind` and `section` are structure over the same fact `reason` states in prose. The renderer has to report \"N further mechanisms were cut to keep this section at 5\" below the last deep dive, and deriving that by string-matching the reason text would make a rendered sentence depend on how a prompt happened to word itself."
+      "description": "A node deleted by the rank stage: floor or section budget, always recorded (#9).\n\n`kind` and `section` are structure over the same fact `reason` states in prose. The renderer has to report \"N further mechanisms were cut to keep this section at 5\" below the last deep dive, and deriving that by string-matching the reason text would make a rendered sentence depend on how a prompt happened to word itself.\n\n`unit` distinguishes a whole node cut from an interviewer question trimmed off a surviving node: both are deletions and share one auditable list (#9), but the record must count \"N nodes cut\" without a trimmed question inflating it. Absent means `node`, so pre-`unit` records read as node cuts unchanged."
     },
     "PrivateSourceRecord": {
       "type": "object",

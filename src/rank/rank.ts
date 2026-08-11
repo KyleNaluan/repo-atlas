@@ -115,6 +115,7 @@ const trimQuestions = (
       reason: `section budget: interviewer_questions capped at ${budget} by the ${profileName} profile; ranked ${position + 1}`,
       kind: "budget",
       section: "interviewer_questions",
+      unit: "question",
     });
   });
 
@@ -150,6 +151,7 @@ export const rank = (
         score: s.score,
         reason: `suppressed by project override: ${suppressed.why}`,
         kind: "floor",
+        unit: "node",
       });
       continue;
     }
@@ -160,6 +162,7 @@ export const rank = (
         score: s.score,
         reason: `below the interview_value floor of ${p.budgets.interview_value_floor}`,
         kind: "floor",
+        unit: "node",
       });
       continue;
     }
@@ -194,6 +197,7 @@ export const rank = (
         reason: `section budget: ${section} capped at ${budget} by the ${p.name} profile; ranked ${position}`,
         kind: "budget",
         section,
+        unit: "node",
       });
       continue;
     }

@@ -28,9 +28,15 @@ export const dependencyDivergence: Probe = {
     const lower = readme.toLowerCase();
 
     const manifests = declaredManifests(ctx);
+    if (manifests.length === 0) return [];
     const names = new Set<string>();
-    for (const m of manifests) for (const n of m.names) names.add(n);
-    if (names.size === 0) return [];
+    for (const m of manifests) if (m.recognized) for (const n of m.names) names.add(n);
+    const anyUnrecognized = manifests.some((m) => !m.recognized);
+    // With no readable manifest declaring anything, there is no build to diverge
+    // from. But an UNREADABLE manifest is not the same as an empty one: emit the
+    // candidate and let the gate demote it to unresolved rather than confirm a
+    // divergence against a manifest nothing here could parse.
+    if (names.size === 0 && !anyUnrecognized) return [];
 
     const out: Candidate[] = [];
     for (const tech of CLAIMED) {

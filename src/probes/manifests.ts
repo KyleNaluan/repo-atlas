@@ -14,39 +14,85 @@
 
 export const MANIFESTS = ["pom.xml", "build.gradle", "build.gradle.kts", "package.json"];
 
+/**
+ * What one manifest declares, and whether the rule understood how to read it.
+ *
+ * `recognized` is the structural half of the W1 unification. Once the probe and
+ * the gate share ONE definition of "declared", a rule that is wrong is wrong on
+ * both sides and self-confirming: the probe emits "X is named but declared
+ * nowhere" and the gate confirms it, purely because neither could parse the
+ * manifest. So a manifest present but written in a form this rule cannot read
+ * reports `recognized: false`, which the gate turns into an UNRESOLVED verdict -
+ * the candidate is demoted, not confirmed. "I did not recognise any
+ * declarations here" must never collapse into "nothing is declared here".
+ */
+export interface DeclaredDeps {
+  names: Set<string>;
+  recognized: boolean;
+}
+
+/** The standard Gradle configurations, groovy and kotlin-DSL alike. */
+const GRADLE_CONFIGS = [
+  "implementation",
+  "api",
+  "compileOnly",
+  "compile",
+  "runtimeOnly",
+  "testImplementation",
+  "testRuntimeOnly",
+  "testCompileOnly",
+  "annotationProcessor",
+  "developmentOnly",
+].join("|");
+
+const GRADLE_DEP = new RegExp(String.raw`^\s*(?:${GRADLE_CONFIGS})\s*[('"]+([^'")]+)`, "gm");
+
 /** Dependency names one manifest declares, however it spells them. */
-export const declaredIn = (manifest: string, text: string): Set<string> => {
+export const declaredIn = (manifest: string, text: string): DeclaredDeps => {
   const names = new Set<string>();
   if (manifest === "package.json") {
     try {
       const parsed = JSON.parse(text) as { dependencies?: Record<string, string> };
       for (const name of Object.keys(parsed.dependencies ?? {})) names.add(name.toLowerCase());
+      return { names, recognized: true };
     } catch {
-      /* a manifest that does not parse is not a divergence finding */
+      // A manifest that does not parse is not evidence a dependency is absent.
+      return { names, recognized: false };
     }
-    return names;
   }
-  for (const m of text.matchAll(/<artifactId>([^<]+)<\/artifactId>/g)) {
-    names.add((m[1] ?? "").toLowerCase());
+  if (manifest === "pom.xml") {
+    for (const m of text.matchAll(/<artifactId>([^<]+)<\/artifactId>/g)) {
+      names.add((m[1] ?? "").toLowerCase());
+    }
+    // A pom without a single artifactId is not maven as this rule understands it.
+    return { names, recognized: /<artifactId>/.test(text) };
   }
-  for (const m of text.matchAll(/^\s*(?:implementation|api|compile)\s*[('"]+([^'")]+)/gm)) {
+  // Gradle (build.gradle or build.gradle.kts).
+  for (const m of text.matchAll(GRADLE_DEP)) {
     const coord = (m[1] ?? "").split(":");
     if (coord[1]) names.add(coord[1].toLowerCase());
   }
-  return names;
+  // A dependencies block whose lines this rule parsed none of is a declaration
+  // syntax it does not know - unrecognized, not empty. No block at all declares
+  // nothing here and is understood as such.
+  const hasDepsBlock = /dependencies\s*\{/.test(text);
+  return { names, recognized: !hasDepsBlock || names.size > 0 };
 };
 
-/** Every manifest in the tree, paired with the dependency names it declares. */
+/** Every manifest in the tree, paired with what it declares and whether it read. */
 export const declaredManifests = (ctx: {
   paths: string[];
   read: (path: string) => string | null;
-}): { path: string; names: Set<string> }[] => {
-  const out: { path: string; names: Set<string> }[] = [];
+}): { path: string; names: Set<string>; recognized: boolean }[] => {
+  const out: { path: string; names: Set<string>; recognized: boolean }[] = [];
   for (const manifest of MANIFESTS) {
     const found = ctx.paths.filter((p) => p === manifest || p.endsWith(`/${manifest}`));
     for (const path of found) {
       const text = ctx.read(path);
-      if (text !== null) out.push({ path, names: declaredIn(manifest, text) });
+      if (text !== null) {
+        const { names, recognized } = declaredIn(manifest, text);
+        out.push({ path, names, recognized });
+      }
     }
   }
   return out;

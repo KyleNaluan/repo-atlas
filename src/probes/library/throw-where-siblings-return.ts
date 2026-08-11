@@ -26,6 +26,19 @@ import {
 
 const REFUSAL = /UnsupportedOperationException|NotImplementedException|AssertionError/;
 
+/**
+ * Encode array-ness and varargs into a parameter type BEFORE it is slugged.
+ *
+ * `slug` strips `[]` and `...`, so `slug("byte[]")` and `slug("byte")` both
+ * collapse to "byte". Two legal overloads that differ only in array/varargs-ness
+ * - `write(byte)` and `write(byte[])` - would then mint the same signature and
+ * the same id, and the run-level uniqueness guard would crash on an otherwise
+ * valid subject. Turning the marker into a readable word keeps distinct erasures
+ * distinct once slugged.
+ */
+const encodeType = (type: string): string =>
+  type.replace(/\.\.\./g, " varargs").replace(/\[\s*\]/g, " array");
+
 /** A body whose only statement is a throw, rather than one carrying a guard. */
 const isOutrightRefusal = (body: SyntaxNode): boolean => {
   let statements = 0;
@@ -65,7 +78,7 @@ export const throwWhereSiblingsReturn: Probe = {
         if (REFUSAL.test(body.text) && isOutrightRefusal(body)) {
           const ownerPath = enclosingTypeNames(method);
           const params = paramTypesOf(method);
-          const sig = params.length > 0 ? slug(params.join("-")) : "noargs";
+          const sig = params.length > 0 ? slug(params.map(encodeType).join("-")) : "noargs";
           refusing.push({ path, name, node: method, ownerPath, sig });
         } else if (body.text.includes("return ")) {
           returning.set(name, (returning.get(name) ?? 0) + 1);

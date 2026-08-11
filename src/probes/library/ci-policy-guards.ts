@@ -10,6 +10,7 @@
  * Grep-class: this is a question about what a workflow file says it is for.
  */
 import type { Candidate, Probe } from "../types.js";
+import { slug } from "../id.js";
 
 const WORKFLOW = /^\.github\/workflows\/.+\.ya?ml$/;
 
@@ -31,11 +32,17 @@ export const ciPolicyGuards: Probe = {
       for (const [index, line] of lines.entries()) {
         if (!POLICY.test(line) || TEST_RUN.test(line)) continue;
         const named = /name:\s*(.+)$/.exec(line)?.[1]?.trim().replace(/^["']|["']$/g, "");
+        const filename = path.split("/").pop()?.replace(/\W+/g, "-") ?? "step";
+        // The step's own name is the stable semantic discriminator: an id is an
+        // anchor a reader links to, and a line-derived one churns whenever
+        // anything above the step moves. The line number is a last resort for a
+        // matched step that carries no name of its own.
+        const discriminator = named ? slug(named) : `${index + 1}`;
         out.push({
           probe_id: "ci-policy-guards",
           node: {
             type: "mechanism",
-            id: `m-ci-guard-${index + 1}-${path.split("/").pop()?.replace(/\W+/g, "-") ?? "step"}`,
+            id: `m-ci-guard-${filename}-${discriminator}`,
             title: named ?? "A CI step that guards policy",
             what: `${path} carries a step that fails the build on a policy breach rather than on a failing test.`,
             why_interesting:

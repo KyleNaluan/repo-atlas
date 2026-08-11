@@ -362,6 +362,24 @@ describe("throw-where-siblings-return", () => {
     expect(new Set(ids).size).toBe(ids.length);
   }, 60_000);
 
+  it("keeps two overloads distinct across the array/varargs boundary", async () => {
+    // slug strips `[]` and `...`, so write(byte) and write(byte[]) would mint the
+    // same signature and the same id unless the marker is preserved before
+    // slugging. A duplicate id trips the run-level uniqueness guard.
+    const ctx = contextFor({
+      "col/Stub.java":
+        "class Stub {\n" +
+        "  void write(byte b) { throw new UnsupportedOperationException(); }\n" +
+        "  void write(byte[] b) { throw new UnsupportedOperationException(); }\n" +
+        "}\n",
+      "col/Real.java": "class Real {\n  int write(byte b) { return 0; }\n}\n",
+    });
+    const found = await candidatesFrom("throw-where-siblings-return", ctx);
+    expect(found).toHaveLength(2);
+    const ids = found.map((c) => c.node.id);
+    expect(new Set(ids).size).toBe(2);
+  }, 60_000);
+
   it("ignores a throw that is a guard clause rather than a refusal", async () => {
     const ctx = contextFor({
       "A.java": "class A { String run() { return \"a\"; } }\n",
@@ -485,6 +503,32 @@ describe("dependency-divergence", () => {
     });
     const found = await candidatesFrom("dependency-divergence", ctx);
     expect(found.map((c) => c.node.id)).toEqual(["e-divergence-redis"]);
+  }, 60_000);
+
+  it("recognises a Gradle dependency declared under runtimeOnly", async () => {
+    // The shared rule must know the standard Gradle configurations, not only
+    // implementation/api/compile, or a driver declared under runtimeOnly reads
+    // as undeclared and the probe emits a spurious divergence.
+    const ctx = contextFor({
+      "README.md": "Runs on Postgres.\n",
+      "build.gradle": "dependencies {\n  runtimeOnly 'org.postgresql:postgresql:42.7.1'\n}\n",
+    });
+    expect(await candidatesFrom("dependency-divergence", ctx)).toEqual([]);
+  }, 60_000);
+
+  it("demotes rather than confirms when the manifest syntax is unreadable", async () => {
+    // A manifest present but in a form the rule cannot parse must not confirm the
+    // divergence: "I could not read any declarations" is not "nothing is
+    // declared". The gate returns unresolved and the candidate is demoted.
+    const ctx = contextFor({
+      "README.md": "Runs on Postgres.\n",
+      "build.gradle": "dependencies {\n  someExoticConfig 'org.postgresql:postgresql:42.7.1'\n}\n",
+    });
+    const [candidate] = await candidatesFrom("dependency-divergence", ctx);
+    expect(candidate).toBeDefined();
+    const result = gateCandidate(ctx, candidate!);
+    expect(result.verdict).toBe("unresolved");
+    expect(result.node.confidence).toBe("attested");
   }, 60_000);
 });
 

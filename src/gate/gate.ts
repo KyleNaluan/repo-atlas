@@ -35,9 +35,21 @@ export interface GatedCandidate {
   finding: string;
 }
 
-/** Does the tree hold the thing the claim is about? */
-const treeHas = (ctx: ProbeContext, claim: ExistenceClaim): { found: boolean; where: string[] } => {
+/**
+ * Does the tree hold the thing the claim is about?
+ *
+ * `undecidable` is the third answer a boolean cannot carry: the gate looked but
+ * a manifest present in a form the shared rule cannot read might declare the
+ * dependency. Treating that as "not declared" would let the gate confirm a
+ * divergence it never established - so the claim comes back undecidable and the
+ * candidate is demoted rather than confirmed.
+ */
+const treeHas = (
+  ctx: ProbeContext,
+  claim: ExistenceClaim,
+): { found: boolean; where: string[]; undecidable: boolean } => {
   const where: string[] = [];
+  let undecidable = false;
 
   for (const path of claim.paths ?? []) {
     if (ctx.read(path) !== null) where.push(path);
@@ -59,13 +71,20 @@ const treeHas = (ctx: ProbeContext, claim: ExistenceClaim): { found: boolean; wh
     // "declared" means one thing on both sides. A bare mention in a comment or a
     // transitive coordinate is not a declaration and must not settle the claim.
     const tech = claim.declares;
+    let sawUnrecognized = false;
     for (const m of declaredManifests(ctx)) {
+      if (!m.recognized) {
+        sawUnrecognized = true;
+        continue;
+      }
       if ([...m.names].some((n) => n.includes(tech))) where.push(m.path);
       if (where.length >= 5) break;
     }
+    // A manifest the rule could not read might declare it; absence is unproven.
+    if (where.length === 0 && sawUnrecognized) undecidable = true;
   }
 
-  return { found: where.length > 0, where };
+  return { found: where.length > 0, where, undecidable };
 };
 
 /**
@@ -127,7 +146,18 @@ export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCan
       };
     }
 
-    const { found, where } = treeHas(ctx, claim);
+    const { found, where, undecidable } = treeHas(ctx, claim);
+    if (undecidable) {
+      // A build manifest is present but in a form the shared rule cannot read.
+      // Confirming the divergence would assert a contradiction the gate did not
+      // establish, so the candidate is demoted exactly as an unreadable claim is.
+      return {
+        probe_id: candidate.probe_id,
+        node: { ...candidate.node, confidence: "attested" },
+        verdict: "unresolved",
+        finding: `${claim.description}: a build manifest is present but in a form this gate cannot read, so whether it declares this is undecided`,
+      };
+    }
     const agrees = claim.expect === "present" ? found : !found;
     if (!agrees) {
       const divergence = toDivergence(candidate, claim, where);

@@ -130,6 +130,31 @@ describeBrowser("pass B on a clean artifact", () => {
       result.checks.map((c) => `${c.id}:${c.outcome}`),
     );
   }, 240_000);
+
+  it("keeps its verdict when screenshots cannot be written, recording a note instead", async () => {
+    // A screenshot directory that cannot be created (its parent is a file, not a
+    // directory) is a fact about the operator's machine, not the artifact.
+    const blocker = join(dir, "blocker");
+    writeFileSync(blocker, "not a directory", "utf8");
+    const unwritable = join(blocker, "shots");
+
+    const result = await runPassB(artifactPath, ctx.atlas, { screenshotDir: unwritable });
+    // No screenshot was written, and the failure is surfaced as a note.
+    expect(result.screenshots).toEqual([]);
+    expect(result.notes.length).toBeGreaterThan(0);
+    expect(result.notes.join("\n")).toContain(unwritable);
+
+    // The checks are byte-identical to a run with screenshots disabled: the
+    // verdict stands on the gates and warnings, never on the capture.
+    const without = await runPassB(artifactPath, ctx.atlas);
+    expect(result.checks).toEqual(without.checks);
+
+    // And through the whole suite the audit still passes and never crashes; the
+    // note rides along on the outcome.
+    const outcome = await runAudit(ctx, { artifactPath, screenshotDir: unwritable });
+    expect(outcome.status).toBe("passed");
+    expect(outcome.notes.join("\n")).toContain(unwritable);
+  }, 240_000);
 });
 
 describeBrowser("E1 traces a node's evidence through every slot the schema gives it", () => {

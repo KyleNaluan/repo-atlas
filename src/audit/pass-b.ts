@@ -32,6 +32,12 @@ export interface PassBResult {
   checks: CheckResult[];
   measurements: ViewportMeasurement[];
   screenshots: string[];
+  /**
+   * What could not be written while capturing screenshots. Screenshots are
+   * artifacts OF the audit, not inputs TO a check (#8, 6.4), so a capture failure
+   * is a note about the operator's machine, never a change to the verdict.
+   */
+  notes: string[];
 }
 
 /**
@@ -45,6 +51,9 @@ interface Step {
   ids: string[];
   run: () => Promise<CheckResult[]> | CheckResult[];
 }
+
+const describe = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : String(cause);
 
 const runStep = async (step: Step): Promise<CheckResult[]> => {
   try {
@@ -63,6 +72,7 @@ export const runPassB = async (
   const loaded: LoadedPage = await openArtifact(path);
   const checks: CheckResult[] = [];
   const screenshots: string[] = [];
+  const notes: string[] = [];
   let measurements: ViewportMeasurement[] = [];
 
   try {
@@ -88,24 +98,37 @@ export const runPassB = async (
     for (const step of steps) {
       const rs = await runStep(step);
       checks.push(...rs);
-      if (rs.some(isBlocking)) return { checks, measurements, screenshots };
+      if (rs.some(isBlocking)) return { checks, measurements, screenshots, notes };
     }
 
+    // Screenshots run only after every gate has passed and no check reads them,
+    // so a capture failure - an unwritable directory, a full disk, a protocol
+    // timeout on a large full-page capture - is a fact about the operator's
+    // machine, not about the artifact. It becomes a note; the verdict already
+    // stands on the checks and must not move here.
     if (options.screenshotDir) {
       const dir = resolve(options.screenshotDir);
-      mkdirSync(dir, { recursive: true });
-      for (const width of VIEWPORTS) {
-        await loaded.page.setViewport({ width, height: 900 });
-        const file = join(dir, `viewport-${width}.png`);
-        await loaded.page.screenshot({ path: file as `${string}.png`, fullPage: true });
-        screenshots.push(file);
+      try {
+        mkdirSync(dir, { recursive: true });
+        for (const width of VIEWPORTS) {
+          try {
+            await loaded.page.setViewport({ width, height: 900 });
+            const file = join(dir, `viewport-${width}.png`);
+            await loaded.page.screenshot({ path: file as `${string}.png`, fullPage: true });
+            screenshots.push(file);
+          } catch (cause) {
+            notes.push(`screenshot for viewport ${width}px could not be written: ${describe(cause)}`);
+          }
+        }
+      } catch (cause) {
+        notes.push(`screenshot directory ${dir} could not be created: ${describe(cause)}`);
       }
     }
   } finally {
     await loaded.close();
   }
 
-  return { checks, measurements, screenshots };
+  return { checks, measurements, screenshots, notes };
 };
 
 /** Written into the audit statement: the widths the layout checks actually ran at. */

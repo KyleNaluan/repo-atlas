@@ -156,17 +156,25 @@ export const runAudit = async (
   try {
     const b = await runPassB(options.artifactPath, ctx.atlas, options);
     return {
-      ...assemble([...a, ...b.checks], ["A", "B"], pre.notes),
+      ...assemble([...a, ...b.checks], ["A", "B"], [...pre.notes, ...b.notes]),
       measurements: b.measurements,
       screenshots: b.screenshots,
     };
   } catch (error) {
+    // The boundary rule, which has swung both ways and needs stating, not two
+    // instances: a throw that prevents the audit from ESTABLISHING something is a
+    // precondition failure - the audit could not see what it needed, which is a
+    // claim about the audit and never about the artifact. A throw in work done
+    // DOWNSTREAM of the verdict, purely to help a human afterwards (screenshots),
+    // is a note - it changes nothing the audit established, so it is caught in
+    // pass B and never reaches here.
+    //
     // Any throw escaping pass B - a missing browser, a page that will not load,
     // a browser that dies mid-launch - is a precondition failure, never a generic
     // crash. The reasoning is the one NoBrowserError already gets: the audit could
-    // not see what it needed, which is a claim about the audit and never about the
-    // artifact. Pass A's real answers are preserved; the pass B checks are named as
-    // not run with the underlying cause, so nothing degrades into exit 70.
+    // not see what it needed. Pass A's real answers are preserved; the pass B
+    // checks are named as not run with the underlying cause, so nothing degrades
+    // into exit 70.
     const message = error instanceof Error ? error.message : String(error);
     const reason =
       error instanceof NoBrowserError

@@ -43,11 +43,18 @@ export interface GatedCandidate {
  * dependency. Treating that as "not declared" would let the gate confirm a
  * divergence it never established - so the claim comes back undecidable and the
  * candidate is demoted rather than confirmed.
+ *
+ * The same third answer covers a pattern that will not compile. Claims now
+ * originate from model output as well as deterministic probes, so a malformed
+ * regex is reachable input, not a code bug. Searching cannot proceed, so the
+ * claim is undecidable exactly as an unreadable manifest is - the gate must
+ * never crash on it, and never pass it silently as though the tree had been
+ * read. `undecidableReason` names the specific cause for the finding.
  */
 const treeHas = (
   ctx: ProbeContext,
   claim: ExistenceClaim,
-): { found: boolean; where: string[]; undecidable: boolean } => {
+): { found: boolean; where: string[]; undecidable: boolean; undecidableReason?: string } => {
   const where: string[] = [];
   let undecidable = false;
 
@@ -56,8 +63,23 @@ const treeHas = (
   }
 
   if (claim.pattern) {
-    const include = claim.pattern.include ? new RegExp(claim.pattern.include) : null;
-    const regex = new RegExp(claim.pattern.regex, "i");
+    let include: RegExp | null;
+    let regex: RegExp;
+    try {
+      include = claim.pattern.include ? new RegExp(claim.pattern.include) : null;
+      regex = new RegExp(claim.pattern.regex, "i");
+    } catch {
+      const bad =
+        claim.pattern.include !== undefined
+          ? `include \`${claim.pattern.include}\` / regex \`${claim.pattern.regex}\``
+          : `regex \`${claim.pattern.regex}\``;
+      return {
+        found: where.length > 0,
+        where,
+        undecidable: true,
+        undecidableReason: `its search pattern did not compile (${bad}), so the tree could not be searched for it`,
+      };
+    }
     for (const path of ctx.paths) {
       if (include && !include.test(path)) continue;
       const text = ctx.read(path);
@@ -195,16 +217,18 @@ export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCan
       };
     }
 
-    const { found, where, undecidable } = treeHas(ctx, claim);
+    const { found, where, undecidable, undecidableReason } = treeHas(ctx, claim);
     if (undecidable) {
-      // A build manifest is present but in a form the shared rule cannot read.
-      // Confirming the divergence would assert a contradiction the gate did not
-      // establish, so the candidate is demoted exactly as an unreadable claim is.
+      // The gate looked but could not settle the claim: a build manifest present
+      // in a form the shared rule cannot read, or a model-authored pattern that
+      // will not compile. Either way, confirming the divergence would assert a
+      // contradiction the gate did not establish, so the candidate is demoted
+      // exactly as an unreadable claim is.
       return {
         probe_id: candidate.probe_id,
         node: { ...candidate.node, confidence: "attested" },
         verdict: "unresolved",
-        finding: `${claim.description}: a build manifest is present but in a form this gate cannot read, so whether it declares this is undecided`,
+        finding: `${claim.description}: ${undecidableReason ?? "a build manifest is present but in a form this gate cannot read, so whether it declares this is undecided"}`,
       };
     }
     const agrees = claim.expect === "present" ? found : !found;

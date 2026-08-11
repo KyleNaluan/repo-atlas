@@ -1087,6 +1087,64 @@ describe("the existence gate overturns the record in BOTH directions", () => {
     expect(result.node.confidence).toBe("attested");
   }, 60_000);
 
+  it("demotes rather than crashes on a model-authored regex that will not compile", () => {
+    // Claims now come from model output, so a malformed pattern is reachable
+    // input, not a code bug. It must never throw out of the gate, and must never
+    // pass as though the tree had been searched.
+    const ctx = contextFor({ "A.java": "class A {}\n" });
+    const candidate: Candidate = {
+      probe_id: "write",
+      claims: [{ description: "a Grader abstraction", expect: "present", pattern: { regex: "class (Grader" } }],
+      node: {
+        type: "mechanism",
+        id: "m-bad-regex",
+        title: "x",
+        what: "w",
+        why_interesting: "y",
+        enforcement: "type-level",
+        gotchas: [],
+        evidence: [],
+        confidence: "verified",
+        interview_value: 0,
+      },
+    };
+    const result = gateCandidate(ctx, candidate);
+    expect(result.verdict).toBe("unresolved");
+    expect(result.node.confidence).toBe("attested");
+    // The finding names the pattern that would not compile.
+    expect(result.finding).toContain("class (Grader");
+  }, 60_000);
+
+  it("demotes on a malformed include filter, not only a malformed regex", () => {
+    const ctx = contextFor({ "A.java": "class A {}\n" });
+    const candidate: Candidate = {
+      probe_id: "write",
+      claims: [
+        {
+          description: "a Grader abstraction",
+          expect: "present",
+          pattern: { regex: "class Grader", include: "src/**[" },
+        },
+      ],
+      node: {
+        type: "mechanism",
+        id: "m-bad-include",
+        title: "x",
+        what: "w",
+        why_interesting: "y",
+        enforcement: "type-level",
+        gotchas: [],
+        evidence: [],
+        confidence: "verified",
+        interview_value: 0,
+      },
+    };
+    const result = gateCandidate(ctx, candidate);
+    expect(result.verdict).toBe("unresolved");
+    expect(result.node.confidence).toBe("attested");
+    expect(result.finding).toContain("src/**[");
+  }, 60_000);
+
   it("passes through a candidate grounded in what the probe already read", () => {
     const ctx = contextFor({ "A.java": "class A {}\n" });
     const candidate: Candidate = {

@@ -76,7 +76,7 @@ Note on the reference fixture: `test/fixtures/swe-prep.atlas.json` keeps two nod
 ## The audit's two standing rules
 
 - **No check ships without a mutant fixture proving it fails** (#8). `test/mutants/` holds one deliberately-broken artifact per check, and `test/audit/pass-a.test.ts` asserts each check rejects its own mutant and only its own. A check that has never been watched fail is a check nobody knows works.
-- **A check that could not run says so by name.** `not_applicable` and `not_run` carry a mandatory reason, and neither ever counts as passing. The audit reports all twenty checks even though only some passes are built, for the same reason #6 forbids communicating absence by silence.
+- **A check that could not run says so by name.** `not_applicable` and `not_run` carry a mandatory reason, and neither ever counts as passing. All four passes are built, but a given invocation may not run every check - `--no-browser`, `--no-model`, an empty harvest cache (L3), or an earlier blocking gate can each leave a pass unrun - and the audit reports all twenty by name regardless, for the same reason #6 forbids communicating absence by silence.
 
 The audit slot is the only part of a rendered artifact the audit may write, and **everything it writes must live inside the slot** - including the state class, which is why the statement wraps itself rather than the slot element carrying an attribute. An attribute on the slot element sits outside the blanked content, so writing it falsifies the hash the statement prints. `stampAudit` asserts the hash is unchanged and refuses otherwise; that assertion caught this exact defect, and a non-greedy slot scanner that ended the slot at the first nested closing tag.
 

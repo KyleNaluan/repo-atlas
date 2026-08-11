@@ -1,0 +1,8 @@
+node_modules/
+dist/
+out/
+*.tsbuildinfo
+.DS_Store
+coverage/
+.cache/
+.atlas-cache/

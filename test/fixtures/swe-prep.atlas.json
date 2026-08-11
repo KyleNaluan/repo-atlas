@@ -1,0 +1,1511 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-08-10T20:30:00-05:00",
+  "profile": "interview",
+  "rubric_version": "v1",
+  "subject": {
+    "owner": "KyleNaluan",
+    "repo": "swe-prep",
+    "url": "https://github.com/KyleNaluan/swe-prep",
+    "branch": "main",
+    "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+    "read_on": "2026-08-10",
+    "visibility": "public"
+  },
+  "synopsis": {
+    "statement": "swe-prep is a single-user interview-prep app that runs your code. Its product is a daily session in three tiers: a required ~4-minute warm-up of ~8 quick reps that alone completes the day, an optional ~30-minute main exercise, then uncapped continuation. Everything under it - the grader/runner seam, the spaced-repetition queue, the empirical complexity check, the readiness surface - exists to make that daily loop cheap enough to never skip and honest enough to believe.",
+    "evidence": [
+      {
+        "kind": "issue",
+        "number": 3,
+        "comment_id": 5180801286,
+        "note": "the three-tier session decision"
+      },
+      {
+        "kind": "file",
+        "path": "README.md",
+        "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+      }
+    ]
+  },
+  "shape": {
+    "tree": "swe-prep/                     # PUBLIC - the engine\n├── backend/                  # Spring Boot, Maven\n│   └── src/main/java/com/sweprep/backend/\n│       ├── exercise/     the language-neutral domain model: Content, Exercise,\n│       │                 Lesson, Response, Grading, Comparison, Signature, TestCase\n│       ├── content/      loading + parsing from disk; the answer-tell checker\n│       ├── grader/       pass/fail decisions - TestCase, AnswerKey, SelfCheck, SqlQuery\n│       ├── runner/       execution only - the swappable sandbox seam (Java + Python)\n│       ├── language/     stub + harness generation per language (Java, Python)\n│       ├── sql/          fixture DB, read-only role, result-set execution\n│       ├── complexity/   empirical scaling measurement + classifier\n│       ├── attempt/      durable practice history, the lifecycle service\n│       ├── scheduler/    SM-2 due-date queue + challenge priority score\n│       ├── challenge/    wires attempt history into the priority scorer\n│       ├── reps/         warm-up set selection, interleaving, confusion pairs\n│       ├── learned/      the \"learned\" criterion (successive relearning)\n│       ├── readiness/    the honest progress surface; shaky + stale topics\n│       ├── authoring/    derive warm-up reps from a reference solution (CLI)\n│       ├── commit/       solution auto-commit into the private content clone\n│       ├── role/         which role families the user is training for\n│       ├── session/      day completion + streak (with capped repair)\n│       └── web/          REST controllers, error handlers, view records\n├── frontend/                 # React + Vite: Session shell, Warmup, Practice, Lesson,\n│                             # Readiness, RolePicker\n├── scripts/check-no-content.sh   # CI guard: no private content may be committed here\n├── scripts/daily-cue.sh          # systemd user timer: the scheduled daily cue\n├── docker-compose.yml        # Postgres for local dev, on :5433 to avoid collisions\n└── test.sh                   # the one documented command that runs both suites\n\nswe-prep-content/             # PRIVATE - statements, test data, reference solutions,\n                              # generators. Loaded from a gitignored local path.",
+    "evidence": [
+      {
+        "kind": "command",
+        "cmd": "ls backend/src/main/java/com/sweprep/backend/",
+        "output_excerpt": "attempt authoring challenge commit complexity content exercise grader language learned readiness reps role runner scheduler session sql web"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "type": "fact",
+      "id": "f-loc-main",
+      "title": "Lines of Java (main)",
+      "label": "lines Java (main)",
+      "value": "13,574",
+      "source": "command",
+      "confidence": "verified",
+      "interview_value": 3,
+      "evidence": [
+        {
+          "kind": "command",
+          "cmd": "find backend/src/main/java -name '*.java' -exec cat {} + | wc -l",
+          "output_excerpt": "13574"
+        }
+      ]
+    },
+    {
+      "type": "fact",
+      "id": "f-loc-test",
+      "title": "Lines of Java (test)",
+      "label": "lines Java (test)",
+      "value": "10,699",
+      "source": "command",
+      "confidence": "verified",
+      "interview_value": 3,
+      "evidence": [
+        {
+          "kind": "command",
+          "cmd": "find backend/src/test/java -name '*.java' -exec cat {} + | wc -l",
+          "output_excerpt": "10699"
+        }
+      ]
+    },
+    {
+      "type": "fact",
+      "id": "f-tests-backend",
+      "title": "Backend test suite at this SHA",
+      "label": "backend tests, 1 FAILING",
+      "value": "466",
+      "source": "command",
+      "confidence": "verified",
+      "interview_value": 5,
+      "interviewer_questions": [
+        "\"Does it build?\""
+      ],
+      "evidence": [
+        {
+          "kind": "command",
+          "cmd": "./test.sh",
+          "output_excerpt": "OK: no private exercise content is committed to this repo.\n[ERROR] Failures:\n[ERROR]   ReadinessServiceTest.staleTopicsFlagsATopicNotTouchedRecentlyAndSkipsAnUntouchedOne:189\nexpected: 30L\n but was: 31L\n[ERROR] Tests run: 466, Failures: 1, Errors: 0, Skipped: 5\n[INFO] BUILD FAILURE\n[INFO] Total time:  01:36 min",
+          "note": "2026-08-10 20:07 local"
+        }
+      ]
+    },
+    {
+      "type": "fact",
+      "id": "f-packages",
+      "title": "Backend packages",
+      "label": "backend packages",
+      "value": "18",
+      "source": "command",
+      "confidence": "verified",
+      "interview_value": 2,
+      "evidence": [
+        {
+          "kind": "command",
+          "cmd": "ls backend/src/main/java/com/sweprep/backend/ | wc -l",
+          "output_excerpt": "18 directories + BackendApplication.java"
+        }
+      ]
+    },
+    {
+      "type": "fact",
+      "id": "f-migrations",
+      "title": "Flyway migrations",
+      "label": "Flyway migrations",
+      "value": "8",
+      "source": "file",
+      "confidence": "verified",
+      "interview_value": 3,
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/resources/db/migration/V8__submission_language.sql",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "V1..V8; the schema is Flyway-owned from the first table"
+        }
+      ]
+    },
+    {
+      "type": "fact",
+      "id": "f-age",
+      "title": "Repository age and commit count at the pin",
+      "label": "commits, 7 calendar days",
+      "value": "47",
+      "source": "command",
+      "confidence": "verified",
+      "interview_value": 4,
+      "interviewer_questions": [
+        {
+          "question": "\"How long did this take you?\"",
+          "answer": "47 commits across 7 calendar days, starting 2026-08-04. The defensible claim is not the line count - it is that every boundary in it is written down and I can show you where it is enforced."
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "command",
+          "cmd": "git log --format='%ad' --date=short | sort | uniq -c",
+          "output_excerpt": "13 2026-08-04\n 9 2026-08-06\n13 2026-08-07\n 5 2026-08-09\n 7 2026-08-10   (47 commits total)"
+        }
+      ]
+    },
+    {
+      "type": "decision",
+      "id": "d-platform",
+      "title": "Where it runs, and what it is built with",
+      "question": "Where does swe-prep run, and what is it built with?",
+      "decision": "A local web app: Spring Boot on Java 21, Postgres, React + Vite, Monaco. Reached over a tailnet, autostarted as a systemd user unit. Not hosted.",
+      "why": "Front-end practice is a named future domain, and grading it means rendering and asserting in a browser. A web app is the only shape that holds every named domain without a second platform later. The choice was made on domain coverage, not on friction - a TUI would genuinely have had the lowest friction for a heavy terminal user, and the friction cost was paid off separately with autostart.",
+      "rejected": [
+        {
+          "alternative": "A TUI",
+          "why_it_lost": "explicitly the lowest-friction option for a heavy terminal user, and still rejected because it can never grade front-end work."
+        },
+        {
+          "alternative": "A desktop app",
+          "why_it_lost": "would have to embed a browser to fake the same capability."
+        },
+        {
+          "alternative": "SQLite instead of Postgres",
+          "why_it_lost": "its only real advantage was needing no service, which is worth little against something already configured - and Postgres removes any migration if the app is ever hosted."
+        }
+      ],
+      "status": "decided_and_built",
+      "implemented_by": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/resources/db/migration/V2__app_user.sql",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "the single seeded user; its PK is the user_id every person-owned row carries"
+        },
+        {
+          "kind": "file",
+          "path": "backend/pom.xml",
+          "line_start": 9,
+          "line_end": 21,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "divergence": "The decision names Spring Boot 3.4.3 with Spring Data JPA and Lombok. What shipped is spring-boot-starter-jdbc with JdbcClient, no Lombok, on Boot 3.4.7. The divergence is now acknowledged on the decision issue itself.",
+      "soundbite": "I chose the shape by which domains it could still hold in a year, not by what was fastest to open today, and then paid off the friction cost separately with autostart.",
+      "confidence": "attested",
+      "interview_value": 5,
+      "interviewer_questions": [
+        "\"You execute arbitrary code. How is that safe?\"",
+        "\"Why not JPA?\""
+      ],
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 2,
+          "comment_id": 5181222288,
+          "note": "the resolution comment - the artifact, not the body"
+        },
+        {
+          "kind": "issue",
+          "number": 2,
+          "comment_id": 5243059657,
+          "note": "record-keeping comment acknowledging the build divergence"
+        },
+        {
+          "kind": "file",
+          "path": "backend/pom.xml",
+          "line_start": 33,
+          "line_end": 37,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "spring-boot-starter-jdbc, not data-jpa"
+        }
+      ]
+    },
+    {
+      "type": "decision",
+      "id": "d-abstraction",
+      "title": "The exercise and runner abstraction",
+      "question": "What is the exercise/runner abstraction, so that every named domain fits without a redesign?",
+      "decision": "Split Grader from Runner - a Grader decides pass or fail, a Runner only executes - and make test cases language-neutral JSON data with a per-language harness.",
+      "why": "The obvious design makes Exercise mean \"thing that runs code\", after which concepts and warm-up reps become special cases bolted on the side. Separating what the user produces from how it is judged is what stops \"exercise\" from secretly meaning \"code\": a concept question has a Grader and no Runner at all. Writing test cases as JUnit would mean every new language re-authors the entire problem set - that is the difference between pluggable languages being real and being aspirational.",
+      "rejected": [
+        {
+          "alternative": "Exercise as a code-execution type, with concepts as special cases",
+          "why_it_lost": "makes every non-code domain a bolt-on and forecloses SQL, concepts and front end in one move."
+        },
+        {
+          "alternative": "Test cases authored as JUnit tests",
+          "why_it_lost": "every new language would require re-authoring the entire problem set."
+        },
+        {
+          "alternative": "Inventing a tree/list serialisation convention",
+          "why_it_lost": "LeetCode's existing convention ([1,2,3,null,4]) is adopted instead, since the captain reads their statements anyway."
+        }
+      ],
+      "status": "decided_and_built",
+      "implemented_by": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/grader/Grader.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/runner/Runner.java",
+          "line_start": 15,
+          "line_end": 25,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "two methods: languageId() and execute()"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/exercise/Response.java",
+          "line_start": 16,
+          "line_end": 16,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "permits Code, Choice, FreeText, Query"
+        }
+      ],
+      "divergence": "The decision names five Response kinds - Choice, ShortAnswer, Program, Query and \"later, Component\". The sealed interface at this SHA permits Code, Choice, FreeText and Query. Component is absent, which is the front-end domain being genuinely unbuilt rather than renamed.",
+      "soundbite": "A Grader decides pass or fail; a Runner only executes. Once those are apart, a concept question is not a special case - it is just an exercise with no Runner.",
+      "confidence": "attested",
+      "interview_value": 5,
+      "interviewer_questions": [
+        "\"How would you add Python?\"",
+        "\"How do you support more than one language?\""
+      ],
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 6,
+          "comment_id": 5181413478
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/exercise/Grading.java",
+          "line_start": 17,
+          "line_end": 17,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "permits TestCases, AnswerKey, SelfCheck, ResultSet"
+        }
+      ]
+    },
+    {
+      "type": "decision",
+      "id": "d-judging",
+      "title": "How a submission is judged",
+      "question": "How is a submission judged, and what does the app tell you when it fails?",
+      "decision": "Correctness is pass/fail with no partial credit; on failure the app reports only how many tests failed; help (hints, the failing case) is always available, always recorded, never penalised; a complexity claim is stated before the target is revealed and then checked by measuring scaling empirically.",
+      "why": "Re-reading your own code and reasoning about it without an oracle is the skill a real interview tests, and an app that always hands over the failing case trains the opposite reflex. Penalties on a self-imposed system only teach the user to game themselves. A self-report alone would congratulate an O(n^2) solution claiming to be O(n) - the single case most worth catching - so the claim is scored against measurement rather than an honour-system checkbox.",
+      "rejected": [
+        {
+          "alternative": "Partial credit / a score",
+          "why_it_lost": "would invent a number that means nothing and soften the only honest signal available."
+        },
+        {
+          "alternative": "Always showing the failing case",
+          "why_it_lost": "trains the opposite of the interview skill - it is why people grind hundreds of problems and still freeze."
+        },
+        {
+          "alternative": "Penalising help",
+          "why_it_lost": "on a self-imposed system, penalties only teach the user to game themselves."
+        },
+        {
+          "alternative": "Automated style feedback",
+          "why_it_lost": "noise, and not what interviews reject people over."
+        },
+        {
+          "alternative": "Grading on wall-clock runtime",
+          "why_it_lost": "would punish JVM warm-up and teach nothing; runtime is reported for interest only."
+        }
+      ],
+      "status": "decided_and_built",
+      "implemented_by": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/grader/Verdict.java",
+          "line_start": 22,
+          "line_end": 38,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "Verdict carries passed/total and nothing about a case"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/attempt/AttemptService.java",
+          "line_start": 356,
+          "line_end": 410,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "takeHint / revealFailingCase / claimComplexity"
+        }
+      ],
+      "soundbite": "The failure response is deliberately impoverished. Verdict carries passed and total - no input, no expected, no actual - unless you explicitly ask, and asking is recorded and never costs you anything.",
+      "confidence": "attested",
+      "interview_value": 5,
+      "interviewer_questions": [
+        "\"Why not just show the failing test?\"",
+        "\"Can you really measure complexity by timing?\""
+      ],
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 5,
+          "comment_id": 5180987178
+        }
+      ]
+    },
+    {
+      "type": "decision",
+      "id": "d-licensing",
+      "title": "Whether Blind 75 statements can ship in a public repo",
+      "question": "Can Blind 75 problem statements ship in a public repository?",
+      "decision": "Public engine, private content. No problem statement, test case, reference solution or generator lives in this repository; content is loaded at runtime from a gitignored local clone of a separate private repo.",
+      "why": "The private-solutions decision had already collapsed this question: once solutions are private, the statements have to travel with them, and the engine is the part worth showing publicly anyway. Making it a repository boundary rather than a policy means the rule can be checked mechanically instead of remembered.",
+      "rejected": [
+        {
+          "alternative": "Shipping statements in the public repo",
+          "why_it_lost": "the copyright position on redistributing problem statements is not one worth defending on a portfolio project."
+        },
+        {
+          "alternative": "Keeping the whole project private",
+          "why_it_lost": "the engine is the portfolio artifact; hiding it defeats the purpose."
+        }
+      ],
+      "status": "decided_and_built",
+      "implemented_by": [
+        {
+          "kind": "file",
+          "path": "scripts/check-no-content.sh",
+          "line_start": 14,
+          "line_end": 61,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "three independent leak checks, run first in CI and in ./test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/content/FileExerciseCatalog.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "soundbite": "The boundary is not a policy, it is a repository split with a CI script that fails the build on three separate leak shapes - and that script has its own tests.",
+      "confidence": "attested",
+      "interview_value": 4,
+      "interviewer_questions": [
+        "\"Where is the content? This repo has no problems in it.\""
+      ],
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 4,
+          "comment_id": 5182805341
+        }
+      ]
+    },
+    {
+      "type": "decision",
+      "id": "d-scheduling",
+      "title": "How the app chooses what you practise next",
+      "question": "How does the app choose what you practise next?",
+      "decision": "Two schedulers over one shared attempt record: a standard SM-2 due-date queue for reps, and a priority score - not a due date - for challenges, with a hard minimum-interval floor and a weekly cap on new introductions.",
+      "why": "Spaced repetition assumes reviews are cheap. Twenty due Anki cards cost four minutes; twenty due 30-40 minute challenges is a fortnight of work, and a scheduler that generates impossible debt gets ignored within a week. The scarcity is structural too - roughly 90 challenge slots exist in three months against ~75 problems. Due dates ask what is owed; a priority score asks what is worth it, and only the second survives scarcity.",
+      "rejected": [
+        {
+          "alternative": "One scheduler for both",
+          "why_it_lost": "SM-2's arithmetic breaks completely at 30-40 minutes per review; it would generate debt that cannot be paid."
+        },
+        {
+          "alternative": "FSRS over SM-2 for reps",
+          "why_it_lost": "better on paper, marginal at one user and ~400 reps; keep the algorithm swappable and do not agonise."
+        },
+        {
+          "alternative": "Feeding raw attempt fields into the algorithms",
+          "why_it_lost": "collapsing to a 0-5 quality score keeps the scheduler from ossifying around today's exact recorded fields."
+        },
+        {
+          "alternative": "Including time taken as a signal",
+          "why_it_lost": "interruptions, thinking before typing, and typing fast on a misunderstood problem all corrupt it - variance without information."
+        },
+        {
+          "alternative": "Deleting mastered problems",
+          "why_it_lost": "nothing is ever deleted; a problem passed cleanly three times earns an interval of months. That is retirement, not removal."
+        }
+      ],
+      "status": "decided_and_built",
+      "implemented_by": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/scheduler/Sm2Scheduler.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/scheduler/ChallengePriority.java",
+          "line_start": 93,
+          "line_end": 111,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "the two gates return OptionalDouble.empty(), not a low score"
+        }
+      ],
+      "divergence": "The decision's \"interview soon\" mode - a re-weighted scoring function for the final fortnight that drops the minimum-interval floor - is not built at this SHA. A case-insensitive search of backend/src and frontend/src for interview-soon / interviewSoon / InterviewMode returns nothing.",
+      "soundbite": "Due dates ask what is owed; a priority score asks what is worth it. At 40 minutes a review, only the second one survives.",
+      "confidence": "attested",
+      "interview_value": 5,
+      "interviewer_questions": [
+        "\"How do you keep the spaced-repetition state consistent?\""
+      ],
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 8,
+          "comment_id": 5182242970
+        }
+      ]
+    },
+    {
+      "type": "decision",
+      "id": "d-flyway-owns-schema",
+      "title": "Flyway owns the schema from the first table, never ddl-auto",
+      "question": "What manages the database schema?",
+      "decision": "Schema migrations are Flyway files from the very first table onward; Hibernate ddl-auto is never used.",
+      "why": "Recorded as an acceptance criterion on the scaffold ticket - \"Database schema is managed by a migration tool from the first table onward, not auto-generated from entities\" - and enforced from V1 with no ddl-auto property anywhere in the application configuration.",
+      "rejected": [],
+      "rejected_absent_from_record": true,
+      "status": "decided_and_built",
+      "implemented_by": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/resources/db/migration/V1__baseline.sql",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "command",
+          "cmd": "grep -rn 'ddl-auto' backend/src/main/resources/application.yml",
+          "output_excerpt": "(no matches)"
+        }
+      ],
+      "soundbite": "Flyway has owned the schema since the first table - there has never been a ddl-auto phase to migrate away from.",
+      "confidence": "attested",
+      "interview_value": 3,
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 12,
+          "note": "acceptance criterion in the issue BODY; issue #12 has zero comments, so there is no resolution artifact and no alternative was recorded"
+        }
+      ]
+    },
+    {
+      "type": "mechanism",
+      "id": "m-second-language",
+      "title": "The language-neutral claim, now demonstrated rather than intended",
+      "what": "A second language adapter (PythonLanguageAdapter + LocalPythonRunner) grades the literal same in-memory Exercise fixture that Java grades, with zero content changes. LanguageAdapterRegistry and RunnerRegistry route a plain language string to the one adapter and runner that target it; Java is always first and is the default when the language is null, blank or omitted.",
+      "why_interesting": "This is the project's central design claim - a test case authored once runs in every language - moving from a design intention to a demonstrated property. The proof is deliberately not a Python-flavoured copy of the fixture: TestCaseGraderTest.aSecondLanguageSolvesTheExactSameStoredExerciseWithNoContentChange runs the same object through the Python path. What the ticket also surfaced is the honest part: adding the second language forced real changes to engine code the single-adapter version had left implicitly Java-only (submissionFileName(), languageId(), a submission.language column), and none to content.",
+      "enforcement": "test-level",
+      "gotchas": [
+        "Map.copyOf does not preserve iteration order (explicitly unspecified for 2+ entries), which would silently undo the Java-first sort. The registry sorts into a LinkedHashMap and wraps it with Collections.unmodifiableMap instead.",
+        "Python's indentation is syntactically significant, so PythonLanguageAdapter does not reuse Java's text-block-with-.formatted() splicing style - every emitted line carries its own explicit absolute indentation.",
+        "LocalPythonRunner reports COMPILE_ERROR only for a genuine syntax error (python3 -m py_compile). A NameError at runtime surfaces as a per-case \"threw\" failure, which is an honest difference from Java's stricter compile step, not a gap to close."
+      ],
+      "confidence": "verified",
+      "interview_value": 5,
+      "interviewer_questions": [
+        {
+          "question": "\"How would you add Python?\"",
+          "answer": "One LanguageAdapter and one Runner. Zero test cases are re-authored, because they are language-neutral JSON - and that is now demonstrated, not claimed: the same stored exercise is graded through Python in a test."
+        },
+        {
+          "question": "\"How do you support more than one language?\"",
+          "answer": "Two registries route a language string to the one adapter and runner that target it, Java first and default. Adding the second language changed engine code and no content."
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/test/java/com/sweprep/backend/grader/TestCaseGraderTest.java",
+          "line_start": 220,
+          "line_end": 220,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "the same stored exercise, graded through Python"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/language/LanguageAdapterRegistry.java",
+          "line_start": 24,
+          "line_end": 44,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/language/PythonLanguageAdapter.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/resources/db/migration/V8__submission_language.sql",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "attempt bookkeeping, not a content-format change"
+        }
+      ]
+    },
+    {
+      "type": "mechanism",
+      "id": "m-grader-runner-seam",
+      "title": "The Grader / Runner seam, and boundaries kept in the type system",
+      "what": "GraderRegistry receives List<Grader> from Spring and routes each exercise by the grader's own supports(). TestCaseGrader takes an adapter registry and a runner registry; AnswerKeyGrader's constructor takes only an ObjectMapper and has no Runner field at all; SelfCheckGrader is a routed Grader bean whose grade() throws.",
+      "why_interesting": "The abstraction decision said the split exists. The codebase then refuses to let a caller violate it. AnswerKeyGrader having no Runner field is the mechanically checkable existence proof that the split is real rather than naming, and SelfCheckGrader.grade() throwing makes \"a self-rating never reaches the spaced-repetition quality score\" an unrepresentable state instead of a comment and some discipline.",
+      "enforcement": "type-level",
+      "gotchas": [
+        "The same boundary is defended a second time in SQL: a self-check does write a row, always as SubmissionOutcome.SELF_RATED, which is a superset of Verdict.Outcome and deliberately not a member of it. Every competence query filters on outcome = 'PASSED'.",
+        "Adding a grading kind is a new bean plus one more permitted record - there is nothing in the registry to change."
+      ],
+      "confidence": "verified",
+      "interview_value": 5,
+      "interviewer_questions": [
+        "\"You execute arbitrary code. How is that safe?\""
+      ],
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/grader/SelfCheckGrader.java",
+          "line_start": 42,
+          "line_end": 46,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "the throw"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/grader/AnswerKeyGrader.java",
+          "line_start": 25,
+          "line_end": 27,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "one field, an ObjectMapper - no Runner"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/grader/GraderRegistry.java",
+          "line_start": 18,
+          "line_end": 55,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/runner/Runner.java",
+          "line_start": 15,
+          "line_end": 25,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "code_excerpt": {
+        "language": "java",
+        "text": "@Override\npublic Verdict grade(Exercise exercise, String submission) {\n    throw new UnsupportedOperationException(\n            \"A self-check exercise ('\" + exercise.id() + \"') is never machine-graded: it\"\n                    + \" reveals a model answer for self-assessment and emits no verdict\"\n                    + \" (design revision t3, section 1.1). Call reveal(...) instead.\");\n}",
+        "evidence": {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/grader/SelfCheckGrader.java",
+          "line_start": 41,
+          "line_end": 47,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      }
+    },
+    {
+      "type": "mechanism",
+      "id": "m-content-boundary",
+      "title": "Public engine, private content - and the guard that keeps it true",
+      "what": "scripts/check-no-content.sh runs first in CI and first in ./test.sh and fails the build on three independent leak shapes: anything tracked under content/; content/ not being gitignored at all (checked with git check-ignore against a probe path, so the rule cannot silently lapse); and any tracked *.json that looks like content - an exercise carrying both \"statement\" and \"grading\", or a lesson carrying \"kind\":\"lesson\" or both \"statement\" and \"checks\".",
+      "why_interesting": "The licensing decision is only as good as its enforcement, and \"remember not to commit content\" is not enforcement. The second check is the interesting one: it does not check that content/ is absent, it checks that the ignore rule still exists, so the guard cannot be defeated by someone quietly editing .gitignore. The script has its own test file, so the guard is itself guarded.",
+      "enforcement": "test-level",
+      "gotchas": [
+        "The leak-shape grep is why the content-authoring tool's ProblemSpec format is deliberately not shaped like a real exercise JSON: a problem-spec fixture can never carry both \"statement\" and \"grading\", so committing one as a test resource cannot trip the guard."
+      ],
+      "confidence": "verified",
+      "interview_value": 4,
+      "interviewer_questions": [
+        {
+          "question": "\"Where is the content? This repo has no problems in it.\"",
+          "answer": "Correct, by design and by CI. A guard script fails the build on three independent leak shapes, including one that checks the gitignore rule still exists - and the guard has its own tests."
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "scripts/check-no-content.sh",
+          "line_start": 14,
+          "line_end": 61,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "scripts/check-no-content.test.sh",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "the guard's own tests, also run by ./test.sh"
+        },
+        {
+          "kind": "command",
+          "cmd": "./test.sh",
+          "output_excerpt": "OK: no private exercise content is committed to this repo.\nOK: check-no-content.sh flags exercise and lesson leaks, passes clean trees."
+        }
+      ]
+    },
+    {
+      "type": "mechanism",
+      "id": "m-complexity-honesty",
+      "title": "Empirical complexity measurement, and refusing to overclaim",
+      "what": "After a passing submission the solver states time and space complexity before the authored target is revealed, and the time claim is checked by timing the submission at growing input sizes and fitting a log-log regression. ComplexityBucket collapses the claim vocabulary to five buckets the measurement can actually discriminate - CONSTANT and LOGARITHMIC share SUBLINEAR, LINEAR and LINEARITHMIC share LINEAR.",
+      "why_interesting": "The bucket collapse is the honesty constraint expressed as a type rather than as a caution in the docs: a linear claim can never be contradicted by a linearithmic measurement because they are the same bucket. MeasurementOutcome is sealed Skipped | Inconclusive | Conclusive, so \"inconclusive\" is a first-class result and not an else-branch, and even Conclusive is never worded \"correct\" by the caller - only \"consistent with measurement\".",
+      "enforcement": "type-level",
+      "gotchas": [
+        "JIT dead-code elimination: a trivial loop's return value, if never consumed, can get the whole call eliminated by C2. The timing harness stashes every result into a static Object sink inside the timed window specifically to defeat this.",
+        "JIT/vectorisation warm-up: a cheap auto-vectorisable op can show its first few calls an order of magnitude slower than later ones. The harness makes untimed warm-up calls first, then takes the median (not min, not mean) across timed calls per size.",
+        "ScalingMeasurer is not a new Runner method - it is a different generated harness run through the same Runner.execute(), so it inherits the exact isolation and timeout every other execution gets."
+      ],
+      "confidence": "verified",
+      "interview_value": 4,
+      "interviewer_questions": [
+        {
+          "question": "\"Can you really measure complexity by timing?\"",
+          "answer": "Only coarsely, and the code says so. Buckets collapse O(n) and O(n log n) into one class so a claim can never be contradicted on a distinction timing cannot make, and \"inconclusive\" is a first-class result."
+        },
+        {
+          "question": "\"What is the hardest bug you hit?\"",
+          "answer": "The JIT eliminating the timed call as dead code, and vectorisation warm-up making the first calls an order of magnitude slower. Both only appeared in real execution; the fixes are a static sink inside the timed window and a median across timed calls after untimed warm-ups."
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/complexity/ComplexityBucket.java",
+          "line_start": 9,
+          "line_end": 28,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/complexity/MeasurementOutcome.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/complexity/ComplexityProperties.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "javadoc documents both JIT effects as found by real execution"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/complexity/ScalingMeasurer.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ]
+    },
+    {
+      "type": "mechanism",
+      "id": "m-three-derivations",
+      "title": "Three derivations over one attempt record, deliberately not merged",
+      "what": "LearnedCriterion (\"has this been retrieved to criterion?\"), RepDueService via Sm2Scheduler (\"is this rep due today?\") and ChallengePriority (\"what is the best use of 40 minutes today?\") all read the same attempt and submission history and never read each other. All three are recomputed on read; none is a stored row.",
+      "why_interesting": "The non-relationships matter as much as the relationships. Merging them looks like deduplication and is actually a category error - they answer three different questions and are tuned independently on purpose. Because everything is derived on read there is no second source of truth to drift, which is the whole answer to \"how do you keep spaced-repetition state consistent?\".",
+      "enforcement": "query-level",
+      "gotchas": [
+        "The objective competence signal is the SQL predicate outcome = 'PASSED', repeated across SubmissionRepository's queries. A self-check writes SELF_RATED and a lesson read writes no submission at all, so neither can ever satisfy that filter - the boundary is in the query, not in a caller's discipline.",
+        "challengeReviews' filter is one outcome wider than repReviews' (it includes EXPLAINED) because a self-check challenge never ends SOLVED or ABANDONED; omitting it would leave such a challenge permanently invisible to the scorer."
+      ],
+      "confidence": "verified",
+      "interview_value": 4,
+      "interviewer_questions": [
+        "\"How do you keep the spaced-repetition state consistent?\""
+      ],
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/attempt/SubmissionRepository.java",
+          "line_start": 122,
+          "line_end": 161,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "the outcome = 'PASSED' boundary, in two queries"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/learned/LearnedCriterion.java",
+          "line_start": 28,
+          "line_end": 28,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/challenge/ChallengeService.java",
+          "line_start": 149,
+          "line_end": 149,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/scheduler/ChallengePriority.java",
+          "line_start": 43,
+          "line_end": 52,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ]
+    },
+    {
+      "type": "boundary",
+      "id": "b-grader-runner",
+      "title": "Grader ⟂ Runner",
+      "a": "Grader (decides pass/fail)",
+      "b": "Runner (only executes)",
+      "enforced_by": "AnswerKeyGrader has no Runner field; SelfCheckGrader is a routed Grader bean with no runner and no verdict at all.",
+      "what_breaks_without_it": "\"Exercise\" silently starts meaning \"code\", and every concept question, lesson check and SQL query becomes a special case bolted on the side.",
+      "confidence": "verified",
+      "interview_value": 5,
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/grader/AnswerKeyGrader.java",
+          "line_start": 23,
+          "line_end": 27,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ]
+    },
+    {
+      "type": "boundary",
+      "id": "b-response-grading",
+      "title": "Response ⟂ Grading",
+      "a": "Response (how you answer)",
+      "b": "Grading (how you are judged)",
+      "enforced_by": "Two independent sealed interfaces. Response permits Code, Choice, FreeText, Query; Grading permits TestCases, AnswerKey, SelfCheck, ResultSet. Any pairing is expressible.",
+      "what_breaks_without_it": "Predict-output - write code, judged against a fixed answer - would need a special case instead of falling out of Code + AnswerKey.",
+      "confidence": "verified",
+      "interview_value": 4,
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/exercise/Response.java",
+          "line_start": 16,
+          "line_end": 70,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/exercise/Grading.java",
+          "line_start": 17,
+          "line_end": 80,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ]
+    },
+    {
+      "type": "boundary",
+      "id": "b-engine-content",
+      "title": "Engine ⟂ Content",
+      "a": "This public repository (the engine)",
+      "b": "swe-prep-content (statements, cases, solutions)",
+      "enforced_by": "scripts/check-no-content.sh, run first in CI and in ./test.sh, failing on three independent leak shapes - and it has its own tests.",
+      "what_breaks_without_it": "The copyright position the licensing decision was built to avoid, plus a public repo that cannot be shown.",
+      "confidence": "verified",
+      "interview_value": 4,
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "scripts/check-no-content.sh",
+          "line_start": 22,
+          "line_end": 26,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "the git check-ignore probe - the rule cannot silently lapse"
+        }
+      ]
+    },
+    {
+      "type": "boundary",
+      "id": "b-verdict-selfrating",
+      "title": "Machine verdict ⟂ self-rating",
+      "a": "Machine verdicts (Verdict.Outcome)",
+      "b": "Self-ratings and lesson reads",
+      "enforced_by": "SubmissionOutcome is a superset of Verdict.Outcome with SELF_RATED deliberately outside it, and every competence query filters on outcome = 'PASSED'.",
+      "what_breaks_without_it": "A self-rating could graduate an item through the learned criterion, and the readiness numbers would stop meaning anything.",
+      "confidence": "verified",
+      "interview_value": 5,
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/attempt/SubmissionOutcome.java",
+          "line_start": 17,
+          "line_end": 17,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/attempt/SubmissionRepository.java",
+          "line_start": 138,
+          "line_end": 138,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ]
+    },
+    {
+      "type": "edge",
+      "id": "e-suite-red",
+      "kind": "risk",
+      "title": "The suite is red at this commit, and the cause is a real bug",
+      "statement": "./test.sh fails at this SHA. ReadinessServiceTest.staleTopicsFlagsATopicNotTouchedRecentlyAndSkipsAnUntouchedOne expected 30 days and got 31. The cause is that ReadinessService takes an injected Clock but then calls LocalDate.now(zone) - the wall clock - for \"today\", instead of LocalDate.now(clock). Every other site in the codebase (SessionService, ChallengeService, RepDueService, DeterministicOptionShuffler) uses LocalDate.now(clock); readiness is the lone outlier, so the stale-topic day count is wall-clock dependent and the test only passes when run early enough in the day.",
+      "why_it_matters": "It is a one-line fix, and it is worth going first on because the whole point of the injected Clock bean is that day boundaries are testable. A reviewer who greps for LocalDate.now( finds it in about ten seconds.",
+      "how_to_say_it": "The suite is red at the commit I am showing you, and I know exactly why: readiness reads the wall clock where every other date-sensitive service reads the injected one. It is a one-line fix and I verified it - I would rather show you the commit with the bug in it and the diagnosis than a cherry-picked green one.",
+      "confidence": "verified",
+      "interview_value": 5,
+      "interviewer_questions": [
+        {
+          "question": "\"Does it build?\"",
+          "answer": "Not at this commit, and I know why: readiness reads the wall clock where every other date-sensitive service reads the injected one. 466 tests, 1 failure, 5 skipped. It is a one-line fix."
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/readiness/ReadinessService.java",
+          "line_start": 117,
+          "line_end": 117,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "command",
+          "cmd": "grep -rn 'LocalDate.now(' backend/src/main/java --include=*.java",
+          "output_excerpt": "DeterministicOptionShuffler.java:62: LocalDate.now(clock)\nSessionService.java:91: LocalDate.now(clock)\nreadiness/ReadinessService.java:117: LocalDate.now(zone)\nchallenge/ChallengeService.java:102: LocalDate.now(clock)\nreps/RepDueService.java:59: LocalDate.now(clock)"
+        },
+        {
+          "kind": "command",
+          "cmd": "./test.sh",
+          "output_excerpt": "[ERROR] Tests run: 466, Failures: 1, Errors: 0, Skipped: 5\n[INFO] BUILD FAILURE"
+        }
+      ]
+    },
+    {
+      "type": "edge",
+      "id": "e-issue-26-stale",
+      "kind": "divergence",
+      "title": "The tracker says the second language adapter is unbuilt; the code says otherwise",
+      "statement": "Issue #26 \"Second language adapter\" is still open. At this SHA the Python adapter, the Python runner, both registries and a submission.language migration are all present and tested. The issue is stale, not the code.",
+      "why_it_matters": "A decided-but-unbuilt probe that trusts the tracker alone would report this repository's single most important design claim as still unproven. The existence gate has to be able to overturn the record in both directions: a stated decision is not evidence of implementation, and an open ticket is not evidence of absence.",
+      "how_to_say_it": "The ticket for it is still open because I have not closed it, not because it is not built - the adapter, the runner, the registries and the migration all landed in the commit you are looking at.",
+      "confidence": "verified",
+      "interview_value": 4,
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 26,
+          "note": "state: open at read time"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/language/PythonLanguageAdapter.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "command",
+          "cmd": "git log --oneline -1",
+          "output_excerpt": "086c999 feat(language): add Python as a second language adapter (#80)"
+        }
+      ]
+    },
+    {
+      "type": "edge",
+      "id": "e-frontend-domain",
+      "kind": "unbuilt",
+      "title": "The front-end domain is decided and specified, and nothing is built",
+      "statement": "The abstraction decision names a Component response graded by a headless-browser runner with DOM assertions, and states plainly that the JSON-test-case model does not extend to it. Response permits Code, Choice, FreeText and Query at this SHA - there is no Component, no browser runner and no DOM grader.",
+      "why_it_matters": "This is the one place the language-neutral test-case model is admitted not to reach, and the decision says so rather than papering over it. The abstraction's obligation was to not foreclose front end, and it does not - but \"not foreclosed\" is a much weaker claim than \"supported\", and the difference is worth stating before someone asks.",
+      "how_to_say_it": "Front end is deliberately deferred and the reason is written down: auto-grading it needs a headless browser plus per-exercise DOM assertions, which is a different Grader and a different Runner, and building it would have pushed the first daily session out by a month.",
+      "confidence": "verified",
+      "interview_value": 5,
+      "interviewer_questions": [
+        {
+          "question": "\"What would you do next?\"",
+          "answer": "Front end - it is the one domain the JSON test-case model provably does not reach, it is specified, and it is the last named domain still unbuilt."
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 6,
+          "comment_id": 5181413478,
+          "note": "the domain table naming Component + headless browser"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/exercise/Response.java",
+          "line_start": 16,
+          "line_end": 16,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "permits Code, Choice, FreeText, Query - no Component"
+        }
+      ]
+    },
+    {
+      "type": "edge",
+      "id": "e-interview-soon",
+      "kind": "unbuilt",
+      "title": "\"Interview soon\" mode is decided and not built",
+      "statement": "The scheduling decision specifies a re-weighted challenge scoring function for the final fortnight before interviews, dropping the minimum-interval floor in favour of broad recency. Nothing matching it exists in backend/src or frontend/src.",
+      "why_it_matters": "It is called out in the decision as \"the difference between a tool that trains the captain and one that also prepares him for a specific date\" - the one piece of the scheduling decision that is about the actual deadline.",
+      "how_to_say_it": "The scheduler has the two halves the decision asked for; the interview-soon re-weighting is the third piece and it is not built. It is a different scoring function, not a different app, which is why it stayed cheap to defer.",
+      "confidence": "verified",
+      "interview_value": 3,
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 8,
+          "comment_id": 5182242970,
+          "note": "the \"Interview soon\" mode section of the resolution"
+        },
+        {
+          "kind": "command",
+          "cmd": "grep -rniE 'interview.?soon|interviewSoon|InterviewMode' backend/src frontend/src",
+          "output_excerpt": "(no matches)"
+        }
+      ]
+    },
+    {
+      "type": "edge",
+      "id": "e-jpa-divergence",
+      "kind": "divergence",
+      "title": "The build diverges from the written stack decision, and the record now says so",
+      "statement": "Decision #2 names Spring Boot 3.4.3 with Spring Data JPA and Lombok. The build is Boot 3.4.7 with spring-boot-starter-jdbc, JdbcClient and no Lombok. A follow-up comment on issue #2 records the divergence on the decision itself.",
+      "why_it_matters": "The queries here are read-shaped derivations over two tables, not object graphs, and records already gave the mapping - so the divergence is defensible. It is also a divergence from a written decision, and Spring Data JPA is what entry-level Java postings screen for, so both halves of the answer need to be ready.",
+      "how_to_say_it": "I decided JPA and shipped JdbcClient, and I wrote that down on the decision rather than quietly leaving the record wrong. Every query in this codebase is a read-shaped derivation, not an object graph, so the mapping layer had nothing to do.",
+      "confidence": "attested",
+      "interview_value": 4,
+      "interviewer_questions": [
+        {
+          "question": "\"Why not JPA?\"",
+          "answer": "Every query here is a read-shaped derivation over two tables, not an object graph, and records already gave the mapping. It is also a divergence from the written decision, which I recorded on the decision rather than leaving the record wrong."
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 2,
+          "comment_id": 5243059657
+        },
+        {
+          "kind": "file",
+          "path": "backend/pom.xml",
+          "line_start": 9,
+          "line_end": 37,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ]
+    },
+    {
+      "type": "edge",
+      "id": "e-unsandboxed-runner",
+      "kind": "tradeoff",
+      "title": "The runner is unsandboxed by design",
+      "statement": "A local subprocess with a timeout (sweprep.grader.timeout, default PT10S) and a 1 MB captured-output cap. No container, no resource limits beyond that.",
+      "why_it_matters": "This is sound because there is exactly one user running his own code, and the decision that makes it sound is written down along with what changes the moment the app is hosted. Runner being a small interface is the prepared answer to the follow-up.",
+      "how_to_say_it": "It is not arbitrary code - it is one user running his own, locally. Safety today is a timeout and an output cap, the decision to skip a sandbox is recorded with what changes if it is ever hosted, and a container runner is a bean swap because Runner is an interface.",
+      "confidence": "verified",
+      "interview_value": 5,
+      "interviewer_questions": [
+        {
+          "question": "\"You execute arbitrary code. How is that safe?\"",
+          "answer": "It is not arbitrary - one user, his own code, locally. Safety today is a timeout plus a 1 MB output cap; the decision to skip a sandbox is recorded with what changes if it is ever hosted, and a container runner is a bean swap."
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/runner/LocalProcessSupport.java",
+          "line_start": 32,
+          "line_end": 32,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "MAX_CAPTURED_BYTES = 1 MB, shared by both local runners"
+        },
+        {
+          "kind": "issue",
+          "number": 2,
+          "comment_id": 5181222288,
+          "note": "\"what actually gets expensive when hosted ... not the database - code execution\""
+        }
+      ]
+    },
+    {
+      "type": "edge",
+      "id": "e-recompute-on-read",
+      "kind": "tradeoff",
+      "title": "Recompute-on-read everywhere",
+      "statement": "Learned state, rep due dates, challenge priority, readiness and the streak (including its repair count) are all derived per request from attempt history rather than stored.",
+      "why_it_matters": "Correct at this scale and it removes any possibility of drift between a cached summary and the history it summarises. It is a scaling question if the corpus ever gets large, and \"there is exactly one user\" is the honest reason it is fine today.",
+      "how_to_say_it": "There is no spaced-repetition state to keep consistent, because there is no state - it is derived on read from the attempt history, so there is no second source of truth to drift.",
+      "confidence": "verified",
+      "interview_value": 4,
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/scheduler/RepSchedule.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "note": "javadoc argues the derived-on-read choice"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/session/StreakCalculator.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "interviewer_questions": [
+        {
+          "question": "\"How do you keep the spaced-repetition state consistent?\"",
+          "answer": "There is no state to keep consistent. Learned state, due dates, priority and the streak are all derived on read from the attempt history, so there is no second source of truth to drift."
+        }
+      ]
+    },
+    {
+      "type": "edge",
+      "id": "e-content-never-in-ci",
+      "kind": "coverage_gap",
+      "title": "The real content is never verified in CI",
+      "statement": "RealContentSmokeTest - the test that runs the answer-tell checker over the actual authored corpus - skips itself when no content clone is present, which is always the case in this repository's CI. The 5 skipped tests in the run above are exactly that.",
+      "why_it_matters": "It is deliberate: an expected content failure must not wedge the engine's CI. It does mean the content-quality gates, which are the output of five separate tickets, run only where a clone exists.",
+      "how_to_say_it": "A green suite is not evidence a named test ran. Those five skips are the content gates, and they are skipped by design - the argument for putting them in the content repo's own CI instead is the one I would make.",
+      "confidence": "verified",
+      "interview_value": 4,
+      "interviewer_questions": [
+        {
+          "question": "\"How do you know your own content is any good?\"",
+          "answer": "By measuring exploit rates against a 25% baseline, finding a 41.2% one, fixing it in code and re-measuring. The honest caveat is that those gates skip in this repo's CI - a green suite is not evidence a named test ran."
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "command",
+          "cmd": "./test.sh",
+          "output_excerpt": "[ERROR] Tests run: 466, Failures: 1, Errors: 0, Skipped: 5"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/test/java/com/sweprep/backend/content/RealContentSmokeTest.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ]
+    },
+    {
+      "type": "edge",
+      "id": "e-corpus-unauthored",
+      "kind": "coverage_gap",
+      "title": "The engine is built; the corpus it needs is not",
+      "statement": "Issues #43 (\"Author the AI/ML family, split by shelf life\") and #44 (\"Author the core and professional tranche, then the selected role families\") are both open. The authoring tooling that derives warm-up reps from a reference solution landed at this SHA; the content it is meant to produce has not been authored.",
+      "why_it_matters": "The planning map names content authoring as the most likely place this project stalls after the fun engineering is done, and the two open authoring tickets are that risk still standing. Naming your own project's biggest risk is a good answer, not a bad one.",
+      "how_to_say_it": "The engine is ahead of the corpus. The tooling to derive reps mechanically is built precisely because authoring five items per problem by hand is the thing that would have killed this.",
+      "confidence": "attested",
+      "interview_value": 3,
+      "interviewer_questions": [
+        "\"What would you do next?\""
+      ],
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 43,
+          "note": "state: open at read time"
+        },
+        {
+          "kind": "issue",
+          "number": 44,
+          "note": "state: open at read time"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/authoring/RepDeriver.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ]
+    },
+    {
+      "type": "edge",
+      "id": "e-surefire-pin",
+      "kind": "tradeoff",
+      "title": "A machine-specific workaround is pinned in the build",
+      "statement": "backend/pom.xml sets an api.version system property for Surefire because Testcontainers' Docker connectivity probe hardcodes an old API version that this dev machine's Docker Engine rejects outright. It is confirmed unnecessary on GitHub's hosted runners and kept anyway.",
+      "why_it_matters": "It looks like stray config and is not. Knowing why a workaround exists before someone asks about it is the difference between a defensible build file and an unexplained one.",
+      "how_to_say_it": "That property is a Testcontainers probe workaround for this box's Docker Engine, it is harmless where it is not needed, and it is documented in the project notes rather than left to be discovered.",
+      "confidence": "verified",
+      "interview_value": 2,
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/pom.xml",
+          "line_start": 99,
+          "line_end": 110,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ]
+    },
+    {
+      "type": "flow",
+      "id": "fl-submission",
+      "title": "One submission, end to end",
+      "caption": "The coding path. A multiple-choice rep takes the same route and stops at GraderRegistry: AnswerKeyGrader has no Runner dependency at all, so the whole lower half of this picture never runs. The git commit at the end is deliberately outside the database transaction.",
+      "confidence": "verified",
+      "interview_value": 5,
+      "steps": [
+        {
+          "id": "editor",
+          "node": "Monaco editor",
+          "detail": "Practice.tsx / Warmup.tsx",
+          "calls_next": [
+            "controller"
+          ],
+          "edge_label": "POST",
+          "evidence": {
+            "kind": "file",
+            "path": "frontend/src/Practice.tsx",
+            "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+          }
+        },
+        {
+          "id": "controller",
+          "node": "AttemptController",
+          "detail": "POST /{id}/submissions",
+          "calls_next": [
+            "service"
+          ],
+          "evidence": {
+            "kind": "file",
+            "path": "backend/src/main/java/com/sweprep/backend/web/AttemptController.java",
+            "line_start": 55,
+            "line_end": 57,
+            "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+          }
+        },
+        {
+          "id": "service",
+          "node": "AttemptService.submit",
+          "detail": "short DB transaction",
+          "calls_next": [
+            "registry",
+            "commit"
+          ],
+          "evidence": {
+            "kind": "file",
+            "path": "backend/src/main/java/com/sweprep/backend/attempt/AttemptService.java",
+            "line_start": 141,
+            "line_end": 150,
+            "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+          }
+        },
+        {
+          "id": "catalog",
+          "node": "FileExerciseCatalog",
+          "detail": "*.json from sweprep.content.path\\l(gitignored clone of the PRIVATE repo)\\llazy + cached",
+          "calls_next": [
+            "service"
+          ],
+          "edge_label": "exercise (never in this repo)",
+          "evidence": {
+            "kind": "file",
+            "path": "backend/src/main/java/com/sweprep/backend/content/FileExerciseCatalog.java",
+            "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+          }
+        },
+        {
+          "id": "registry",
+          "node": "GraderRegistry",
+          "detail": "routes by supports()",
+          "calls_next": [
+            "testcase"
+          ],
+          "edge_label": "grade()",
+          "evidence": {
+            "kind": "file",
+            "path": "backend/src/main/java/com/sweprep/backend/grader/GraderRegistry.java",
+            "line_start": 34,
+            "line_end": 55,
+            "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+          }
+        },
+        {
+          "id": "testcase",
+          "node": "TestCaseGrader",
+          "detail": "AnswerKey / SelfCheck / SqlQuery\\lstop here - no code runner",
+          "calls_next": [
+            "adapter"
+          ],
+          "evidence": {
+            "kind": "file",
+            "path": "backend/src/main/java/com/sweprep/backend/grader/TestCaseGrader.java",
+            "line_start": 147,
+            "line_end": 167,
+            "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+          }
+        },
+        {
+          "id": "adapter",
+          "node": "LanguageAdapterRegistry",
+          "detail": "java | python -> generateHarness(Signature)\\lstub + harness, generated",
+          "calls_next": [
+            "runner"
+          ],
+          "edge_label": "harness + cases.json",
+          "evidence": {
+            "kind": "file",
+            "path": "backend/src/main/java/com/sweprep/backend/language/LanguageAdapterRegistry.java",
+            "line_start": 24,
+            "line_end": 50,
+            "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+          }
+        },
+        {
+          "id": "runner",
+          "node": "RunnerRegistry -> LocalJavaRunner",
+          "detail": "javac + java, subprocess\\ltimeout PT10S, 1 MB output cap\\lresults.json: its own channel",
+          "calls_next": [
+            "comparison"
+          ],
+          "edge_label": "results.json",
+          "evidence": {
+            "kind": "file",
+            "path": "backend/src/main/java/com/sweprep/backend/runner/LocalJavaRunner.java",
+            "line_start": 38,
+            "line_end": 38,
+            "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+          }
+        },
+        {
+          "id": "comparison",
+          "node": "Comparison rule",
+          "detail": "exact | orderInsensitive | setEquality\\lJsonEquality compares by magnitude",
+          "calls_next": [
+            "verdict"
+          ],
+          "evidence": {
+            "kind": "file",
+            "path": "backend/src/main/java/com/sweprep/backend/exercise/Comparison.java",
+            "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+          }
+        },
+        {
+          "id": "verdict",
+          "node": "Verdict",
+          "detail": "PASSED | FAILED | TIMEOUT\\lCOMPILE_ERROR | ERROR\\lruntimeMillis: display only",
+          "calls_next": [
+            "submission"
+          ],
+          "kind": "response",
+          "evidence": {
+            "kind": "file",
+            "path": "backend/src/main/java/com/sweprep/backend/grader/Verdict.java",
+            "line_start": 22,
+            "line_end": 38,
+            "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+          }
+        },
+        {
+          "id": "submission",
+          "node": "Submission row",
+          "detail": "+ attempt SOLVED on first pass\\lPostgres, Flyway V3 + V8 language",
+          "calls_next": [
+            "response"
+          ],
+          "kind": "response",
+          "evidence": {
+            "kind": "file",
+            "path": "backend/src/main/resources/db/migration/V3__attempts.sql",
+            "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+          }
+        },
+        {
+          "id": "commit",
+          "node": "SolutionCommitService",
+          "detail": "AFTER the transaction: JGit commit + push\\linto the private content clone\\lnever throws - degrades to a skip",
+          "kind": "aside",
+          "evidence": {
+            "kind": "file",
+            "path": "backend/src/main/java/com/sweprep/backend/commit/SolutionCommitService.java",
+            "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+          }
+        },
+        {
+          "id": "response",
+          "node": "RunResponse",
+          "detail": "\"N of M passed\"\\l+ explanation if wrong\\l+ solutionCommitted",
+          "kind": "response",
+          "evidence": {
+            "kind": "file",
+            "path": "backend/src/main/java/com/sweprep/backend/web/RunResponse.java",
+            "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+          }
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/attempt/AttemptService.java",
+          "line_start": 141,
+          "line_end": 150,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "orientation": "TB"
+    },
+    {
+      "type": "flow",
+      "id": "fl-derivations",
+      "title": "Three derivations over one record, and what each is blind to",
+      "caption": "None of the three reads either of the others. The competence signal is filtered in SQL, not in a caller - which is why a self-rating and a lesson read are structurally invisible to it.",
+      "confidence": "verified",
+      "interview_value": 4,
+      "steps": [
+        {
+          "id": "attempt",
+          "node": "attempt + submission",
+          "detail": "Postgres, Flyway V3-V8\\lthe only stored state",
+          "calls_next": [
+            "learned",
+            "repdue",
+            "priority"
+          ]
+        },
+        {
+          "id": "learned",
+          "node": "LearnedCriterion",
+          "detail": "\"retrieved to criterion?\"\\lreads outcome = 'PASSED' only",
+          "edge_label": "PASSED rows",
+          "kind": "response"
+        },
+        {
+          "id": "repdue",
+          "node": "RepDueService -> Sm2Scheduler",
+          "detail": "\"is this rep due today?\"\\lreads SOLVED | ABANDONED reps",
+          "edge_label": "terminal rep attempts",
+          "kind": "response"
+        },
+        {
+          "id": "priority",
+          "node": "ChallengePriority",
+          "detail": "\"best use of 40 minutes?\"\\lreads SOLVED | ABANDONED | EXPLAINED",
+          "edge_label": "terminal challenge attempts",
+          "kind": "response"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/attempt/SubmissionRepository.java",
+          "line_start": 122,
+          "line_end": 161,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ]
+    }
+  ],
+  "record": {
+    "sources": [
+      {
+        "source": "GitHub issue resolution comments",
+        "what_existed": "9 closed decision issues, each with exactly one resolution-shaped comment (3.0-5.7 KB)",
+        "fetched": "in full via gh api .../issues/{n}/comments",
+        "admissible_as": "attested"
+      },
+      {
+        "source": "Issue bodies",
+        "what_existed": "48 non-PR issues (41 closed, 7 open)",
+        "fetched": "in full",
+        "admissible_as": "attested (the question, not the answer)"
+      },
+      {
+        "source": "Code at the pinned SHA",
+        "what_existed": "180 main + 64 test Java files, 19 frontend files",
+        "fetched": "read locally at 086c999",
+        "admissible_as": "verified"
+      },
+      {
+        "source": "Command output",
+        "what_existed": "./test.sh, git log, targeted greps",
+        "fetched": "run in a clean worktree at the pin",
+        "admissible_as": "verified"
+      },
+      {
+        "source": "AGENTS.md (project memory, 77.7 KB)",
+        "what_existed": "one file, symlinked as CLAUDE.md",
+        "fetched": "indexed for navigation only",
+        "admissible_as": "not admissible - navigation, never evidence"
+      }
+    ],
+    "density_signals": {
+      "closed_issues_with_resolution_shaped_comments": {
+        "value": 9,
+        "of": 41,
+        "note": "closed non-PR issues carrying a comment beginning '## Resolution:'"
+      },
+      "comment_to_body_length_ratio": {
+        "value": 3.31,
+        "note": "mean resolution-comment length / issue-body length over the nine decision issues (39,057 bytes of resolution text in total); a ratio near zero is the decision-poor signal"
+      },
+      "source_files_citing_issue_numbers": {
+        "value": 144,
+        "of": 180,
+        "note": "main Java files matching 'issue #N' - an unusually exploitable cross-reference signal"
+      },
+      "adr_directory_present": {
+        "value": false,
+        "note": "no docs/, adr/ or docs/adr/ - the decision record lives entirely in the issue tracker"
+      }
+    },
+    "section_presence": {
+      "synopsis": "present",
+      "facts": "present",
+      "shape": "present",
+      "flows": "present",
+      "decisions": "present",
+      "mechanisms": "present",
+      "edges": "present"
+    },
+    "confidence_ledger": {
+      "verified": 21,
+      "attested": 9,
+      "absent_cut": 2
+    },
+    "absent_cuts": [
+      {
+        "id": "cut-agent-assisted",
+        "candidate_type": "edge",
+        "reason": "No admissible evidence at this SHA. All 47 commits are authored by the repository owner with no co-author trailers and no generated-with markers; the only supporting artifact is AGENTS.md, which is project memory and is indexed, never quoted as evidence.",
+        "note": "Content deliberately not reproduced here. A hedged claim is worse than an absent one."
+      },
+      {
+        "id": "cut-sm2-intervals",
+        "candidate_type": "fact",
+        "reason": "The claim named specific SM-2 interval lengths after a run of correct reviews. The mechanism is in the code; the arithmetic was not traced to an executed output, so the numbers have no command or file evidence.",
+        "note": "Content deliberately not reproduced here."
+      }
+    ],
+    "deletions": [
+      {
+        "id": "m-answer-tells",
+        "score": 3.8,
+        "reason": "section budget: deep dives capped at 5 by the interview profile; ranked sixth"
+      },
+      {
+        "id": "m-option-shuffler",
+        "score": 1.9,
+        "reason": "below the interview_value floor of 3"
+      },
+      {
+        "id": "m-warmup-interleaving",
+        "score": 2.4,
+        "reason": "below the interview_value floor of 3"
+      },
+      {
+        "id": "f-endpoint-inventory",
+        "score": 1.2,
+        "reason": "below the interview_value floor of 3; reference material, explicitly bottom-marked by the rubric"
+      },
+      {
+        "id": "f-package-tour",
+        "score": 1.0,
+        "reason": "below the interview_value floor of 3; the annotated tree carries the same information"
+      }
+    ],
+    "budgets": {
+      "mechanisms": 5,
+      "interviewer_questions": 10,
+      "interview_value_floor": 3
+    },
+    "audit": {
+      "status": "not_run",
+      "note": "This artifact was produced by the render-stage prototype. The audit stage (#2) did not run over it."
+    }
+  }
+}

@@ -1,0 +1,1120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/Atlas",
+  "definitions": {
+    "Atlas": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string"
+        },
+        "generated_at": {
+          "type": "string"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "rubric_version": {
+          "type": "string"
+        },
+        "subject": {
+          "$ref": "#/definitions/Subject"
+        },
+        "synopsis": {
+          "$ref": "#/definitions/Synopsis"
+        },
+        "shape": {
+          "$ref": "#/definitions/Shape"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AtlasNode"
+          }
+        },
+        "record": {
+          "$ref": "#/definitions/AtlasRecord"
+        }
+      },
+      "required": [
+        "schema_version",
+        "generated_at",
+        "profile",
+        "rubric_version",
+        "subject",
+        "synopsis",
+        "shape",
+        "nodes",
+        "record"
+      ],
+      "additionalProperties": false
+    },
+    "Subject": {
+      "type": "object",
+      "properties": {
+        "owner": {
+          "type": "string"
+        },
+        "repo": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "sha": {
+          "type": "string",
+          "description": "The full 40-char pinned SHA every claim in the artifact resolves against."
+        },
+        "read_on": {
+          "type": "string"
+        },
+        "visibility": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner",
+        "repo",
+        "url",
+        "branch",
+        "sha",
+        "read_on",
+        "visibility"
+      ],
+      "additionalProperties": false
+    },
+    "Synopsis": {
+      "type": "object",
+      "properties": {
+        "statement": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Evidence"
+          }
+        }
+      },
+      "required": [
+        "statement",
+        "evidence"
+      ],
+      "additionalProperties": false,
+      "description": "The product sentence and the annotated tree are metadata carrying their own evidence, not a seventh node type (#7): they need evidence and ranking immunity, and widening the node contract buys nothing else."
+    },
+    "Evidence": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/FileEvidence"
+        },
+        {
+          "$ref": "#/definitions/IssueEvidence"
+        },
+        {
+          "$ref": "#/definitions/CommandEvidence"
+        }
+      ]
+    },
+    "FileEvidence": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "file"
+        },
+        "path": {
+          "type": "string"
+        },
+        "line_start": {
+          "type": "number",
+          "description": "1-based, inclusive."
+        },
+        "line_end": {
+          "type": "number",
+          "description": "1-based, inclusive. Omitted for a single-line citation."
+        },
+        "sha": {
+          "type": "string",
+          "description": "Must equal the run's pinned SHA - asserted in `links.ts` and again by audit L5."
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "path",
+        "sha"
+      ],
+      "additionalProperties": false,
+      "description": "A file in the subject tree, pinned to a SHA, optionally to a line range."
+    },
+    "IssueEvidence": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "issue"
+        },
+        "number": {
+          "type": "number"
+        },
+        "comment_id": {
+          "type": "number"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "number"
+      ],
+      "additionalProperties": false,
+      "description": "An issue or one comment on it. `comment_id` is load-bearing: an issue body and its resolution comment are different artifacts (#3), and the audit has to be able to tell two comments on one issue apart (#8, L3)."
+    },
+    "CommandEvidence": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "command"
+        },
+        "cmd": {
+          "type": "string"
+        },
+        "output_excerpt": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "cmd",
+        "output_excerpt"
+      ],
+      "additionalProperties": false,
+      "description": "A command run against the pinned tree, with the output that was captured."
+    },
+    "Shape": {
+      "type": "object",
+      "properties": {
+        "tree": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Evidence"
+          }
+        }
+      },
+      "required": [
+        "tree",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "AtlasNode": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/DecisionNode"
+        },
+        {
+          "$ref": "#/definitions/MechanismNode"
+        },
+        {
+          "$ref": "#/definitions/BoundaryNode"
+        },
+        {
+          "$ref": "#/definitions/EdgeNode"
+        },
+        {
+          "$ref": "#/definitions/FactNode"
+        },
+        {
+          "$ref": "#/definitions/FlowNode"
+        }
+      ]
+    },
+    "DecisionNode": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable within a run; used verbatim as the rendered element id."
+        },
+        "title": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Evidence"
+          }
+        },
+        "confidence": {
+          "$ref": "#/definitions/Confidence"
+        },
+        "interview_value": {
+          "type": "number",
+          "description": "0-5. The only pure-judgement field; scored by the rank stage under a versioned rubric (#9)."
+        },
+        "probe_id": {
+          "type": "string",
+          "description": "Provenance of the probe that proposed this node, where one did (#5)."
+        },
+        "interviewer_questions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/InterviewerQuestion"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "decision"
+        },
+        "question": {
+          "type": "string"
+        },
+        "decision": {
+          "type": "string"
+        },
+        "why": {
+          "type": "string"
+        },
+        "rejected": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RejectedAlternative"
+          }
+        },
+        "rejected_absent_from_record": {
+          "type": "boolean"
+        },
+        "status": {
+          "$ref": "#/definitions/DecisionStatus"
+        },
+        "implemented_by": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Evidence"
+          },
+          "description": "Where the decision is actually built. Empty for `decided_not_built` (#8, E2)."
+        },
+        "divergence": {
+          "type": "string"
+        },
+        "soundbite": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "confidence",
+        "decision",
+        "evidence",
+        "id",
+        "implemented_by",
+        "interview_value",
+        "question",
+        "rejected",
+        "soundbite",
+        "status",
+        "title",
+        "type",
+        "why"
+      ],
+      "additionalProperties": false,
+      "description": "A question that was argued and closed.\n\n`rejected[]` uses explicit-absence semantics (#3): either it is populated, or `rejected_absent_from_record` is true. The renderer never invents an alternative, and \"decided without recording an alternative\" must stay distinguishable from \"no decision record at all\"."
+    },
+    "Confidence": {
+      "type": "string",
+      "enum": [
+        "verified",
+        "attested",
+        "absent"
+      ],
+      "description": "The three-level confidence gate (#3).\n\n- `verified`: traces to a file at the pinned SHA, or to captured command output.\n- `attested`: traces to a primary issue/comment record.\n- `absent`:   no admissible evidence. Cut outright at render, never hedged."
+    },
+    "InterviewerQuestion": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "question": {
+              "type": "string"
+            },
+            "answer": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "question",
+            "answer"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "A question this node answers, phrased as an interviewer would ask it.\n\nA bare string means \"answered by this node's own short answer\" (a Decision's soundbite, an Edge's how_to_say_it, ...). The object form binds an explicit answer, and is REQUIRED whenever a node answers a question other than its own (#7 amendment (a)): a Decision's soundbite answers that decision's question, not every question the decision touches. Without it the Q&A fold produces fluent, confidently wrong rows."
+    },
+    "RejectedAlternative": {
+      "type": "object",
+      "properties": {
+        "alternative": {
+          "type": "string"
+        },
+        "why_it_lost": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "alternative",
+        "why_it_lost"
+      ],
+      "additionalProperties": false
+    },
+    "DecisionStatus": {
+      "type": "string",
+      "enum": [
+        "decided",
+        "decided_and_built",
+        "decided_not_built",
+        "superseded"
+      ]
+    },
+    "MechanismNode": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable within a run; used verbatim as the rendered element id."
+        },
+        "title": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Evidence"
+          }
+        },
+        "confidence": {
+          "$ref": "#/definitions/Confidence"
+        },
+        "interview_value": {
+          "type": "number",
+          "description": "0-5. The only pure-judgement field; scored by the rank stage under a versioned rubric (#9)."
+        },
+        "probe_id": {
+          "type": "string",
+          "description": "Provenance of the probe that proposed this node, where one did (#5)."
+        },
+        "interviewer_questions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/InterviewerQuestion"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "mechanism"
+        },
+        "what": {
+          "type": "string"
+        },
+        "why_interesting": {
+          "type": "string"
+        },
+        "enforcement": {
+          "$ref": "#/definitions/Enforcement"
+        },
+        "gotchas": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "code_excerpt": {
+          "$ref": "#/definitions/CodeExcerpt"
+        }
+      },
+      "required": [
+        "confidence",
+        "enforcement",
+        "evidence",
+        "gotchas",
+        "id",
+        "interview_value",
+        "title",
+        "type",
+        "what",
+        "why_interesting"
+      ],
+      "additionalProperties": false
+    },
+    "Enforcement": {
+      "type": "string",
+      "enum": [
+        "type-level",
+        "query-level",
+        "test-level",
+        "convention"
+      ],
+      "description": "How a mechanism is held in place. The enum is the interesting part."
+    },
+    "CodeExcerpt": {
+      "type": "object",
+      "properties": {
+        "language": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/definitions/Evidence"
+        }
+      },
+      "required": [
+        "language",
+        "text",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "BoundaryNode": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable within a run; used verbatim as the rendered element id."
+        },
+        "title": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Evidence"
+          }
+        },
+        "confidence": {
+          "$ref": "#/definitions/Confidence"
+        },
+        "interview_value": {
+          "type": "number",
+          "description": "0-5. The only pure-judgement field; scored by the rank stage under a versioned rubric (#9)."
+        },
+        "probe_id": {
+          "type": "string",
+          "description": "Provenance of the probe that proposed this node, where one did (#5)."
+        },
+        "interviewer_questions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/InterviewerQuestion"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "boundary"
+        },
+        "a": {
+          "type": "string"
+        },
+        "b": {
+          "type": "string"
+        },
+        "enforced_by": {
+          "type": "string"
+        },
+        "what_breaks_without_it": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "a",
+        "b",
+        "confidence",
+        "enforced_by",
+        "evidence",
+        "id",
+        "interview_value",
+        "title",
+        "type",
+        "what_breaks_without_it"
+      ],
+      "additionalProperties": false
+    },
+    "EdgeNode": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable within a run; used verbatim as the rendered element id."
+        },
+        "title": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Evidence"
+          }
+        },
+        "confidence": {
+          "$ref": "#/definitions/Confidence"
+        },
+        "interview_value": {
+          "type": "number",
+          "description": "0-5. The only pure-judgement field; scored by the rank stage under a versioned rubric (#9)."
+        },
+        "probe_id": {
+          "type": "string",
+          "description": "Provenance of the probe that proposed this node, where one did (#5)."
+        },
+        "interviewer_questions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/InterviewerQuestion"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "edge"
+        },
+        "kind": {
+          "$ref": "#/definitions/EdgeKind"
+        },
+        "statement": {
+          "type": "string"
+        },
+        "why_it_matters": {
+          "type": "string"
+        },
+        "how_to_say_it": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "confidence",
+        "evidence",
+        "how_to_say_it",
+        "id",
+        "interview_value",
+        "kind",
+        "statement",
+        "title",
+        "type",
+        "why_it_matters"
+      ],
+      "additionalProperties": false
+    },
+    "EdgeKind": {
+      "type": "string",
+      "enum": [
+        "unbuilt",
+        "tradeoff",
+        "risk",
+        "divergence",
+        "coverage_gap"
+      ],
+      "description": "`coverage_gap` carries #6's \"trace without resolution\" case: a source citing a bare issue number with nothing in the record explaining it. It is reported as referenced-but-unresolved, never synthesised into a rationale."
+    },
+    "FactNode": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable within a run; used verbatim as the rendered element id."
+        },
+        "title": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Evidence"
+          }
+        },
+        "confidence": {
+          "$ref": "#/definitions/Confidence"
+        },
+        "interview_value": {
+          "type": "number",
+          "description": "0-5. The only pure-judgement field; scored by the rank stage under a versioned rubric (#9)."
+        },
+        "probe_id": {
+          "type": "string",
+          "description": "Provenance of the probe that proposed this node, where one did (#5)."
+        },
+        "interviewer_questions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/InterviewerQuestion"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "fact"
+        },
+        "label": {
+          "type": "string",
+          "description": "Stat-tile caption, distinct from `title` (#7 amendment (c))."
+        },
+        "value": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "command",
+            "file",
+            "issue"
+          ]
+        }
+      },
+      "required": [
+        "confidence",
+        "evidence",
+        "id",
+        "interview_value",
+        "label",
+        "source",
+        "title",
+        "type",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "FlowNode": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable within a run; used verbatim as the rendered element id."
+        },
+        "title": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Evidence"
+          }
+        },
+        "confidence": {
+          "$ref": "#/definitions/Confidence"
+        },
+        "interview_value": {
+          "type": "number",
+          "description": "0-5. The only pure-judgement field; scored by the rank stage under a versioned rubric (#9)."
+        },
+        "probe_id": {
+          "type": "string",
+          "description": "Provenance of the probe that proposed this node, where one did (#5)."
+        },
+        "interviewer_questions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/InterviewerQuestion"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "flow"
+        },
+        "caption": {
+          "type": "string"
+        },
+        "orientation": {
+          "type": "string",
+          "enum": [
+            "LR",
+            "TB"
+          ],
+          "description": "Reading direction handed to the layout engine (#7 amendment (b)). Not a coordinate: the engine still does every placement."
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FlowStep"
+          }
+        }
+      },
+      "required": [
+        "confidence",
+        "evidence",
+        "id",
+        "interview_value",
+        "steps",
+        "title",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "FlowStep": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "calls_next": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "edge_label": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "request",
+            "response",
+            "aside"
+          ],
+          "description": "Drives edge colour, never position."
+        },
+        "evidence": {
+          "$ref": "#/definitions/Evidence"
+        }
+      },
+      "required": [
+        "id",
+        "node"
+      ],
+      "additionalProperties": false
+    },
+    "AtlasRecord": {
+      "type": "object",
+      "properties": {
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SourceRecord"
+          }
+        },
+        "density_signals": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/DensitySignal"
+          }
+        },
+        "section_presence": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/SectionPresence"
+          }
+        },
+        "confidence_ledger": {
+          "$ref": "#/definitions/ConfidenceLedger"
+        },
+        "absent_cuts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AbsentCut"
+          }
+        },
+        "deletions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Deletion"
+          }
+        },
+        "budgets": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Applied by the rank stage, reported by the renderer. Includes `interview_value_floor`."
+        },
+        "private_source": {
+          "$ref": "#/definitions/PrivateSourceRecord"
+        },
+        "audit": {
+          "$ref": "#/definitions/AuditRecord"
+        }
+      },
+      "required": [
+        "sources",
+        "density_signals",
+        "section_presence",
+        "confidence_ledger",
+        "absent_cuts",
+        "deletions",
+        "budgets",
+        "audit"
+      ],
+      "additionalProperties": false,
+      "description": "A profile is a named bundle of (rubric + section budgets) (#9). v1 ships `interview`; the seam is this reference plus the recorded budgets."
+    },
+    "SourceRecord": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "what_existed": {
+          "type": "string"
+        },
+        "fetched": {
+          "type": "string"
+        },
+        "admissible_as": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "what_existed",
+        "fetched",
+        "admissible_as"
+      ],
+      "additionalProperties": false
+    },
+    "DensitySignal": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": [
+            "number",
+            "boolean"
+          ]
+        },
+        "of": {
+          "type": "number"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "additionalProperties": false,
+      "description": "The four density signals (#6), recorded separately and never collapsed into a scalar: a scalar could contradict extraction in either direction."
+    },
+    "SectionPresence": {
+      "type": "string",
+      "enum": [
+        "present",
+        "partial",
+        "absent"
+      ]
+    },
+    "ConfidenceLedger": {
+      "type": "object",
+      "properties": {
+        "verified": {
+          "type": "number"
+        },
+        "attested": {
+          "type": "number"
+        },
+        "absent_cut": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "verified",
+        "attested",
+        "absent_cut"
+      ],
+      "additionalProperties": false
+    },
+    "AbsentCut": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "candidate_type": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "candidate_type",
+        "reason"
+      ],
+      "additionalProperties": false,
+      "description": "A candidate cut for want of evidence. The claim text is deliberately NOT carried here for rendering: The record reports count + type + why the evidence failed, and withholds the claim (#7 ruling `absent-cut-disclosure`)."
+    },
+    "Deletion": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "score",
+        "reason"
+      ],
+      "additionalProperties": false,
+      "description": "A node deleted by the rank stage: floor or section budget, always recorded (#9)."
+    },
+    "PrivateSourceRecord": {
+      "type": "object",
+      "properties": {
+        "declared": {
+          "type": "boolean"
+        },
+        "repo": {
+          "type": "string"
+        },
+        "readable_at_harvest": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "declared",
+        "readable_at_harvest"
+      ],
+      "additionalProperties": false,
+      "description": "Whether the subject declares a public/private split, and whether harvest could read the private side. This drives the three-state applicability of audit check P1 (#8): a check that could not run must say so by name, never silently."
+    },
+    "AuditRecord": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "#/definitions/AuditStatus"
+        },
+        "failure_kind": {
+          "type": "string",
+          "enum": [
+            "gate",
+            "precondition"
+          ],
+          "description": "`precondition` when the clone/SHA/worktree preconditions failed (#8, section 3)."
+        },
+        "content_hash": {
+          "type": "string",
+          "description": "sha256 of the artifact with the audit slot's content replaced by the fixed placeholder."
+        },
+        "audited_at": {
+          "type": "string"
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AuditCheckResult"
+          }
+        },
+        "viewports": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "description": "The declared viewport matrix the layout checks ran at (#8, point 11)."
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "AuditStatus": {
+      "type": "string",
+      "enum": [
+        "not_run",
+        "passed",
+        "passed_with_warnings",
+        "failed"
+      ]
+    },
+    "AuditCheckResult": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Register id: S1-S4, L1-L5, G1-G3, E1-E2, P1, V1-V3, M1-M2."
+        },
+        "name": {
+          "type": "string"
+        },
+        "class": {
+          "$ref": "#/definitions/AuditCheckClass"
+        },
+        "outcome": {
+          "$ref": "#/definitions/AuditCheckOutcome"
+        },
+        "count": {
+          "type": "number",
+          "description": "What the check measured, for the counts-not-adjectives wording."
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "One line per finding. Warnings are enumerated in full, never summarised (#8)."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why the check did not run, when outcome is `not_applicable` or `not_run`."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "class",
+        "outcome"
+      ],
+      "additionalProperties": false,
+      "description": "One entry of the twenty-check register (#8, section 4)."
+    },
+    "AuditCheckClass": {
+      "type": "string",
+      "enum": [
+        "gate",
+        "warning"
+      ]
+    },
+    "AuditCheckOutcome": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "not_applicable",
+        "not_run"
+      ]
+    }
+  }
+}

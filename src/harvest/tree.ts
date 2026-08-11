@@ -67,6 +67,71 @@ const countLines = (text: string): number => {
 };
 
 /**
+ * Does a source file cite an issue number *in a comment*? (#6, signal 3)
+ *
+ * The signal renders as a measured density figure, so it must count only what it
+ * claims: a `#N` that a human wrote in a comment to reference an issue, not any
+ * `#`-then-digits token anywhere in the bytes. The match is deliberately a
+ * legible heuristic rather than a parser:
+ *
+ * - The `#N` must sit in a comment, keyed off the marker for the file's language
+ *   family (`//`, `/*` or a leading `*` for C-family; `#` for Python/Ruby; `--`
+ *   or `/*` for SQL). A `#2` in a bare string in a C-family file is not counted.
+ * - A `#` run of 3, 4, 6 or 8 hex characters is a colour (`#333`, `#1e1e1e`) and
+ *   is never a citation.
+ * - A `#` immediately preceded by a quote or `=` is an anchor or attribute value
+ *   (`href="#404"`) and is never a citation.
+ */
+const C_FAMILY = /\.(java|ts|tsx|js|jsx|go|rs|kt|scala|c|cc|cpp|h|hpp|cs|php)$/i;
+const HASH_FAMILY = /\.(py|rb)$/i;
+const SQL_FAMILY = /\.sql$/i;
+const CITATION_TOKEN = /#[0-9A-Za-z]+/g;
+const HEX_COLOR_LENGTHS = new Set([3, 4, 6, 8]);
+
+const commentStart = (line: string, path: string): number => {
+  const marks: number[] = [];
+  const at = (needle: string): void => {
+    const i = line.indexOf(needle);
+    if (i !== -1) marks.push(i);
+  };
+  const leadingStar = (): void => {
+    const m = /^\s*\*/.exec(line);
+    if (m) marks.push(m[0].length - 1);
+  };
+  if (C_FAMILY.test(path)) {
+    at("//");
+    at("/*");
+    leadingStar();
+  } else if (HASH_FAMILY.test(path)) {
+    at("#");
+  } else if (SQL_FAMILY.test(path)) {
+    at("--");
+    at("/*");
+    leadingStar();
+  }
+  return marks.length === 0 ? -1 : Math.min(...marks);
+};
+
+const citesIssue = (text: string, path: string): boolean => {
+  for (const line of text.split("\n")) {
+    const start = commentStart(line, path);
+    if (start === -1) continue;
+    CITATION_TOKEN.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = CITATION_TOKEN.exec(line)) !== null) {
+      if (m.index < start) continue;
+      const rest = m[0].slice(1);
+      if (!/^\d+$/.test(rest)) continue;
+      if (HEX_COLOR_LENGTHS.has(rest.length) && /^[0-9A-Fa-f]+$/.test(rest)) continue;
+      const before = m.index > 0 ? line[m.index - 1] : "";
+      if (before === '"' || before === "'" || before === "=") continue;
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
  * One pass over the source tree.
  *
  * The line count (#7 scale) and the issue-citation count (#6 signal 3) both need
@@ -89,7 +154,7 @@ export const scanSource = (repo: string, sha: string): SourceScan => {
   for (const path of files) {
     const text = blob(repo, sha, path);
     lines += countLines(text ?? "");
-    if (text !== null && /(?:^|[^\w])#\d+/.test(text)) citing += 1;
+    if (text !== null && citesIssue(text, path)) citing += 1;
   }
   return { files: files.length, lines, citing };
 };
@@ -245,7 +310,7 @@ export const detectPrivateSplit = (
 export const subjectRemote = (repo: string): string | null => {
   try {
     const url = git(repo, ["remote", "get-url", "origin"]).trim();
-    const m = /github\.com[:/]([^/]+\/[^/.]+)(?:\.git)?$/.exec(url);
+    const m = /github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?\/?$/.exec(url);
     return m?.[1] ?? null;
   } catch {
     return null;

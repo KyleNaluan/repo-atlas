@@ -36,6 +36,7 @@ import {
   isSourceFile,
   measureScale,
   ShallowCloneError,
+  subjectRemote,
 } from "../../src/harvest/tree.js";
 import { listComments } from "../../src/harvest/gh.js";
 import type { HarvestedIssue } from "../../src/harvest/types.js";
@@ -307,6 +308,36 @@ describe("scale and density from the pinned tree", () => {
   it("counts source files citing an issue, over source files only", () => {
     const counted = countSourceFilesCitingIssues(repo.path, repo.sha);
     expect(counted).toEqual({ citing: 1, of: 2 });
+  });
+
+  it("counts only genuine issue citations, not colours, anchors, or bare strings", () => {
+    const cited = buildRepo({
+      "colour.ts": 'const bg = "#000000";\nconst fg = "#333";\nexport { bg, fg };\n',
+      "anchor.ts": 'const link = <a href="#404">home</a>;\nexport { link };\n',
+      "comment.ts": "export const g = () => {};\n// fixes #12, see the resolution\n",
+      "string.ts": 'const label = "issue #2 is unrelated to this string";\nexport { label };\n',
+    });
+    const counted = countSourceFilesCitingIssues(cited.path, cited.sha);
+    expect(counted).toEqual({ citing: 1, of: 4 });
+  });
+
+  it("auto-detects the subject repository, keeping interior dots and stripping .git", () => {
+    const dotted = buildRepo({ "a.ts": "export {};\n" });
+    execFileSync(
+      "git",
+      ["remote", "add", "origin", "https://github.com/owner/foo.github.io.git"],
+      { cwd: dotted.path, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    expect(subjectRemote(dotted.path)).toBe("owner/foo.github.io");
+  });
+
+  it("returns null when the origin remote is not a GitHub URL", () => {
+    const other = buildRepo({ "a.ts": "export {};\n" });
+    execFileSync("git", ["remote", "add", "origin", "https://gitlab.com/owner/repo.git"], {
+      cwd: other.path,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    expect(subjectRemote(other.path)).toBeNull();
   });
 
   it("finds an ADR directory when there is one", () => {

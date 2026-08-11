@@ -12,16 +12,20 @@
  */
 import type { Candidate, Probe } from "../types.js";
 import { pathSlug, slug } from "../id.js";
-import { enclosingTypeNames, endLineOf, findAll, lineOf, nameOf, parseJava } from "../java.js";
+import {
+  directoryOf,
+  enclosingTypeNames,
+  endLineOf,
+  findAll,
+  lineOf,
+  nameOf,
+  parseJava,
+} from "../java.js";
 
-/** Types in the same directory are the sibling set worth comparing. */
-const directory = (path: string): string => {
-  // A repo-root file has no slash; `lastIndexOf` returns -1 and a bare slice
-  // would drop the final character, stranding each root class in its own bogus
-  // one-member directory instead of the shared root.
-  const slash = path.lastIndexOf("/");
-  return slash === -1 ? "" : path.slice(0, slash);
-};
+// Types in the same directory are the sibling set this probe compares. The
+// definition is shared with throw-where-siblings-return via `directoryOf`, so
+// the two probes cannot quietly disagree about what a directory sibling is.
+const directory = directoryOf;
 
 export const dependencyAsymmetry: Probe = {
   id: "dependency-asymmetry",

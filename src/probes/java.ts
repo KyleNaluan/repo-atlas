@@ -119,6 +119,73 @@ export const enclosingTypeNames = (node: SyntaxNode): string[] => {
   return names;
 };
 
+/** The nearest enclosing type declaration of a node, or null if it is top-level. */
+export const enclosingTypeNode = (node: SyntaxNode): SyntaxNode | null => {
+  for (let cur = node.parent; cur; cur = cur.parent) {
+    if (TYPE_DECLARATION.test(cur.type)) return cur;
+  }
+  return null;
+};
+
+/** The simple name of a type node, stripping generic arguments and package path. */
+const baseTypeName = (type: SyntaxNode): string | null => {
+  if (type.type === "type_identifier") return type.text;
+  if (type.type === "scoped_type_identifier") {
+    const parts = type.text.split(".");
+    return parts[parts.length - 1] ?? null;
+  }
+  if (type.type === "generic_type") {
+    const base = type.namedChild(0);
+    return base ? baseTypeName(base) : null;
+  }
+  return null;
+};
+
+const SUPERTYPE_CLAUSES = new Set(["superclass", "super_interfaces", "extends_interfaces"]);
+
+/**
+ * The simple names of the types a declaration extends or implements.
+ *
+ * Reads the `superclass`, `super_interfaces` and `extends_interfaces` clauses,
+ * so `class A extends Base implements Runner` yields {Base, Runner}. Generic and
+ * package-qualified supertypes collapse to their simple name (`Comparable`, not
+ * `java.lang.Comparable<A>`), which is what a sibling comparison keys on.
+ */
+export const supertypeNamesOf = (type: SyntaxNode): Set<string> => {
+  const names = new Set<string>();
+  for (let i = 0; i < type.namedChildCount; i += 1) {
+    const clause = type.namedChild(i);
+    if (!clause || !SUPERTYPE_CLAUSES.has(clause.type)) continue;
+    for (let j = 0; j < clause.namedChildCount; j += 1) {
+      const child = clause.namedChild(j);
+      if (!child) continue;
+      const types =
+        child.type === "type_list"
+          ? Array.from({ length: child.namedChildCount }, (_, k) => child.namedChild(k))
+          : [child];
+      for (const t of types) {
+        const name = t ? baseTypeName(t) : null;
+        if (name) names.add(name);
+      }
+    }
+  }
+  return names;
+};
+
+/**
+ * The directory a file sits in - the peer set two structural probes agree on.
+ *
+ * A repo-root file has no slash; `lastIndexOf` returns -1 and a bare slice would
+ * drop the final character, stranding each root class in its own bogus one-member
+ * directory instead of the shared root. Both `dependency-asymmetry` and
+ * `throw-where-siblings-return` compare "siblings", and they must not quietly
+ * disagree about what a directory sibling is, so the definition lives here once.
+ */
+export const directoryOf = (path: string): string => {
+  const slash = path.lastIndexOf("/");
+  return slash === -1 ? "" : path.slice(0, slash);
+};
+
 /** 1-based line of a node, for evidence line ranges. */
 export const lineOf = (node: SyntaxNode): number => node.startPosition.row + 1;
 

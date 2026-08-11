@@ -449,6 +449,61 @@ describe("throw-where-siblings-return", () => {
     });
     expect(await candidatesFrom("throw-where-siblings-return", ctx)).toEqual([]);
   }, 60_000);
+
+  it("does not pair two unrelated types that merely share a method name", async () => {
+    // A refusing iterator() in one hierarchy and a returning iterator() in an
+    // unrelated one share no supertype and no directory. They are not siblings,
+    // so pairing them would assert a seam between types that share no contract -
+    // a fabricated relationship the bounded sibling set exists to refuse.
+    const ctx = contextFor({
+      "x/A.java": "class A { Object iterator() { throw new UnsupportedOperationException(); } }\n",
+      "y/B.java": "class B { Object iterator() { return null; } }\n",
+    });
+    expect(await candidatesFrom("throw-where-siblings-return", ctx)).toEqual([]);
+  }, 60_000);
+
+  it("pairs implementations of a shared supertype even across directories", async () => {
+    // The shared shape is what makes the asymmetry a design: one Grader refuses
+    // where its fellow Graders return. The supertype binds them even though they
+    // live in different directories.
+    const ctx = contextFor({
+      "a/Self.java": "class Self implements Grader { Object grade() { throw new UnsupportedOperationException(); } }\n",
+      "b/AnswerKey.java": "class AnswerKey implements Grader { Object grade() { return null; } }\n",
+      "c/TestCase.java": "class TestCase implements Grader { Object grade() { return this; } }\n",
+    });
+    const found = await candidatesFrom("throw-where-siblings-return", ctx);
+    expect(found).toHaveLength(1);
+    expect(found[0]!.node.title).toContain("Self.grade");
+    // Two sibling implementations return, and the count reflects that.
+    expect(found[0]!.node.type === "mechanism" && found[0]!.node.what).toContain("2 other");
+  }, 60_000);
+
+  it("pairs directory peers when neither declares a supertype", async () => {
+    // With no supertype to key on, the sibling set falls back to the directory -
+    // the same peer notion dependency-asymmetry uses, so the two probes agree.
+    const ctx = contextFor({
+      "g/One.java": "class One { String run() { return \"a\"; } }\n",
+      "g/Two.java": "class Two { String run() { return \"b\"; } }\n",
+      "g/Three.java": "class Three { String run() { throw new UnsupportedOperationException(); } }\n",
+    });
+    const found = await candidatesFrom("throw-where-siblings-return", ctx);
+    expect(found).toHaveLength(1);
+    expect(found[0]!.node.title).toContain("Three.run");
+  }, 60_000);
+
+  it("does not treat a class's own overload as its sibling", async () => {
+    // One class whose overloads differ in refusing-vs-returning may be a real
+    // finding, but it is not the one this probe makes: a type is never its own
+    // sibling, and the title would say "siblings" of something with none.
+    const ctx = contextFor({
+      "one/X.java":
+        "class X {\n" +
+        "  void f() { throw new UnsupportedOperationException(); }\n" +
+        "  String f(int i) { return \"x\"; }\n" +
+        "}\n",
+    });
+    expect(await candidatesFrom("throw-where-siblings-return", ctx)).toEqual([]);
+  }, 60_000);
 });
 
 describe("dependency-asymmetry", () => {
@@ -618,6 +673,7 @@ describe("tuned-config-properties", () => {
     const found = await candidatesFrom("tuned-config-properties", ctx);
     expect(found).toHaveLength(1);
     const ev = found[0]!.node.evidence[0]!;
+    if (ev.kind !== "file") throw new Error("expected file evidence");
     expect(ev.line_start).toBe(1);
     expect(ev.line_end).toBe(3);
     expect(ev.note).toBe("We measured this under load. Found that PT10S is the sweet spot.");
@@ -638,6 +694,7 @@ describe("tuned-config-properties", () => {
     const found = await candidatesFrom("tuned-config-properties", ctx);
     expect(found).toHaveLength(1);
     const ev = found[0]!.node.evidence[0]!;
+    if (ev.kind !== "file") throw new Error("expected file evidence");
     expect(ev.line_start).toBe(3);
     expect(ev.line_end).toBe(4);
     expect(ev.note).toBe("measured: 10s is the p99 under load");

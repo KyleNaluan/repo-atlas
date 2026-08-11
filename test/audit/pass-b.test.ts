@@ -36,6 +36,8 @@ import type {
 } from "../../src/schema/types.js";
 import type { AuditContext } from "../../src/audit/types.js";
 import { buildSyntheticSubject } from "./subject.js";
+import { issueStore } from "../../src/audit/issue-store.js";
+import { cacheFor } from "./issue-cache.js";
 import { BROWSER_MUTANTS } from "../mutants/browser.js";
 
 const hasBrowser = browserAvailable();
@@ -334,7 +336,39 @@ describeBrowser("the whole deterministic suite", () => {
     expect(GATES).toHaveLength(15);
     const unrun = outcome.checks.filter((c) => c.outcome === "not_run");
     expect(unrun.map((c) => c.id).sort()).toEqual(["L3", "M1", "M2"]);
-    for (const c of unrun) expect(c.reason).toMatch(/not built in this version/);
+    // Both passes are built; this invocation was handed neither an issue source
+    // nor a model, so the reason is that they did not run - not that they do not
+    // exist. Saying "not built" once a pass is built is the same lie in the
+    // other direction.
+    for (const c of unrun) expect(c.reason).toMatch(/did not run in this invocation/);
+  }, 240_000);
+
+  it("runs pass C when given issues, and passes D over it when given no model", async () => {
+    const outcome = await runAudit(ctx, { artifactPath, issues: issueStore(cacheFor(ctx.atlas)) });
+    expect(outcome.checks.find((c) => c.id === "L3")?.outcome).toBe("passed");
+    for (const id of ["M1", "M2"]) {
+      expect(outcome.checks.find((c) => c.id === id)?.reason).toMatch(
+        /did not run in this invocation/,
+      );
+    }
+    expect(outcome.notes.some((n) => /served from the harvest cache/.test(n))).toBe(true);
+    expect(outcome.status).toBe("passed");
+  }, 240_000);
+
+  it("ships the artifact even when every model verdict is against it", async () => {
+    // The end-to-end form of the property pass D's own tests establish in
+    // isolation: warnings from the model change the wording of the statement and
+    // never the ship decision.
+    const outcome = await runAudit(ctx, {
+      artifactPath,
+      issues: issueStore(cacheFor(ctx.atlas)),
+      model: { judge: async () => ({ supported: false, note: "overclaims" }), resolve: () => "evidence text" },
+    });
+    expect(outcome.status).toBe("passed_with_warnings");
+    expect(outcome.failure_kind).toBeUndefined();
+    for (const id of ["M1", "M2"]) {
+      expect(outcome.checks.find((c) => c.id === id)?.outcome).toBe("failed");
+    }
   }, 240_000);
 
   it("does not launch a browser when pass A already failed", async () => {

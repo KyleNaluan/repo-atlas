@@ -23,11 +23,28 @@ export class GhError extends Error {
   constructor(
     message: string,
     readonly args: string[],
+    /**
+     * The HTTP status, when gh reported one. Present so a caller can tell "this
+     * does not exist" from "I could not ask" - the difference between a false
+     * citation and a failed precondition, which is a distinction the audit is
+     * not allowed to guess at.
+     */
+    readonly status?: number,
   ) {
     super(message);
     this.name = "GhError";
   }
 }
+
+/**
+ * gh prints `gh: Not Found (HTTP 404)` on stderr; that is the only status it
+ * gives. Exported because it is a parse of another tool's output, which is the
+ * kind of thing that stops working quietly.
+ */
+export const statusOf = (stderr: string): number | undefined => {
+  const m = /\(HTTP (\d{3})\)/.exec(stderr);
+  return m ? Number(m[1]) : undefined;
+};
 
 /** 64 MB: a single issue thread cannot approach this, and a silent truncation could. */
 const MAX_BUFFER = 64 * 1024 * 1024;
@@ -61,6 +78,7 @@ export const ghApi = async <T>(path: string, options: GhOptions = {}): Promise<T
     throw new GhError(
       `gh api ${path} failed: ${stderr.trim() || (cause as Error).message}`,
       args,
+      statusOf(stderr),
     );
   }
 };
@@ -89,6 +107,10 @@ export interface GhComment {
 
 export const listIssues = (repo: string): Promise<GhIssue[]> =>
   ghApi<GhIssue[]>(`repos/${repo}/issues?state=all&per_page=100`, { paginate: true });
+
+/** One issue by number. Used on a cache miss, so a citation is never left unchecked. */
+export const getIssue = (repo: string, issue: number): Promise<GhIssue> =>
+  ghApi<GhIssue>(`repos/${repo}/issues/${issue}`);
 
 export const listComments = (repo: string, issue: number): Promise<GhComment[]> =>
   ghApi<GhComment[]>(`repos/${repo}/issues/${issue}/comments?per_page=100`, { paginate: true });

@@ -165,7 +165,11 @@ describe("pass A on a clean artifact", () => {
     expect(outcome.checks.find((c) => c.id === "S2")?.reason).toMatch(
       /did not run in this invocation/,
     );
-    expect(outcome.checks.find((c) => c.id === "M1")?.reason).toMatch(/not built in this version/);
+    // Same rule for the model pass now that it exists: it did not run here
+    // because audit() is the static entry point, not because it is unbuilt.
+    expect(outcome.checks.find((c) => c.id === "M1")?.reason).toMatch(
+      /did not run in this invocation/,
+    );
   });
 });
 

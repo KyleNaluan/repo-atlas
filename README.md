@@ -10,7 +10,7 @@ Anything that could not be traced is cut, not hedged.
 On a repository with no decision record, the artifact says so - it never reconstructs a decision trail from commit archaeology.
 
 **Status: under construction.** The complete v1 design is closed on this tracker: issues [#1](https://github.com/KyleNaluan/repo-atlas/issues/1)-[#10](https://github.com/KyleNaluan/repo-atlas/issues/10), each with a binding `## Resolution:` comment recording the decision, the why, and the rejected alternatives.
-This build ships the `atlas.json` contract, the harvest stage, the probe library and its existence gate, the model scorer and the rank stage's deterministic half, the render stage, and the audit's deterministic passes with its stamp; the run orchestrator and the remaining extraction stages land stage by stage.
+This build ships the `atlas.json` contract, the harvest stage, the probe library and its existence gate, the model scorer and the rank stage's deterministic half, the render stage, and the full audit - its deterministic passes and the advisory model pass - with its stamp; the run orchestrator and the remaining extraction stages land stage by stage.
 
 ```
 npx repo-atlas harvest --clone ../subject -o harvest.json
@@ -103,6 +103,10 @@ File citations resolve locally with `git cat-file` at the pinned SHA rather than
 
 Pass B loads the artifact in a headless browser with the network disabled, which is what makes "exactly one request" mean anything, and measures layout, clipping and WCAG AA contrast at 390 / 768 / 1280 / 1440 with every collapsible section forced open.
 Screenshots are kept as artifacts *of* the audit, never as inputs *to* a check: no model is asked whether the page looks right, because a model asked that says yes and no fixture can prove such a check works.
+
+Pass C resolves every issue and comment citation cache-first: harvest already fetched each body and comment at full fidelity, so the network is reached only for an id the cache does not hold, and a citation to an issue that does not exist - a 404 - is a false claim, while an unreachable GitHub is a precondition the pass could not check rather than a verdict about the artifact.
+Pass D is the model, and it can only ever add warnings: it asks whether a node's prose says more than its own evidence establishes (M1) and whether an absence claim's citation actually witnesses the absence (M2).
+A model that is unreachable or dies mid-sweep reports as not run, never as a failure, because making the ship decision depend on model availability is the non-reproducibility the audit design rejected; `--no-model` skips the pass outright and its checks report as not run.
 
 The audit asserts its preconditions before any check runs - clone present, HEAD equal to the pinned SHA, worktree clean, and a browser available for pass B - and a missing precondition is its own failure, never a pass and never a silent skip.
 

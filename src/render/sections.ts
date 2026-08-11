@@ -584,6 +584,10 @@ export const sectionRecord = (atlas: Atlas, surviving: AtlasNode[]): Safe => {
   const tally = confidenceTally(surviving);
   const r = atlas.record;
   const floor = r.budgets["interview_value_floor"];
+  // A trimmed question is a deletion, but not a deleted node. Count the two apart
+  // so the record does not report a trimmed question as a node the rank stage cut.
+  const nodeCuts = r.deletions.filter((d) => d.unit !== "question");
+  const questionCuts = r.deletions.filter((d) => d.unit === "question");
   return html`
     <section id="record">
       <h2><span class="n">08</span>${chrome`The record`}</h2>
@@ -607,7 +611,7 @@ export const sectionRecord = (atlas: Atlas, surviving: AtlasNode[]): Safe => {
           <div class="lab">${chrome`cut: no evidence`}</div>
         </div>
         <div class="cell">
-          <div class="num v-cut">${r.deletions.length}</div>
+          <div class="num v-cut">${nodeCuts.length}</div>
           <div class="lab">${chrome`cut: rank / budget`}</div>
         </div>
         <div class="cell">
@@ -723,8 +727,8 @@ export const sectionRecord = (atlas: Atlas, surviving: AtlasNode[]): Safe => {
 
       <h4>${chrome`What was cut for want of value`}</h4>
       <p class="small muted">
-        ${chrome`${r.deletions.length} ${plural(r.deletions.length, "node", "nodes")} scored and
-        deleted by the rank stage${floor === undefined ? "" : `: a hard floor at interview_value ${floor}, plus per-section budgets`}.
+        ${chrome`${nodeCuts.length} ${plural(nodeCuts.length, "node", "nodes")} scored and
+        deleted by the rank stage${floor === undefined ? "" : `: a hard floor at interview_value ${floor}, plus per-section budgets`}${questionCuts.length === 0 ? "" : `, and ${questionCuts.length} ${plural(questionCuts.length, "interviewer question", "interviewer questions")} trimmed from surviving nodes to fit the same budgets`}.
         Every deletion is recorded in <code>atlas.json</code> with its id, score and reason, so the
         ruthlessness is auditable and the renderer cannot quietly resurrect a deleted node.`}
       </p>
@@ -732,13 +736,14 @@ export const sectionRecord = (atlas: Atlas, surviving: AtlasNode[]): Safe => {
         <summary>${chrome`The deletion record (${r.deletions.length})`}</summary>
         <div class="tbl"><table>
           <thead><tr>
-            <th>${chrome`Node`}</th><th>${chrome`Score`}</th><th>${chrome`Reason`}</th>
+            <th>${chrome`Cut`}</th><th>${chrome`Unit`}</th><th>${chrome`Score`}</th><th>${chrome`Reason`}</th>
           </tr></thead>
           <tbody>
             ${join(
               r.deletions.map(
                 (d, i) => html`<tr>
                   <td><code>${d.id}</code></td>
+                  <td class="small">${d.unit ?? "node"}</td>
                   <td>${d.score}</td>
                   <td class="small muted">${prose(d.reason, recordProv(`deletions[${i}].reason`))}</td>
                 </tr>`,

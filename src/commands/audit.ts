@@ -95,14 +95,19 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
   }
 
   console.log(`audit ${artifactPath} against ${atlasPath} at ${ctx.atlas.subject.sha}`);
-  // Only the pre-check preconditions (clone missing, HEAD mismatch, dirty tree)
-  // stop the run before any check; those carry problems and report here. A check
-  // that aborted mid-run is a precondition-class failure too, but its checks ran,
-  // so it prints through the normal check list below rather than short-circuiting.
+  // Two precondition shapes, told apart structurally rather than by message text.
+  // A PRE-FLIGHT failure (clone missing, HEAD mismatch, dirty tree) stopped the
+  // run before any check, so every check is not_run and the problems are all there
+  // is to report. A MID-RUN pass failure threw after pass A had produced real
+  // results; runAudit preserved those and named the pass B checks not_run with the
+  // cause, so the report below is printed alongside the problems. The audit says
+  // what it established and what it did not - printing only the one-line failure
+  // when eight gates actually ran is the same silence #6 forbids elsewhere.
+  const anyCheckRan = outcome.checks.some((c) => c.outcome !== "not_run");
   if (outcome.preconditions.length > 0) {
     console.error("failed: precondition");
     for (const p of outcome.preconditions) console.error(`  - ${p}`);
-    return 78; // EX_CONFIG
+    if (!anyCheckRan) return 78; // EX_CONFIG - nothing ran; nothing to report
   }
   for (const note of outcome.notes) console.log(`  note  ${note}`);
   for (const c of outcome.checks) console.log(line(c));
@@ -117,6 +122,11 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
   for (const shot of outcome.screenshots ?? []) {
     console.log(`  shot  ${shot}`);
   }
+
+  // A mid-run precondition failure printed its full report above; the run still
+  // did not establish what it set out to, so it exits 78 like the pre-flight case
+  // rather than falling through to the gate-count summary.
+  if (outcome.preconditions.length > 0) return 78; // EX_CONFIG
 
   const gatesPassed = outcome.checks.filter(
     (c) => c.class === "gate" && c.outcome === "passed",

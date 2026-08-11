@@ -429,27 +429,27 @@ describe("scores arrive through one seam, whatever produced them", () => {
   };
 
   it("attaches a score and its justification to each node", () => {
-    const [s] = scoresFromFile(file, INTERVIEW)([mechanism("a")]);
+    const [s] = scoresFromFile(file, INTERVIEW, rubricText(INTERVIEW))([mechanism("a")]);
     expect(s).toMatchObject({ score: 4, because: "a decision with a recorded alternative" });
   });
 
   it("refuses to rank a node nobody scored", () => {
     // An unscored node is not a zero. Ranking it as one would delete it while
     // the deletion record claimed it had been weighed.
-    expect(() => scoresFromFile(file, INTERVIEW)([mechanism("a"), mechanism("b")])).toThrow(
-      MissingScoreError,
-    );
+    expect(() =>
+      scoresFromFile(file, INTERVIEW, rubricText(INTERVIEW))([mechanism("a"), mechanism("b")]),
+    ).toThrow(MissingScoreError);
   });
 
   it("refuses to mix two rubric versions in one ranking", () => {
     const stale: ScoreFile = { ...file, rubric_version: "v0" };
-    expect(() => scoresFromFile(stale, INTERVIEW)).toThrow(RubricMismatchError);
+    expect(() => scoresFromFile(stale, INTERVIEW, rubricText(INTERVIEW))).toThrow(RubricMismatchError);
   });
 
   it("refuses scores produced under a different profile", () => {
     // A profile bundles a rubric with its budgets. The field is a guarantee, so
     // it is enforced like rubric_version rather than left as unchecked metadata.
     const other: ScoreFile = { ...file, profile: "onboarding" };
-    expect(() => scoresFromFile(other, INTERVIEW)).toThrow(ProfileMismatchError);
+    expect(() => scoresFromFile(other, INTERVIEW, rubricText(INTERVIEW))).toThrow(ProfileMismatchError);
   });
 });

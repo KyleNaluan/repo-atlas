@@ -10,7 +10,7 @@ Anything that could not be traced is cut, not hedged.
 On a repository with no decision record, the artifact says so - it never reconstructs a decision trail from commit archaeology.
 
 **Status: under construction.** The complete v1 design is closed on this tracker: issues [#1](https://github.com/KyleNaluan/repo-atlas/issues/1)-[#10](https://github.com/KyleNaluan/repo-atlas/issues/10), each with a binding `## Resolution:` comment recording the decision, the why, and the rejected alternatives.
-This build ships the `atlas.json` contract, the harvest stage, the probe library and its existence gate, the model scorer and the rank stage's deterministic half, the render stage, and the full audit - its deterministic passes and the advisory model pass - with its stamp; the run orchestrator and the remaining extraction stages land stage by stage.
+This build ships the `atlas.json` contract, the harvest stage, the probe library and its existence gate, the model scorer and the rank stage's deterministic half, the assemble stage that joins a run into the `atlas.json` contract, the render stage, and the full audit - its deterministic passes and the advisory model pass - with its stamp; the run orchestrator and the remaining extraction stages land stage by stage.
 
 ```
 npx repo-atlas harvest --clone ../subject -o harvest.json
@@ -30,6 +30,7 @@ The mechanical stages are plain deterministic code; only `score` and `audit` cal
 | `gate` | confirm each candidate against the tree, in both directions | [#5](https://github.com/KyleNaluan/repo-atlas/issues/5), [#7](https://github.com/KyleNaluan/repo-atlas/issues/7) |
 | `score` | score `interview_value` with a model under the versioned rubric, one call for the whole graph | [#2](https://github.com/KyleNaluan/repo-atlas/issues/2), [#9](https://github.com/KyleNaluan/repo-atlas/issues/9) |
 | `rank` | delete by floor and budget under the pinned scores | [#9](https://github.com/KyleNaluan/repo-atlas/issues/9) |
+| `assemble` | join harvest, gate and rank into one `atlas.json`, validated closed - adds no claim of its own | [#3](https://github.com/KyleNaluan/repo-atlas/issues/3), [#6](https://github.com/KyleNaluan/repo-atlas/issues/6) |
 | `render` | `atlas.json` -> one self-contained HTML artifact | [#7](https://github.com/KyleNaluan/repo-atlas/issues/7) |
 | `audit` | twenty checks, fifteen hard gates; stamps its own result into the artifact | [#8](https://github.com/KyleNaluan/repo-atlas/issues/8) |
 | `validate` | check an `atlas.json` against the generated JSON Schema, fail closed | [#3](https://github.com/KyleNaluan/repo-atlas/issues/3) |

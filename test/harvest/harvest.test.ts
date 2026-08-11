@@ -340,6 +340,32 @@ describe("scale and density from the pinned tree", () => {
     expect(subjectRemote(other.path)).toBeNull();
   });
 
+  it("counts multi-digit issue citations, which a colour-length rule silently dropped", () => {
+    // #10 names `#190`, `#114`, `#222` and `#459` as the sharpest test of the
+    // honest-degradation subject: bare citations with nothing in the record
+    // explaining them. An exclusion keyed on digit-run length (3, 4, 6 or 8, the
+    // hex-colour lengths) rejected every one of them, because the decimal test
+    // above already runs first - so that branch could only ever reject real
+    // citations. The cost is a rare `// palette #333` counted as a citation,
+    // which is a far smaller error than reporting zero decision-trail citations
+    // on the subject chosen to exercise them.
+    const cited = buildRepo({
+      "a.java": "class A {}\n// look at variable declaration why this line exists and #190\n",
+      "b.java": "class B {}\n// see #114 and #1234\n",
+      "c.java": "class C {}\n// see #26\n",
+    });
+    expect(countSourceFilesCitingIssues(cited.path, cited.sha)).toEqual({ citing: 3, of: 3 });
+  });
+
+  it("still excludes the shapes that are never citations", () => {
+    const noise = buildRepo({
+      "colour.ts": "export const c = '#1e1e1e';\n// swatch #1e1e1e\n",
+      "anchor.ts": '// see <a href="#404">the anchor</a>\n',
+      "string.ts": 'const s = "#2 in a string";\n',
+    });
+    expect(countSourceFilesCitingIssues(noise.path, noise.sha)).toEqual({ citing: 0, of: 3 });
+  });
+
   it("finds an ADR directory when there is one", () => {
     expect(findAdrDirectory(repo.path, repo.sha)).toBe("docs/adr");
   });

@@ -77,8 +77,14 @@ const countLines = (text: string): number => {
  * - The `#N` must sit in a comment, keyed off the marker for the file's language
  *   family (`//`, `/*` or a leading `*` for C-family; `#` for Python/Ruby; `--`
  *   or `/*` for SQL). A `#2` in a bare string in a C-family file is not counted.
- * - A `#` run of 3, 4, 6 or 8 hex characters is a colour (`#333`, `#1e1e1e`) and
- *   is never a citation.
+ * - A token containing a hex letter is a colour (`#1e1e1e`), never a citation.
+ *   There is deliberately NO exclusion by digit-run length: an all-digit token of
+ *   length 3, 4, 6 or 8 could be a colour (`#333`) but is far more often an issue
+ *   number, and excluding those lengths silently dropped `#190`, `#114`, `#222`
+ *   and `#459` - the bare citations #10 names as the sharpest test of the
+ *   honest-degradation subject. A rare `// palette #333` counted as a citation is
+ *   a small over-count; dropping every three-digit issue number is a false
+ *   negative in the signal that decides how much decision record a repo has.
  * - A `#` immediately preceded by a quote or `=` is an anchor or attribute value
  *   (`href="#404"`) and is never a citation.
  */
@@ -86,7 +92,6 @@ const C_FAMILY = /\.(java|ts|tsx|js|jsx|go|rs|kt|scala|c|cc|cpp|h|hpp|cs|php)$/i
 const HASH_FAMILY = /\.(py|rb)$/i;
 const SQL_FAMILY = /\.sql$/i;
 const CITATION_TOKEN = /#[0-9A-Za-z]+/g;
-const HEX_COLOR_LENGTHS = new Set([3, 4, 6, 8]);
 
 const commentStart = (line: string, path: string): number => {
   const marks: number[] = [];
@@ -121,8 +126,9 @@ const citesIssue = (text: string, path: string): boolean => {
     while ((m = CITATION_TOKEN.exec(line)) !== null) {
       if (m.index < start) continue;
       const rest = m[0].slice(1);
+      // Decimal only: a token carrying a hex letter is a colour, not an issue
+      // number, and this test already excludes it.
       if (!/^\d+$/.test(rest)) continue;
-      if (HEX_COLOR_LENGTHS.has(rest.length) && /^[0-9A-Fa-f]+$/.test(rest)) continue;
       const before = m.index > 0 ? line[m.index - 1] : "";
       if (before === '"' || before === "'" || before === "=") continue;
       return true;

@@ -11,8 +11,8 @@
  * productions, and a grep would match the type name in imports and comments.
  */
 import type { Candidate, Probe } from "../types.js";
-import { pathSlug } from "../id.js";
-import { endLineOf, findAll, lineOf, nameOf, parseJava } from "../java.js";
+import { pathSlug, slug } from "../id.js";
+import { enclosingTypeNames, endLineOf, findAll, lineOf, nameOf, parseJava } from "../java.js";
 
 /** Types in the same directory are the sibling set worth comparing. */
 const directory = (path: string): string => path.slice(0, path.lastIndexOf("/"));
@@ -31,13 +31,14 @@ export const dependencyAsymmetry: Probe = {
       for (const decl of findAll(root, "class_declaration")) {
         const name = nameOf(decl);
         if (name === null) continue;
+        const fullName = [...enclosingTypeNames(decl), name].join(".");
         const fields = new Set<string>();
         for (const field of findAll(decl, "field_declaration")) {
           const type = field.childForFieldName("type")?.text;
           if (type) fields.add(type.replace(/<.*>$/, ""));
         }
         const list = byDir.get(directory(path)) ?? [];
-        list.push({ path, name, fields, line: [lineOf(decl), endLineOf(decl)] });
+        list.push({ path, name: fullName, fields, line: [lineOf(decl), endLineOf(decl)] });
         byDir.set(directory(path), list);
       }
     }
@@ -57,7 +58,7 @@ export const dependencyAsymmetry: Probe = {
           probe_id: "dependency-asymmetry",
           node: {
             type: "boundary",
-            id: `b-asymmetry-${pathSlug(odd.path)}-${odd.name}-${type}`,
+            id: `b-asymmetry-${pathSlug(odd.path)}-${slug(odd.name)}-${slug(type)}`,
             title: `${odd.name} holds no ${type}, and every sibling does`,
             a: odd.name,
             b: type,

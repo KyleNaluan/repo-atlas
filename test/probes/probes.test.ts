@@ -215,6 +215,61 @@ describe("the probe manifest", () => {
   });
 });
 
+/* --------------------------------------------------- library-wide naming */
+
+describe("library-wide naming invariants", () => {
+  // A tree that fires the type-naming structural probes on nested types sharing
+  // a simple name across different enclosing types in one file, plus a
+  // collaborator whose type carries selector-hostile characters (an array).
+  const nestedTree: Record<string, string> = {
+    "s/Sealed.java":
+      "class A { sealed interface Shape permits Sq, Ci {} }\n" +
+      "class B { sealed interface Shape permits Sq, Ci {} }\n",
+    "t/Throw.java":
+      "class A { class Inner { void foo() { throw new UnsupportedOperationException(); } } }\n" +
+      "class B { class Inner { void foo() { throw new UnsupportedOperationException(); } } }\n" +
+      "class C { String foo() { return \"c\"; } }\n",
+    "d/One.java": "class One { private Runner[] runner; }\n",
+    "d/Two.java": "class Two { private Runner[] runner; }\n",
+    "d/Three.java": "class Three { private Runner[] runner; }\n",
+    "d/Four.java": "class Four { private String key; }\n",
+  };
+
+  // A CSS id selector matches this without escaping, so an id that satisfies it
+  // round-trips through the querySelector("#id") lookups the audit's G1/G2/E1
+  // checks resolve nodes by. Brackets, dots and the like would break that.
+  const SELECTOR_SAFE = /^[A-Za-z][A-Za-z0-9_-]*$/;
+
+  it("mints only selector-safe candidate ids across the whole run", async () => {
+    const outcomes = await runProbes(contextFor(nestedTree));
+    const ids = outcomes.flatMap((o) => (o.status === "ran" ? o.candidates.map((c) => c.node.id) : []));
+    expect(ids.length).toBeGreaterThan(0);
+    for (const id of ids) expect(id).toMatch(SELECTOR_SAFE);
+    // And unique, so a selector never resolves two nodes.
+    expect(new Set(ids).size).toBe(ids.length);
+  }, 60_000);
+
+  it("carries the full enclosing type path into both id and title, so they cannot drift", async () => {
+    const outcomes = await runProbes(contextFor(nestedTree));
+    const titleFor = (probe: string): string[] =>
+      outcomes
+        .filter((o) => o.status === "ran")
+        .flatMap((o) => (o.status === "ran" && o.probe_id === probe ? o.candidates : []))
+        .map((c) => c.node.title)
+        .sort();
+
+    // sealed and throw both see two nested types sharing a simple name; each
+    // node names its OWN full path, and the two ids differ by construction.
+    expect(titleFor("sealed-hierarchies")).toEqual([
+      "A.Shape is sealed over 2 permitted types",
+      "B.Shape is sealed over 2 permitted types",
+    ]);
+    const throwTitles = titleFor("throw-where-siblings-return");
+    expect(throwTitles[0]).toContain("A.Inner.foo");
+    expect(throwTitles[1]).toContain("B.Inner.foo");
+  }, 60_000);
+});
+
 /* ------------------------------------------------ one fixture per probe */
 
 describe("sealed-hierarchies", () => {
@@ -226,6 +281,26 @@ describe("sealed-hierarchies", () => {
     expect(found).toHaveLength(1);
     expect(found[0]!.node.title).toContain("2 permitted types");
     expect(found[0]!.node.confidence).toBe("verified");
+  }, 60_000);
+
+  it("names the full enclosing path so same-named nested sealed types stay distinct", async () => {
+    // Two nested sealed types sharing a simple name under different outer types
+    // in one file resolve to the same simple name ("Shape"); only the full path
+    // (A.Shape vs B.Shape) tells them apart in both the id and the title. The
+    // simple-name title would name "Shape" without saying which - the same
+    // identify-what-you-established failure the throw probe already fixed.
+    const ctx = contextFor({
+      "nest/Nest.java":
+        "class A { sealed interface Shape permits Sq, Ci {} }\n" +
+        "class B { sealed interface Shape permits Sq, Ci {} }\n",
+    });
+    const found = await candidatesFrom("sealed-hierarchies", ctx);
+    expect(found).toHaveLength(2);
+    const titles = found.map((c) => c.node.title).sort();
+    expect(titles[0]).toContain("A.Shape");
+    expect(titles[1]).toContain("B.Shape");
+    const ids = found.map((c) => c.node.id);
+    expect(new Set(ids).size).toBe(ids.length);
   }, 60_000);
 
   it("ignores a type that is not sealed", async () => {
@@ -307,6 +382,22 @@ describe("dependency-asymmetry", () => {
     const found = await candidatesFrom("dependency-asymmetry", ctx);
     expect(found).toHaveLength(1);
     expect(found[0]!.node.title).toContain("Four holds no Runner");
+  }, 60_000);
+
+  it("slugs a bracketed or qualified collaborator type into a selector-safe id", async () => {
+    // The collaborator type is interpolated into the element id. An array type
+    // ("Runner[]") or a qualified one ("java.util.Map") carries characters that
+    // are legal in an HTML id but break querySelector("#id") - the lookup the
+    // audit's G1/G2/E1 checks resolve nodes by. slug() keeps the id selector-safe.
+    const ctx = contextFor({
+      "g/One.java": "class One { private Runner[] runner; }\n",
+      "g/Two.java": "class Two { private Runner[] runner; }\n",
+      "g/Three.java": "class Three { private Runner[] runner; }\n",
+      "g/Four.java": "class Four { private String key; }\n",
+    });
+    const found = await candidatesFrom("dependency-asymmetry", ctx);
+    expect(found).toHaveLength(1);
+    expect(found[0]!.node.id).toMatch(/^[A-Za-z][A-Za-z0-9_-]*$/);
   }, 60_000);
 });
 

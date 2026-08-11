@@ -34,6 +34,8 @@ export const sealedHierarchies: Probe = {
         if (!permits) continue;
         const name = nameOf(type);
         if (name === null) continue;
+        const path_names = [...enclosingTypeNames(type), name];
+        const fullName = path_names.join(".");
         const members = permits.text
           .replace(/^permits\s*/, "")
           .split(",")
@@ -44,9 +46,9 @@ export const sealedHierarchies: Probe = {
           probe_id: "sealed-hierarchies",
           node: {
             type: "mechanism",
-            id: `m-sealed-${pathSlug(path)}-${slug([...enclosingTypeNames(type), name].join("-"))}`,
-            title: `${name} is sealed over ${members.length} permitted ${members.length === 1 ? "type" : "types"}`,
-            what: `${name} permits exactly ${members.join(", ")}. The compiler rejects any implementation outside that set.`,
+            id: `m-sealed-${pathSlug(path)}-${slug(path_names.join("-"))}`,
+            title: `${fullName} is sealed over ${members.length} permitted ${members.length === 1 ? "type" : "types"}`,
+            what: `${fullName} permits exactly ${members.join(", ")}. The compiler rejects any implementation outside that set.`,
             why_interesting:
               "A sealed hierarchy is a closed enumeration the type system enforces. It is also one of the few things that can witness an absence claim, because the set is provably complete.",
             enforcement: "type-level",

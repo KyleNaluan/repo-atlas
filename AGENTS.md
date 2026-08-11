@@ -43,6 +43,12 @@ After any change to `src/schema/types.ts`, run `npm run schema:gen` and commit t
 - **`prose()` requires a provenance argument.** There is no unstamped overload, because the moment one exists the check it protects becomes advisory. The renderer's own sentences use the `chrome` template instead.
 - **`src/render/theme.ts` is one big template literal** - a backtick anywhere in it, including in a comment, silently truncates the stylesheet.
 
+## Harvest reads through `gh api` only
+
+Never a convenience wrapper, and never GraphQL `bodyText`. #4's resolution is the finding that a wrapper truncated every one of swe-prep's nine resolution comments to ~15% of its content while reporting a character count that was itself wrong - so a wrapper's self-report is not a fidelity check. `bodyText` is a markdown-stripped projection that reads shorter **by design**; it must not be used even as a length cross-check.
+
+Completeness is verified per issue against the count GitHub itself reports, and a mismatch is a hard failure. `test/harvest/harvest.test.ts` carries the byte-pinned tripwire: a real comment's exact length and SHA-256. It skips without `gh` auth (a statement about the machine) and CI asserts auth so the skip cannot hide a regression.
+
 ## The audit's two standing rules
 
 - **No check ships without a mutant fixture proving it fails** (#8). `test/mutants/` holds one deliberately-broken artifact per check, and `test/audit/pass-a.test.ts` asserts each check rejects its own mutant and only its own. A check that has never been watched fail is a check nobody knows works.

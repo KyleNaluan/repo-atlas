@@ -10,6 +10,9 @@ permissions:
 
 env:
   CHROME_PATH: /usr/bin/google-chrome
+  # The harvest truncation tripwire reads a real comment through gh api. Public
+  # repository reads are all it needs.
+  GH_TOKEN: ${{ github.token }}
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -33,6 +36,12 @@ jobs:
         run: |
           test -x "$CHROME_PATH" || { echo "no browser at $CHROME_PATH"; exit 1; }
           "$CHROME_PATH" --version
+      # The truncation tripwire (#4) pins a real comment's byte length and digest.
+      # It skips when gh is unauthenticated, which is right on a laptop and wrong
+      # here: the trap it guards - a fetch path silently returning less than it
+      # should - is exactly the kind that a quiet skip would let back in.
+      - name: Assert gh is authenticated for the harvest tripwire
+        run: gh auth status
       # The contract cannot drift from the types (#3): this fails if
       # schema/atlas.schema.json is stale relative to src/schema/types.ts.
       - run: npm run schema:check

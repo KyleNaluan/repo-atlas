@@ -21,8 +21,8 @@ export const STAGES: Stage[] = [
   {
     name: "harvest",
     summary: "fetch the subject at a pinned SHA through raw API paths, count-verified (#4)",
-    implemented: false,
-    run: notBuilt,
+    implemented: true,
+    run: async (argv) => (await import("./commands/harvest.js")).harvestCommand(argv),
   },
   {
     name: "probe",

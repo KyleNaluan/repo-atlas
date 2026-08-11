@@ -49,6 +49,16 @@ Never a convenience wrapper, and never GraphQL `bodyText`. #4's resolution is th
 
 Completeness is verified per issue against the count GitHub itself reports, and a mismatch is a hard failure. `test/harvest/harvest.test.ts` carries the byte-pinned tripwire: a real comment's exact length and SHA-256. It skips without `gh` auth (a statement about the machine) and CI asserts auth so the skip cannot hide a regression.
 
+## Probes and the gate
+
+A probe is a **pure deterministic function** over harvest artifacts: no network, no model calls, ever (#5). Adding one is a module in `src/probes/library/`, an entry in `src/probes/registry.ts`, and a fixture test - no core changes. A probe that finds nothing emits nothing; a probe that does not apply says so **by name**, because a subject with no Java must not look identical to one where every Java probe ran and found nothing.
+
+Probes emit **candidates**, never final nodes. The gate confirms, the rank stage accepts or deletes.
+
+The existence gate runs in **both directions** (#7 point 7), and the single-direction version is the one already found wrong on the reference subject: a stated decision is not evidence of implementation, and an open ticket is not evidence of absence. A confirmed contradiction becomes a `divergence` edge rather than being dropped. A claim nothing in the tree can settle is **demoted, never admitted as checked**.
+
+`assets/tree-sitter-java.wasm` is vendored deliberately. The only npm package shipping a prebuilt Java grammar bundles ~40 of them at 50 MB for one 430 KB file, which is not a defensible npx footprint. `web-tree-sitter` is pinned to the ABI that grammar was built against - **the two move together or not at all**.
+
 ## The audit's two standing rules
 
 - **No check ships without a mutant fixture proving it fails** (#8). `test/mutants/` holds one deliberately-broken artifact per check, and `test/audit/pass-a.test.ts` asserts each check rejects its own mutant and only its own. A check that has never been watched fail is a check nobody knows works.

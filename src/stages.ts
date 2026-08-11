@@ -27,14 +27,14 @@ export const STAGES: Stage[] = [
   {
     name: "probe",
     summary: "run the mechanical probe library over the harvest, emitting candidate nodes (#5)",
-    implemented: false,
-    run: notBuilt,
+    implemented: true,
+    run: async (argv) => (await import("./commands/probe.js")).probeCommand(argv),
   },
   {
     name: "gate",
     summary: "confirm each candidate against the tree in both directions (#5, #7 point 7)",
-    implemented: false,
-    run: notBuilt,
+    implemented: true,
+    run: async (argv) => (await import("./commands/probe.js")).gateCommand(argv),
   },
   {
     name: "rank",

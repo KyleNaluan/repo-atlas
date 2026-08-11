@@ -1,0 +1,32 @@
+/**
+ * A short, stable slug of a file path, minted into every probe-generated id.
+ *
+ * A node's id is used verbatim as the rendered element id (#7). Two candidates
+ * for the same simple name in two different files or packages - the same class
+ * name in two packages, the same setting tuned in two config files - would
+ * otherwise share an id, and duplicate ids are invalid HTML and confuse the
+ * audit's node lookups (G1 absent-node, G2 resurrection, the E1 provenance
+ * walk). Uniqueness is minted here, where the id is minted, rather than repaired
+ * downstream: including a path-derived component makes it unique by
+ * construction. The slug is readable rather than a hash so the id still says
+ * where the finding came from.
+ */
+import { createHash } from "node:crypto";
+
+/** Reduce any string to a readable id-safe slug: lowercase, dashes for runs. */
+export const slug = (text: string): string =>
+  text
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+
+export const pathSlug = (path: string): string => slug(path.replace(/\.[^./]+$/, ""));
+
+/**
+ * A short, stable hex digest of the full string, for an id whose readable part
+ * is a lossy projection. A truncated slug can collide when two distinct values
+ * share a prefix; appending this keeps the id unique whenever the value is,
+ * while staying deterministic so the id does not churn between runs.
+ */
+export const shortHash = (text: string): string =>
+  createHash("sha256").update(text).digest("hex").slice(0, 8);

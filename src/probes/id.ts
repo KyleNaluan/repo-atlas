@@ -11,9 +11,11 @@
  * construction. The slug is readable rather than a hash so the id still says
  * where the finding came from.
  */
-export const pathSlug = (path: string): string =>
-  path
-    .replace(/\.[^./]+$/, "")
+/** Reduce any string to a readable id-safe slug: lowercase, dashes for runs. */
+export const slug = (text: string): string =>
+  text
     .replace(/[^a-zA-Z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .toLowerCase();
+
+export const pathSlug = (path: string): string => slug(path.replace(/\.[^./]+$/, ""));

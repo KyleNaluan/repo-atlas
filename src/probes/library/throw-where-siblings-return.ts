@@ -12,8 +12,17 @@
  * from a method whose entire contract is to refuse.
  */
 import type { Candidate, Probe } from "../types.js";
-import { pathSlug } from "../id.js";
-import { endLineOf, findAll, lineOf, nameOf, parseJava, walk, type SyntaxNode } from "../java.js";
+import { pathSlug, slug } from "../id.js";
+import {
+  endLineOf,
+  findAll,
+  lineOf,
+  nameOf,
+  paramTypesOf,
+  parseJava,
+  walk,
+  type SyntaxNode,
+} from "../java.js";
 
 const REFUSAL = /UnsupportedOperationException|NotImplementedException|AssertionError/;
 
@@ -37,7 +46,8 @@ export const throwWhereSiblingsReturn: Probe = {
   run: async (ctx) => {
     // Collect by method name across the tree, so siblings can be compared.
     const returning = new Map<string, number>();
-    const refusing: { path: string; name: string; node: SyntaxNode; owner: string }[] = [];
+    const refusing: { path: string; name: string; node: SyntaxNode; owner: string; sig: string }[] =
+      [];
 
     for (const path of ctx.paths.filter((p) => p.endsWith(".java"))) {
       const source = ctx.read(path);
@@ -54,7 +64,9 @@ export const throwWhereSiblingsReturn: Probe = {
               owner = nameOf(n) ?? owner;
             }
           });
-          refusing.push({ path, name, node: method, owner });
+          const params = paramTypesOf(method);
+          const sig = params.length > 0 ? slug(params.join("-")) : "noargs";
+          refusing.push({ path, name, node: method, owner, sig });
         } else if (body.text.includes("return ")) {
           returning.set(name, (returning.get(name) ?? 0) + 1);
         }
@@ -67,7 +79,7 @@ export const throwWhereSiblingsReturn: Probe = {
         probe_id: "throw-where-siblings-return",
         node: {
           type: "mechanism" as const,
-          id: `m-refuses-${pathSlug(r.path)}-${r.owner || "type"}-${r.name}`,
+          id: `m-refuses-${pathSlug(r.path)}-${r.owner || "type"}-${r.name}-${r.sig}`,
           title: `${r.owner ? `${r.owner}.` : ""}${r.name} refuses where its siblings return`,
           what: `${r.name} throws outright here, while ${returning.get(r.name)} other ${(returning.get(r.name) ?? 0) === 1 ? "implementation returns" : "implementations return"} a value.`,
           why_interesting:

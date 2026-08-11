@@ -81,6 +81,44 @@ export const findAll = (root: SyntaxNode, type: string): SyntaxNode[] => {
 export const nameOf = (node: SyntaxNode): string | null =>
   node.childForFieldName("name")?.text ?? null;
 
+/**
+ * The declared parameter types of a method, in order.
+ *
+ * Two overloads share a name; their signatures do not. This is the semantic
+ * discriminator that keeps a candidate id unique within one file when a class
+ * carries `add(E)` and `add(int, E)` both refusing outright.
+ */
+export const paramTypesOf = (method: SyntaxNode): string[] => {
+  const params = method.childForFieldName("parameters");
+  if (!params) return [];
+  const out: string[] = [];
+  for (let i = 0; i < params.namedChildCount; i += 1) {
+    const p = params.namedChild(i);
+    const type = p?.childForFieldName("type")?.text;
+    if (type) out.push(type);
+  }
+  return out;
+};
+
+const TYPE_DECLARATION = /^(class|interface|record|enum|annotation_type)_declaration$/;
+
+/**
+ * The names of the type declarations enclosing a node, outermost first.
+ *
+ * Two nested types can share a simple name across different enclosing types in
+ * one file (`A.X` and `B.X`); the enclosing path is what tells them apart.
+ */
+export const enclosingTypeNames = (node: SyntaxNode): string[] => {
+  const names: string[] = [];
+  for (let cur = node.parent; cur; cur = cur.parent) {
+    if (TYPE_DECLARATION.test(cur.type)) {
+      const name = nameOf(cur);
+      if (name) names.unshift(name);
+    }
+  }
+  return names;
+};
+
 /** 1-based line of a node, for evidence line ranges. */
 export const lineOf = (node: SyntaxNode): number => node.startPosition.row + 1;
 

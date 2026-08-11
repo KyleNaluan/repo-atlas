@@ -154,6 +154,37 @@ describe("the probe manifest", () => {
     expect(ids.length).toBeGreaterThan(0);
     expect(new Set(ids).size).toBe(ids.length);
   }, 60_000);
+
+  it("mints a unique id even when names collide WITHIN one file", async () => {
+    // A path-derived component is not enough on its own: two overloads that both
+    // refuse outright share a name AND a file, and the same setting can be tuned
+    // twice in one config file. A semantic within-file discriminator - the
+    // parameter signature, the occurrence ordinal - is what keeps the id unique
+    // by construction, which the audit's element-id lookups (G1/G2/E1) rely on.
+    const ctx = contextFor({
+      "col/Immutable.java":
+        "class Immutable {\n" +
+        "  void add(String e) { throw new UnsupportedOperationException(); }\n" +
+        "  void add(int i, String e) { throw new UnsupportedOperationException(); }\n" +
+        "}\n",
+      "col/Mutable.java": "class Mutable {\n  String add(String e) { return e; }\n}\n",
+      "svc/application.yml":
+        "# measured: 10s is the p99 under load\n" +
+        "timeout: PT10S\n" +
+        "# tuned: the pool was sized by benchmark\n" +
+        "timeout: PT20S\n",
+    });
+    const outcomes = await runProbes(ctx);
+    const byProbe = new Map(outcomes.map((o) => [o.probe_id, o]));
+    const refuse = byProbe.get("throw-where-siblings-return");
+    const tuned = byProbe.get("tuned-config-properties");
+    // Both within-file collision shapes must actually fire, or the test proves
+    // nothing about disambiguation.
+    expect(refuse?.status === "ran" && refuse.candidates.length).toBe(2);
+    expect(tuned?.status === "ran" && tuned.candidates.length).toBe(2);
+    const ids = outcomes.flatMap((o) => (o.status === "ran" ? o.candidates.map((c) => c.node.id) : []));
+    expect(new Set(ids).size).toBe(ids.length);
+  }, 60_000);
 });
 
 /* ------------------------------------------------ one fixture per probe */

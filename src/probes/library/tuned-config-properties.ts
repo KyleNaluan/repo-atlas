@@ -27,6 +27,9 @@ export const tunedConfigProperties: Probe = {
       const source = ctx.read(path);
       if (source === null || !TUNED.test(source)) continue;
       const lines = source.split("\n");
+      // The same setting name can be tuned more than once in one file; the
+      // occurrence ordinal is the semantic discriminator that keeps ids unique.
+      const seen = new Map<string, number>();
 
       for (const [index, line] of lines.entries()) {
         const comment = COMMENT.exec(line)?.[1];
@@ -39,11 +42,15 @@ export const tunedConfigProperties: Probe = {
         const setting = target < lines.length ? SETTING.exec(lines[target]!) : null;
         if (!setting) continue;
 
+        const key = setting[1]!.replace(/\W+/g, "-");
+        const occurrence = (seen.get(key) ?? 0) + 1;
+        seen.set(key, occurrence);
+
         out.push({
           probe_id: "tuned-config-properties",
           node: {
             type: "fact",
-            id: `f-tuned-${pathSlug(path)}-${setting[1]!.replace(/\W+/g, "-")}`,
+            id: `f-tuned-${pathSlug(path)}-${key}-${occurrence}`,
             label: setting[1]!,
             value: setting[2]!,
             source: "file",

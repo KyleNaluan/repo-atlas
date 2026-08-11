@@ -88,6 +88,13 @@ export const gateCommand = async (argv: string[]): Promise<number> => {
   }
   const file = JSON.parse(readFileSync(candidatesPath, "utf8")) as CandidateFile;
   const harvest = JSON.parse(readFileSync(harvestPath, "utf8")) as Harvest;
+  if (file.subject_sha !== harvest.subject.sha) {
+    console.error(
+      `gate: candidates were produced at ${file.subject_sha} but the harvest is at ${harvest.subject.sha}; ` +
+        "re-check every candidate against the tree it was minted from, not a different one",
+    );
+    return 65;
+  }
   const ctx = treeContext(harvest, resolve(clone));
 
   const candidates: Candidate[] = file.outcomes.flatMap((o) =>

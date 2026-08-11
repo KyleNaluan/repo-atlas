@@ -9,6 +9,9 @@
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { fileURLToPath } from "node:url";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { main } from "../src/cli.js";
 import { STAGES } from "../src/stages.js";
 
@@ -79,6 +82,24 @@ describe("repo-atlas validate", () => {
 
   it("exits EX_USAGE with no argument", async () => {
     expect(await main(["validate"])).toBe(64);
+  });
+});
+
+describe("repo-atlas gate", () => {
+  it("refuses candidates and a harvest minted at different SHAs, naming both", async () => {
+    // Re-checking a candidate against a tree it was not minted from silently
+    // flips confirmed/overturned verdicts; the guard turns that into a loud,
+    // defined failure before any candidate is resolved.
+    const dir = mkdtempSync(join(tmpdir(), "repo-atlas-gate-"));
+    const candidates = join(dir, "candidates.json");
+    const harvest = join(dir, "harvest.json");
+    writeFileSync(candidates, JSON.stringify({ subject_sha: "aaaaaaa", outcomes: [] }), "utf8");
+    writeFileSync(harvest, JSON.stringify({ subject: { sha: "bbbbbbb", owner: "o", repo: "r" } }), "utf8");
+    const code = await main(["gate", "--candidates", candidates, "--harvest", harvest, "--clone", dir]);
+    expect(code).toBe(65);
+    const message = err.join("\n");
+    expect(message).toContain("aaaaaaa");
+    expect(message).toContain("bbbbbbb");
   });
 });
 

@@ -11,8 +11,8 @@
  * grepping for the word would match it in prose and comments too.
  */
 import type { Candidate, Probe } from "../types.js";
-import { pathSlug } from "../id.js";
-import { endLineOf, findAll, lineOf, nameOf, parseJava } from "../java.js";
+import { pathSlug, slug } from "../id.js";
+import { enclosingTypeNames, endLineOf, findAll, lineOf, nameOf, parseJava } from "../java.js";
 
 export const sealedHierarchies: Probe = {
   id: "sealed-hierarchies",
@@ -44,7 +44,7 @@ export const sealedHierarchies: Probe = {
           probe_id: "sealed-hierarchies",
           node: {
             type: "mechanism",
-            id: `m-sealed-${pathSlug(path)}-${name}`,
+            id: `m-sealed-${pathSlug(path)}-${slug([...enclosingTypeNames(type), name].join("-"))}`,
             title: `${name} is sealed over ${members.length} permitted ${members.length === 1 ? "type" : "types"}`,
             what: `${name} permits exactly ${members.join(", ")}. The compiler rejects any implementation outside that set.`,
             why_interesting:

@@ -10,7 +10,7 @@ Anything that could not be traced is cut, not hedged.
 On a repository with no decision record, the artifact says so - it never reconstructs a decision trail from commit archaeology.
 
 **Status: under construction.** The complete v1 design is closed on this tracker: issues [#1](https://github.com/KyleNaluan/repo-atlas/issues/1)-[#10](https://github.com/KyleNaluan/repo-atlas/issues/10), each with a binding `## Resolution:` comment recording the decision, the why, and the rejected alternatives.
-This build ships the `atlas.json` contract, the harvest stage, the probe library and its existence gate, the rank stage's deterministic half, the render stage, and the audit's deterministic passes with its stamp; the model scorer behind `rank` and the remaining extraction stages land stage by stage.
+This build ships the `atlas.json` contract, the harvest stage, the probe library and its existence gate, the model scorer and the rank stage's deterministic half, the render stage, and the audit's deterministic passes with its stamp; the run orchestrator and the remaining extraction stages land stage by stage.
 
 ```
 npx repo-atlas harvest --clone ../subject -o harvest.json
@@ -21,14 +21,15 @@ npx repo-atlas audit overview.html --atlas atlas.json --clone ../subject
 ## The pipeline
 
 Each stage is a subcommand (per [#2](https://github.com/KyleNaluan/repo-atlas/issues/2)), reading and writing a content-addressed cache keyed on the pinned SHA, with a top-level `run` orchestrator.
-The mechanical stages are plain deterministic code; only `rank` and `audit` call a model, and the model controls no flow.
+The mechanical stages are plain deterministic code; only `score` and `audit` call a model, and the model controls no flow.
 
 | Stage | What it does | Ticket |
 |---|---|---|
 | `harvest` | fetch the subject at a pinned SHA through raw API paths, count-verified | [#4](https://github.com/KyleNaluan/repo-atlas/issues/4) |
 | `probe` | run the mechanical probe library, emitting candidate nodes | [#5](https://github.com/KyleNaluan/repo-atlas/issues/5) |
 | `gate` | confirm each candidate against the tree, in both directions | [#5](https://github.com/KyleNaluan/repo-atlas/issues/5), [#7](https://github.com/KyleNaluan/repo-atlas/issues/7) |
-| `rank` | score `interview_value` under a versioned rubric; delete by floor and budget | [#9](https://github.com/KyleNaluan/repo-atlas/issues/9) |
+| `score` | score `interview_value` with a model under the versioned rubric, one call for the whole graph | [#2](https://github.com/KyleNaluan/repo-atlas/issues/2), [#9](https://github.com/KyleNaluan/repo-atlas/issues/9) |
+| `rank` | delete by floor and budget under the pinned scores | [#9](https://github.com/KyleNaluan/repo-atlas/issues/9) |
 | `render` | `atlas.json` -> one self-contained HTML artifact | [#7](https://github.com/KyleNaluan/repo-atlas/issues/7) |
 | `audit` | twenty checks, fifteen hard gates; stamps its own result into the artifact | [#8](https://github.com/KyleNaluan/repo-atlas/issues/8) |
 | `validate` | check an `atlas.json` against the generated JSON Schema, fail closed | [#3](https://github.com/KyleNaluan/repo-atlas/issues/3) |
@@ -141,6 +142,7 @@ The tool is distributed for `npx`, so the footprint is a design constraint rathe
 | Package | Why | Where |
 |---|---|---|
 | `ajv` | validates `atlas.json` against the generated schema | contract |
+| `@anthropic-ai/claude-agent-sdk` | the one authenticated model call that scores `interview_value` | score |
 | `puppeteer-core` | drives an already-installed browser for the audit's pass B | audit |
 | `web-tree-sitter` | structural parsing for the three probes that need a parse tree | probes |
 | `@hpcc-js/wasm-graphviz` | diagram layout as WebAssembly - no native binary, no system package | render |

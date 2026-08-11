@@ -49,6 +49,12 @@ export const STAGES: Stage[] = [
     run: async (argv) => (await import("./commands/rank.js")).rankCommand(argv),
   },
   {
+    name: "assemble",
+    summary: "join harvest, gate and rank into one atlas.json, validated closed (#3, #6)",
+    implemented: true,
+    run: async (argv) => (await import("./commands/assemble.js")).assembleCommand(argv),
+  },
+  {
     name: "render",
     summary: "atlas.json -> one self-contained HTML artifact (#7)",
     implemented: true,

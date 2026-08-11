@@ -18,8 +18,7 @@ import {
   noDeletedNodeResurrected,
 } from "./checks/graph-agreement.js";
 import { privateSourceCheck } from "./checks/private-source.js";
-import { spec } from "./register.js";
-import { aborted, isBlocking, type AuditContext, type CheckResult } from "./types.js";
+import { abortedFor, isBlocking, type AuditContext, type CheckResult } from "./types.js";
 
 /**
  * Order within the pass is cheapest-and-most-decisive first, so a broken
@@ -55,7 +54,7 @@ const runStep = (ctx: AuditContext, step: Step): CheckResult[] => {
   try {
     return step.run(ctx);
   } catch (cause) {
-    return step.ids.map((id) => aborted(spec(id), cause));
+    return abortedFor(step.ids, cause);
   }
 };
 

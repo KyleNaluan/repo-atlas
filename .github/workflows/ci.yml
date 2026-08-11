@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  CHROME_PATH: /usr/bin/google-chrome
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -22,6 +25,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Pass B loads the artifact in a browser. The suite skips those tests when
+      # no browser exists, which is right for a contributor's laptop and wrong
+      # here: a silent skip in CI would quietly disable five hard gates' coverage.
+      # Assert one is present so the skip can never happen unnoticed.
+      - name: Assert a browser is available for audit pass B
+        run: |
+          test -x "$CHROME_PATH" || { echo "no browser at $CHROME_PATH"; exit 1; }
+          "$CHROME_PATH" --version
       # The contract cannot drift from the types (#3): this fails if
       # schema/atlas.schema.json is stale relative to src/schema/types.ts.
       - run: npm run schema:check

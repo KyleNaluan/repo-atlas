@@ -9,7 +9,7 @@
  * add it here, in the open.
  */
 import type { AuditCheckOutcome, Atlas } from "../schema/types.js";
-import type { CheckSpec } from "./register.js";
+import { spec, type CheckSpec } from "./register.js";
 
 export interface AuditContext {
   /** The rendered file, byte for byte as it will ship. */
@@ -116,3 +116,14 @@ export const aborted = (s: CheckSpec, cause: unknown): CheckResult => ({
  */
 export const isBlocking = (r: CheckResult): boolean =>
   r.outcome === "failed" && (r.class === "gate" || r.aborted === true);
+
+/**
+ * The per-check error boundary, in one place so the two passes cannot drift. A
+ * step that throws becomes a defined `aborted` failure for every id it owns
+ * rather than an unhandled exception - the structural close of the
+ * crash-instead-of-report class. Pass A's steps are synchronous and pass B's are
+ * not, so each pass keeps its own thin wrapper around this shared mapping; both
+ * therefore produce identical result shapes for a thrown check.
+ */
+export const abortedFor = (ids: string[], cause: unknown): CheckResult[] =>
+  ids.map((id) => aborted(spec(id), cause));

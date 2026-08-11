@@ -155,7 +155,17 @@ describe("pass A on a clean artifact", () => {
     expect(outcome.checks).toHaveLength(20);
     const notRun = outcome.checks.filter((c) => c.outcome === "not_run");
     expect(notRun.length).toBe(11);
-    for (const c of notRun) expect(c.reason).toMatch(/not built in this version/);
+    // The reason has to be the REAL one. audit() is the static entry point, so
+    // pass B exists in this build and simply did not run here; saying it "is not
+    // built" once it is built would be the same lie in the other direction.
+    for (const c of notRun) {
+      expect(c.reason, `${c.id} reports no reason`).toBeTruthy();
+      expect(c.reason).toMatch(/did not run in this invocation|not built in this version/);
+    }
+    expect(outcome.checks.find((c) => c.id === "S2")?.reason).toMatch(
+      /did not run in this invocation/,
+    );
+    expect(outcome.checks.find((c) => c.id === "M1")?.reason).toMatch(/not built in this version/);
   });
 });
 

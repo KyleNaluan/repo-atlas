@@ -10,7 +10,7 @@ Anything that could not be traced is cut, not hedged.
 On a repository with no decision record, the artifact says so - it never reconstructs a decision trail from commit archaeology.
 
 **Status: under construction.** The complete v1 design is closed on this tracker: issues [#1](https://github.com/KyleNaluan/repo-atlas/issues/1)-[#10](https://github.com/KyleNaluan/repo-atlas/issues/10), each with a binding `## Resolution:` comment recording the decision, the why, and the rejected alternatives.
-This build ships the `atlas.json` contract, the render stage, and the audit's static pass; the extraction stages and the remaining audit passes land stage by stage.
+This build ships the `atlas.json` contract, the render stage, and the audit's deterministic passes; the extraction stages and the model pass land stage by stage.
 
 ```
 npx repo-atlas render atlas.json -o overview.html
@@ -56,7 +56,12 @@ One rule decides all twenty classifications:
 Evidence integrity is truth; layout is quality.
 File citations resolve locally with `git cat-file` at the pinned SHA rather than over HTTP, because GitHub returns 200 for a line range past the end of a file - the fragment never reaches the server, so a network walk is structurally blind to the part of a citation that pins the claim.
 
-The audit asserts its preconditions before any check runs - clone present, HEAD equal to the pinned SHA, worktree clean - and a missing precondition is its own failure, never a pass and never a silent skip.
+Pass B loads the artifact in a headless browser with the network disabled, which is what makes "exactly one request" mean anything, and measures layout, clipping and WCAG AA contrast at 390 / 768 / 1280 / 1440 with every collapsible section forced open.
+Screenshots are kept as artifacts *of* the audit, never as inputs *to* a check: no model is asked whether the page looks right, because a model asked that says yes and no fixture can prove such a check works.
+
+The audit asserts its preconditions before any check runs - clone present, HEAD equal to the pinned SHA, worktree clean, and a browser available for pass B - and a missing precondition is its own failure, never a pass and never a silent skip.
+
+No check ships without a mutant fixture proving it fails.
 
 ## The contract
 
@@ -80,6 +85,7 @@ The tool is distributed for `npx`, so the footprint is a design constraint rathe
 | Package | Why | Where |
 |---|---|---|
 | `ajv` | validates `atlas.json` against the generated schema | contract |
+| `puppeteer-core` | drives an already-installed browser for the audit's pass B | audit |
 | `@hpcc-js/wasm-graphviz` | diagram layout as WebAssembly - no native binary, no system package | render |
 | `shiki` | build-time syntax highlighting, emitted as static HTML | render |
 

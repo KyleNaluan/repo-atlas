@@ -44,7 +44,7 @@ One submission
 One submission, end to end
 Pinned commit
 Presence
-Profile
+Profile interview &middot; rubric v#
 Question
 Questions an interviewer will ask
 Read on

@@ -45,6 +45,19 @@ The cache is keyed on `(repo, issue, issue.updated_at, comment_count, max(commen
 
 A declared-private side is never read. That it exists is recorded, because the audit's private-source check has three applicability states and the middle one must never be silent.
 
+## Probes and the existence gate
+
+Eight probes, each encoding one piece of human judgement about what is worth finding - a sealed hierarchy's closed enumeration, a method that refuses where its siblings return, a predicate repeated across queries until it is an invariant, a CI step that guards policy rather than testing code.
+They are pure deterministic functions: no network, no model calls, cheap enough to be cacheable and small enough to be unit-tested against fixtures.
+
+Probes propose; they never decide. Every candidate goes to the existence gate, which resolves it against the tree at the pinned SHA and can **overturn the record in either direction**:
+
+> A stated decision is not evidence of implementation, and an open ticket is not evidence of absence.
+
+On the reference subject the gate overturns an open ticket for a "second language adapter" whose implementation fully exists at the pinned commit.
+A confirmed contradiction becomes a `divergence` edge rather than being dropped - the record and the build disagreeing is the finding, not noise to filter.
+A claim nothing in the tree can settle is demoted rather than admitted, because a claim nobody checked must never arrive looking checked.
+
 ## The artifact
 
 One HTML file, nine sections, zero external requests: what this is, the interviewer Q&A index, the real shape, one flow end to end, the decision trail, ranked deep dives, honest edges, the record, and a generated source index.
@@ -111,6 +124,7 @@ The tool is distributed for `npx`, so the footprint is a design constraint rathe
 |---|---|---|
 | `ajv` | validates `atlas.json` against the generated schema | contract |
 | `puppeteer-core` | drives an already-installed browser for the audit's pass B | audit |
+| `web-tree-sitter` | structural parsing for the three probes that need a parse tree | probes |
 | `@hpcc-js/wasm-graphviz` | diagram layout as WebAssembly - no native binary, no system package | render |
 | `shiki` | build-time syntax highlighting, emitted as static HTML | render |
 

@@ -1157,16 +1157,18 @@ describe("a decision the gate found is a decision the artifact may call built", 
     expect(node.implemented_by).toEqual([]);
   });
 
-  it("does not promote on a confirmed ABSENT claim", async () => {
-    // Confirming that something is not there says nothing about a decision being
-    // built, and filling implemented_by from it would cite the absence as the
-    // implementation.
+  it("settles a confirmed ABSENT claim to decided_not_built with empty implemented_by", async () => {
+    // The mirror of promotion: the gate confirmed the decision is not built, which
+    // is a settlement the gate alone may make. implemented_by stays empty per #8's
+    // E2 - confirming a thing is not there is never a citation of where it is built.
     const ctx = contextFor({ "README.md": "no statements here" });
-    const node = gateCandidate(
+    const result = gateCandidate(
       ctx,
       decision([{ description: "no problem prose", expect: "absent", paths: ["statements/"] }]),
-    ).node as DecisionNode;
-    expect(node.status).toBe("decided");
+    );
+    const node = result.node as DecisionNode;
+    expect(result.verdict).toBe("confirmed");
+    expect(node.status).toBe("decided_not_built");
     expect(node.implemented_by).toEqual([]);
   });
 

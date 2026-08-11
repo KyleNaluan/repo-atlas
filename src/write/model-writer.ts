@@ -145,8 +145,14 @@ export const modelWriter = (options: ModelWriterOptions = {}): Writer => {
     // records at once can borrow a rationale from the wrong one.
     decision: async (record, prompt) => readDecision(await ask(decisionPrompt(record, prompt))),
     prose: async (request, prompt) => {
+      // ask() stays OUTSIDE the try, matching the decision path: an AskError from
+      // the SDK seam (a tool-use reply, no result) must propagate loudly rather
+      // than be reported as prose that could not be read, which would mask the
+      // exact regression the empty-allowlist fix exists to surface. Only a parse
+      // failure becomes admissible:false.
+      const text = await ask(prosePrompt(request, prompt));
       try {
-        const parsed = parseWritten<WrittenProse>(await ask(prosePrompt(request, prompt)));
+        const parsed = parseWritten<WrittenProse>(text);
         if (typeof parsed.admissible !== "boolean") {
           return { admissible: false, because: "the writer did not say whether the prose is admissible" };
         }

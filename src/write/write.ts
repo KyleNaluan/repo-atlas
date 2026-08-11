@@ -177,6 +177,19 @@ export const assertWriteFresh = (file: WrittenFile, prompt: string, subjectSha: 
 /** A stable id for a decision, from the record it was read from rather than its prose. */
 export const decisionId = (issue: number): string => `d-issue-${issue}`;
 
+/**
+ * The only status the writer may mint: `decided`, or `superseded` when the record
+ * says a later decision replaced this one.
+ *
+ * A prompt instruction is not an enforcement (#7 point 7): the prompt can ask the
+ * model for a build status and the model can return one anyway, but where a
+ * decision is built is a claim about the tree only the gate may settle. So a
+ * model-returned `decided_and_built` or `decided_not_built` is clamped back to
+ * `decided` here, leaving promotion in the one place that reads the tree.
+ */
+const clampStatus = (status: DecisionStatus | undefined): DecisionStatus =>
+  status === "superseded" ? "superseded" : "decided";
+
 const claimOf = (w: WrittenDecision): ExistenceClaim[] => {
   const c = w.implementation_claim;
   if (c === undefined) return [];
@@ -236,6 +249,7 @@ export const toCandidate = (record: RecordToRead, w: WrittenDecision): Candidate
     };
   }
 
+  const claims = claimOf(w);
   return {
     probe_id: "write",
     node: {
@@ -249,7 +263,7 @@ export const toCandidate = (record: RecordToRead, w: WrittenDecision): Candidate
       ...((w.rejected ?? []).length === 0
         ? { rejected_absent_from_record: w.rejected_absent_from_record ?? true }
         : {}),
-      status: w.status ?? "decided",
+      status: clampStatus(w.status),
       implemented_by: [],
       soundbite: w.soundbite ?? "",
       evidence,
@@ -259,7 +273,7 @@ export const toCandidate = (record: RecordToRead, w: WrittenDecision): Candidate
       confidence: "attested",
       interview_value: 0,
     },
-    ...(claimOf(w).length === 0 ? {} : { claims: claimOf(w) }),
+    ...(claims.length === 0 ? {} : { claims }),
   };
 };
 

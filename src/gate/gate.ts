@@ -123,34 +123,48 @@ const toDivergence = (candidate: Candidate, claim: ExistenceClaim, where: string
 };
 
 /**
- * A decision the gate FOUND is a decision the artifact may say was built.
+ * The gate settles whether a decision was built, in both directions.
  *
  * The write stage never sets this, and must not: a resolution comment states what
  * was decided, never that it was built, and treating the record as evidence of
  * implementation is the exact failure #7 point 7 wrote a bidirectional gate to
- * prevent. So the promotion happens here, on the strength of the gate's own
+ * prevent. So the settlement happens here, on the strength of the gate's own
  * reading of the tree, and `implemented_by` carries the paths the gate actually
  * located rather than anything a model proposed. Verification recorded, not
  * assertion trusted.
  *
- * A decision with no confirmed present-claim is left alone. `decided` is the
- * honest state for a decision nothing in the tree was asked to confirm, and
- * promoting one on the strength of a claim nobody checked would be the thing this
- * function exists to avoid.
+ * A confirmed present-claim promotes to `decided_and_built` with the paths the
+ * gate located. A confirmed absent-claim settles the mirror: `decided_not_built`,
+ * with `implemented_by` left empty per #8's E2, because confirming a thing is not
+ * there is not a citation of where it is built. A decision with neither is left
+ * alone - `decided` is the honest state for a decision nothing in the tree was
+ * asked to confirm, and moving one on the strength of a claim nobody checked would
+ * be the thing this function exists to avoid.
  */
-const promoteIfBuilt = (node: AtlasNode, confirmedAt: string[], sha: string): AtlasNode => {
-  if (node.type !== "decision" || confirmedAt.length === 0) return node;
-  const seen = new Set<string>();
-  const implemented_by: Evidence[] = confirmedAt
-    .filter((path) => !seen.has(path) && seen.add(path))
-    .map((path) => ({ kind: "file" as const, path, sha }));
-  return { ...node, status: "decided_and_built", implemented_by };
+const settleBuild = (
+  node: AtlasNode,
+  confirmedAt: string[],
+  confirmedAbsent: boolean,
+  sha: string,
+): AtlasNode => {
+  if (node.type !== "decision") return node;
+  if (confirmedAt.length > 0) {
+    const seen = new Set<string>();
+    const implemented_by: Evidence[] = confirmedAt
+      .filter((path) => !seen.has(path) && seen.add(path))
+      .map((path) => ({ kind: "file" as const, path, sha }));
+    return { ...node, status: "decided_and_built", implemented_by };
+  }
+  if (confirmedAbsent) return { ...node, status: "decided_not_built", implemented_by: [] };
+  return node;
 };
 
 export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCandidate => {
   const claims = candidate.claims ?? [];
-  /** Where a confirmed present-claim was found, for the promotion below. */
+  /** Where a confirmed present-claim was found, for the settlement below. */
   const confirmedAt: string[] = [];
+  /** True once the tree confirms an absent-claim, settling `decided_not_built`. */
+  let confirmedAbsent = false;
   if (claims.length === 0) {
     return {
       probe_id: candidate.probe_id,
@@ -193,6 +207,10 @@ export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCan
       // Discarding these would throw away a verification the gate performed.
       confirmedAt.push(...where);
     }
+    if (agrees && claim.expect === "absent") {
+      // The mirror verification: the tree confirms the decision was not built.
+      confirmedAbsent = true;
+    }
     if (!agrees) {
       const divergence = toDivergence(candidate, claim, where);
       const evidence = divergence.evidence.map((e) =>
@@ -209,7 +227,7 @@ export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCan
 
   return {
     probe_id: candidate.probe_id,
-    node: promoteIfBuilt(candidate.node, confirmedAt, ctx.sha),
+    node: settleBuild(candidate.node, confirmedAt, confirmedAbsent, ctx.sha),
     verdict: "confirmed",
     finding:
       confirmedAt.length === 0

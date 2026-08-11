@@ -117,6 +117,25 @@ describe("the writer proposes; it does not cite and it does not implement", () =
     expect(candidate.claims).toBeUndefined();
   });
 
+  it("clamps a model-returned build status back to decided", () => {
+    // A prompt instruction is not an enforcement: the model can return a build
+    // status anyway, but where a decision is built is a claim about the tree only
+    // the gate may settle. So decided_and_built and decided_not_built are clamped
+    // to decided here, leaving promotion in the one place that reads the tree.
+    expect((toCandidate(RECORD, { ...ADMISSIBLE, status: "decided_and_built" }).node as DecisionNode).status).toBe(
+      "decided",
+    );
+    expect((toCandidate(RECORD, { ...ADMISSIBLE, status: "decided_not_built" }).node as DecisionNode).status).toBe(
+      "decided",
+    );
+  });
+
+  it("keeps superseded, the one non-decided status the writer may mint", () => {
+    expect((toCandidate(RECORD, { ...ADMISSIBLE, status: "superseded" }).node as DecisionNode).status).toBe(
+      "superseded",
+    );
+  });
+
   it("admits a decision as attested, never as verified", () => {
     // A decision record is testimony: it establishes what was decided, never
     // that it was built. Only the gate can move this, and only downwards.

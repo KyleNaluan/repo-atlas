@@ -15,7 +15,7 @@ import { dirname, resolve } from "node:path";
 import { profile } from "../rank/profile.js";
 import { rank } from "../rank/rank.js";
 import { scoresFromFile, type ScoreFile } from "../rank/scorer.js";
-import { EMPTY_OVERRIDES, type Overrides } from "../rank/overrides.js";
+import { EMPTY_OVERRIDES, validateOverrides, type Overrides } from "../rank/overrides.js";
 import type { GatedCandidate } from "../gate/gate.js";
 import type { AtlasNode } from "../schema/types.js";
 
@@ -65,7 +65,7 @@ export const rankCommand = async (argv: string[]): Promise<number> => {
   const overrides: Overrides =
     overridesPath === undefined
       ? EMPTY_OVERRIDES
-      : (JSON.parse(readFileSync(overridesPath, "utf8")) as Overrides);
+      : validateOverrides(JSON.parse(readFileSync(overridesPath, "utf8")) as Overrides);
 
   const nodes: AtlasNode[] = gatedFile.gated.map((g) => g.node);
   const scored = scoresFromFile(scoreFile, p)(nodes);

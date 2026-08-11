@@ -64,7 +64,21 @@ export class RubricMismatchError extends Error {
   }
 }
 
+export class ProfileMismatchError extends Error {
+  constructor(fileProfile: string, runProfile: string) {
+    super(
+      `scores were produced under profile "${fileProfile}" but this run ranks under "${runProfile}". ` +
+        `A profile bundles a rubric with its section budgets; scores from one profile must not be ` +
+        `ranked under another, the same reason the rubric version is checked.`,
+    );
+    this.name = "ProfileMismatchError";
+  }
+}
+
 export const scoresFromFile = (file: ScoreFile, p: Profile) => {
+  if (file.profile !== p.name) {
+    throw new ProfileMismatchError(file.profile, p.name);
+  }
   if (file.rubric_version !== p.rubric_version) {
     throw new RubricMismatchError(file.rubric_version, p.rubric_version);
   }

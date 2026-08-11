@@ -19,11 +19,17 @@ import { rank, type ScoredNode } from "../../src/rank/rank.js";
 import { INTERVIEW, profile, rubricText, UnknownProfileError } from "../../src/rank/profile.js";
 import {
   MissingScoreError,
+  ProfileMismatchError,
   RubricMismatchError,
   scoresFromFile,
   type ScoreFile,
 } from "../../src/rank/scorer.js";
-import type { Overrides } from "../../src/rank/overrides.js";
+import {
+  InvalidOverrideError,
+  validateOverrides,
+  type Overrides,
+  type ProjectOverride,
+} from "../../src/rank/overrides.js";
 import type { Atlas, AtlasNode, MechanismNode } from "../../src/schema/types.js";
 
 const atlas = JSON.parse(
@@ -120,6 +126,7 @@ describe("the rubric's ground-truth fixture", () => {
     // #9 actually names as the ground truth - "its five ordered deep dives" - is
     // reproduced exactly, and that is asserted above.
     const extra = result.deletions
+      .filter((d) => d.section !== "interviewer_questions")
       .map((d) => d.id)
       .filter((id) => ![...REFERENCE_CUTS.budget, ...REFERENCE_CUTS.floor].includes(id));
     expect(extra.sort()).toEqual(["e-surefire-pin", "f-packages"]);
@@ -141,7 +148,7 @@ describe("the rubric's ground-truth fixture", () => {
   });
 
   it("records the section a budget cut was made against", () => {
-    expect(result.deletions.find((d) => d.kind === "budget")?.section).toBe("mechanisms");
+    expect(result.deletions.find((d) => d.id === "m-answer-tells")?.section).toBe("mechanisms");
   });
 
   it("carries the profile and rubric version the ranking was made under", () => {
@@ -201,6 +208,69 @@ describe("deletion uses two mechanisms, and needs both", () => {
   it("writes the adjusted score onto the node the renderer will display", () => {
     const result = rank(scored([["a", 4]]), INTERVIEW);
     expect(result.nodes[0]!.interview_value).toBe(4);
+  });
+});
+
+/* ------------------------------------ the interviewer_questions budget */
+
+describe("the interviewer_questions budget cuts questions, not nodes", () => {
+  const numbered = (n: number): string[] =>
+    Array.from({ length: n }, (_, i) => `q${String(i + 1).padStart(2, "0")}`);
+
+  it("cuts the eleventh question, keeps ten, and records the cut in its section", () => {
+    const node = mechanism("m", { interviewer_questions: numbered(11) });
+    const result = rank([{ node, score: 5 }], INTERVIEW);
+    const kept = result.nodes[0]!.interviewer_questions!;
+    expect(kept).toHaveLength(10);
+    expect(kept).not.toContain("q11");
+    const cut = result.deletions.filter((d) => d.section === "interviewer_questions");
+    expect(cut).toHaveLength(1);
+    expect(cut[0]).toMatchObject({ kind: "budget", section: "interviewer_questions", score: 5 });
+    expect(cut[0]!.id).toContain("m#interviewer_questions");
+    // The node that declared it lives; only the question was trimmed.
+    expect(result.nodes.map((n) => n.id)).toEqual(["m"]);
+  });
+
+  it("folds a question declared by two nodes into one budget slot", () => {
+    // Ten distinct questions, one of them shared: eleven declared entries but ten
+    // rows, so the budget of 10 is met exactly and nothing is cut. Were the shared
+    // question counted twice it would be eleven slots and one cut.
+    const shared = "how is it enforced?";
+    const a = mechanism("a", { interviewer_questions: [shared, ...numbered(9)] });
+    const b = mechanism("b", { interviewer_questions: [shared] });
+    const result = rank([{ node: a, score: 5 }, { node: b, score: 4 }], INTERVIEW);
+    expect(result.deletions.filter((d) => d.section === "interviewer_questions")).toEqual([]);
+    expect(result.nodes.find((n) => n.id === "a")!.interviewer_questions).toContain(shared);
+    expect(result.nodes.find((n) => n.id === "b")!.interviewer_questions).toContain(shared);
+  });
+
+  it("records a shared cut question once and trims it from every declaring node", () => {
+    // Ten high-value questions fill the budget; an eleventh, declared by two
+    // lower-value nodes, falls over the line. It is one folded row, so it is one
+    // deletion - if it were one per declaring node the renderer's "N questions
+    // cut" count would overstate - and it is trimmed from both nodes.
+    const shared = "shared, and cut";
+    const top = mechanism("top", { interviewer_questions: numbered(10) });
+    const b = mechanism("b", { interviewer_questions: [shared] });
+    const c = mechanism("c", { interviewer_questions: [shared] });
+    const result = rank(
+      [{ node: top, score: 5 }, { node: b, score: 3 }, { node: c, score: 3 }],
+      INTERVIEW,
+    );
+    const cut = result.deletions.filter((d) => d.section === "interviewer_questions");
+    expect(cut).toHaveLength(1);
+    expect(result.nodes.find((n) => n.id === "b")!.interviewer_questions).toEqual([]);
+    expect(result.nodes.find((n) => n.id === "c")!.interviewer_questions).toEqual([]);
+  });
+
+  it("trims only the cut questions and leaves the surviving node otherwise unchanged", () => {
+    const node = mechanism("m", { interviewer_questions: numbered(12), why_interesting: "intact" });
+    const result = rank([{ node, score: 5 }], INTERVIEW);
+    const returned = result.nodes[0]!;
+    expect(returned.interviewer_questions).toEqual(numbered(10));
+    const { interviewer_questions: _rq, interview_value: _rv, ...restReturned } = returned;
+    const { interviewer_questions: _nq, interview_value: _nv, ...restOriginal } = node;
+    expect(restReturned).toEqual(restOriginal);
   });
 });
 
@@ -265,6 +335,33 @@ describe("per-project overrides are data, and the rubric is code", () => {
   });
 });
 
+/* ---------------------------------------------- override validation */
+
+describe("overrides are validated at load, so a malformed one never passes silently", () => {
+  it("rejects an override that selects nothing, naming the offending entry", () => {
+    // An override with no selector matches nothing and does nothing: a human who
+    // believes they pinned something gets an artifact that quietly disagrees.
+    const bad: Overrides = { overrides: [{ boost: 1, why: "nothing selected" } as ProjectOverride] };
+    expect(() => validateOverrides(bad)).toThrow(InvalidOverrideError);
+    expect(() => validateOverrides(bad)).toThrow(/nothing selected/);
+    expect(() => validateOverrides(bad)).toThrow(/no selector/);
+  });
+
+  it("rejects an override that selects on more than one axis", () => {
+    const bad: Overrides = {
+      overrides: [{ id: "a", type: "mechanism", boost: 1, why: "two selectors" } as ProjectOverride],
+    };
+    expect(() => validateOverrides(bad)).toThrow(InvalidOverrideError);
+    expect(() => validateOverrides(bad)).toThrow(/2 selectors/);
+  });
+
+  it("accepts a well-formed override and still applies it", () => {
+    const good: Overrides = { overrides: [{ id: "a", boost: 2, why: "under-rated" }] };
+    expect(validateOverrides(good)).toBe(good);
+    expect(rank(scored([["a", 2]]), INTERVIEW, good).nodes.map((n) => n.id)).toEqual(["a"]);
+  });
+});
+
 /* -------------------------------------------------- profile and rubric */
 
 describe("the profile is a named bundle of rubric and budgets", () => {
@@ -315,5 +412,12 @@ describe("scores arrive through one seam, whatever produced them", () => {
   it("refuses to mix two rubric versions in one ranking", () => {
     const stale: ScoreFile = { ...file, rubric_version: "v0" };
     expect(() => scoresFromFile(stale, INTERVIEW)).toThrow(RubricMismatchError);
+  });
+
+  it("refuses scores produced under a different profile", () => {
+    // A profile bundles a rubric with its budgets. The field is a guarantee, so
+    // it is enforced like rubric_version rather than left as unchecked metadata.
+    const other: ScoreFile = { ...file, profile: "onboarding" };
+    expect(() => scoresFromFile(other, INTERVIEW)).toThrow(ProfileMismatchError);
   });
 });

@@ -44,6 +44,41 @@ export interface Overrides {
 
 export const EMPTY_OVERRIDES: Overrides = { overrides: [] };
 
+const SELECTORS = ["id", "type", "probe_id"] as const;
+
+export class InvalidOverrideError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidOverrideError";
+  }
+}
+
+/**
+ * Validate the override file at load, before any override touches the ranking.
+ *
+ * Each override must name EXACTLY ONE selector - id, type or probe_id. The
+ * `matches` predicate is an OR, so an override with none silently matches nothing
+ * and one with several matches on any: both make the file quietly disagree with
+ * the human who wrote it, and a silent no-op is the worst outcome available for a
+ * calibration record. So a malformed entry is rejected loudly and by position.
+ */
+export const validateOverrides = (overrides: Overrides): Overrides => {
+  overrides.overrides.forEach((o, i) => {
+    const present = SELECTORS.filter((k) => o[k] !== undefined);
+    if (present.length !== 1) {
+      const which =
+        present.length === 0 ? "no selector" : `${present.length} selectors (${present.join(", ")})`;
+      throw new InvalidOverrideError(
+        `override #${i + 1} (why: ${JSON.stringify(o.why)}) names ${which}; ` +
+          `each override must select exactly one of id, type or probe_id, because the file is the ` +
+          `human calibration record and an override that matches nothing or everything disagrees ` +
+          `silently with the human who wrote it.`,
+      );
+    }
+  });
+  return overrides;
+};
+
 const matches = (o: ProjectOverride, node: AtlasNode): boolean =>
   (o.id !== undefined && o.id === node.id) ||
   (o.type !== undefined && o.type === node.type) ||

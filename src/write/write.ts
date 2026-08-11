@@ -181,11 +181,19 @@ export const decisionId = (issue: number): string => `d-issue-${issue}`;
  * The only status the writer may mint: `decided`, or `superseded` when the record
  * says a later decision replaced this one.
  *
- * A prompt instruction is not an enforcement (#7 point 7): the prompt can ask the
- * model for a build status and the model can return one anyway, but where a
- * decision is built is a claim about the tree only the gate may settle. So a
- * model-returned `decided_and_built` or `decided_not_built` is clamped back to
- * `decided` here, leaving promotion in the one place that reads the tree.
+ * The prompt no longer asks for a build status - it solicits only `decided` or
+ * `superseded`, and moves whether a thing was built onto `implementation_claim`
+ * for the gate to settle. This clamp is the backstop for a model that answers
+ * outside that vocabulary anyway: a prompt instruction is not an enforcement (#7
+ * point 7), and where a decision is built is a claim about the tree only the gate
+ * may settle. So a model-returned `decided_and_built` or `decided_not_built` is
+ * clamped back to `decided` here, leaving promotion in the one place that reads
+ * the tree.
+ *
+ * The consequence, deliberately: where a record states something was not built but
+ * names nothing searchable to express it (no absent-claim, or one the gate cannot
+ * read), the claim is unresolvable and the status stays `decided`. Unverified means
+ * unasserted - the same treatment an unresolvable present-claim already gets.
  */
 const clampStatus = (status: DecisionStatus | undefined): DecisionStatus =>
   status === "superseded" ? "superseded" : "decided";

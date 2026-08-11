@@ -1172,6 +1172,25 @@ describe("a decision the gate found is a decision the artifact may call built", 
     expect(node.implemented_by).toEqual([]);
   });
 
+  it("leaves a superseded decision alone even when the tree confirms its claim", async () => {
+    // `superseded` is a statement about the decision's standing, not its build
+    // state. Stale code a later decision has not yet removed is exactly what one
+    // would expect to find, never grounds to relabel the node `decided_and_built`.
+    const ctx = contextFor({ "src/main/java/Grader.java": "interface Grader {}" });
+    const node: DecisionNode = { ...(decision().node as DecisionNode), status: "superseded" };
+    const result = gateCandidate(ctx, {
+      probe_id: "write",
+      node,
+      claims: [
+        { description: "a Grader abstraction", expect: "present", paths: ["src/main/java/Grader.java"] },
+      ],
+    });
+    const out = result.node as DecisionNode;
+    expect(result.verdict).toBe("confirmed");
+    expect(out.status).toBe("superseded");
+    expect(out.implemented_by).toEqual([]);
+  });
+
   it("does not promote a decision the tree overturned", async () => {
     const ctx = contextFor({ "README.md": "x" });
     const result = gateCandidate(ctx, decision([

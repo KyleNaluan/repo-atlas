@@ -140,6 +140,12 @@ const toDivergence = (candidate: Candidate, claim: ExistenceClaim, where: string
  * alone - `decided` is the honest state for a decision nothing in the tree was
  * asked to confirm, and moving one on the strength of a claim nobody checked would
  * be the thing this function exists to avoid.
+ *
+ * Only a `decided` node moves. A `superseded` decision is a statement about the
+ * decision's standing - a later decision replaced it - not about its build state,
+ * and its old code lingering in the tree is exactly what one would expect, not
+ * evidence to relabel it `decided_and_built`. Confirming that stale code would
+ * erase the fact that the decision was overtaken, so `superseded` is left untouched.
  */
 const settleBuild = (
   node: AtlasNode,
@@ -147,7 +153,7 @@ const settleBuild = (
   confirmedAbsent: boolean,
   sha: string,
 ): AtlasNode => {
-  if (node.type !== "decision") return node;
+  if (node.type !== "decision" || node.status !== "decided") return node;
   if (confirmedAt.length > 0) {
     const seen = new Set<string>();
     const implemented_by: Evidence[] = confirmedAt

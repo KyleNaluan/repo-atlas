@@ -266,6 +266,27 @@ describe("throw-where-siblings-return", () => {
     expect(new Set(ids).size).toBe(ids.length);
   }, 60_000);
 
+  it("names the full enclosing path so same-named nested types stay distinct", async () => {
+    // Two nested classes sharing a simple name under different outer types in one
+    // file resolve to the same innermost owner ("Inner"); only the full path
+    // (A.Inner vs B.Inner) tells them apart. The innermost-only id would collide
+    // and trip the run-level uniqueness guard, and the title would name "Inner"
+    // without saying which - the same identify-what-you-established failure.
+    const ctx = contextFor({
+      "nest/Nest.java":
+        "class A { class Inner { void foo() { throw new UnsupportedOperationException(); } } }\n" +
+        "class B { class Inner { void foo() { throw new UnsupportedOperationException(); } } }\n" +
+        "class C { String foo() { return \"c\"; } }\n",
+    });
+    const found = await candidatesFrom("throw-where-siblings-return", ctx);
+    expect(found).toHaveLength(2);
+    const titles = found.map((c) => c.node.title).sort();
+    expect(titles[0]).toContain("A.Inner.foo");
+    expect(titles[1]).toContain("B.Inner.foo");
+    const ids = found.map((c) => c.node.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  }, 60_000);
+
   it("ignores a throw that is a guard clause rather than a refusal", async () => {
     const ctx = contextFor({
       "A.java": "class A { String run() { return \"a\"; } }\n",

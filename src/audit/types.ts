@@ -33,6 +33,13 @@ export interface CheckResult {
   findings?: string[];
   /** Why the check did not run. Required when the outcome is not_applicable. */
   reason?: string;
+  /**
+   * Set when the check's execution threw rather than returning an outcome. Such a
+   * result is `failed` and never counts as a pass, but the run's failure is a
+   * precondition finding, not a gate finding: the audit could not see what it
+   * needed, which is a claim about the audit and never about the artifact.
+   */
+  aborted?: boolean;
 }
 
 export type Check = (ctx: AuditContext) => Promise<CheckResult> | CheckResult;
@@ -84,6 +91,28 @@ export const notRun = (s: CheckSpec, reason: string): CheckResult => ({
   reason,
 });
 
-/** A gate failure means the artifact makes an untrue claim. */
+/**
+ * A check whose execution threw. #8 defines exactly four outcome states, and a
+ * stack trace is not one of them: an unexpected throw from any check becomes a
+ * defined `failed` outcome naming the check and the underlying error. It is never
+ * a pass, and because the failure means the audit could not run the check at all
+ * it blocks the run like a gate failure, so the checks it never reached are
+ * reported by name rather than vanishing. A git or filesystem failure is a
+ * precondition finding (git.ts: a bad object is never a false citation).
+ */
+export const aborted = (s: CheckSpec, cause: unknown): CheckResult => ({
+  id: s.id,
+  name: s.name,
+  class: s.class,
+  outcome: "failed",
+  findings: [`could not run: ${cause instanceof Error ? cause.message : String(cause)}`],
+  aborted: true,
+});
+
+/**
+ * A failure the pass must stop on. A gate failure means the artifact makes an
+ * untrue claim; an aborted check means the audit could not run at all. Both are
+ * failures the pass cannot report past, whatever the check's class.
+ */
 export const isBlocking = (r: CheckResult): boolean =>
-  r.class === "gate" && r.outcome === "failed";
+  r.outcome === "failed" && (r.class === "gate" || r.aborted === true);

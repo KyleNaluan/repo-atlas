@@ -31,8 +31,12 @@ export interface AuditOutcome {
 }
 
 const verdict = (checks: CheckResult[]): AuditStatus => {
-  const gateFailures = checks.filter((c) => c.class === "gate" && c.outcome === "failed");
-  if (gateFailures.length > 0) return "failed";
+  // An aborted check could not run, so it can never leave the run passed or
+  // passed-with-warnings, whatever its class; it fails the run like a gate.
+  const hardFailures = checks.filter(
+    (c) => c.outcome === "failed" && (c.class === "gate" || c.aborted),
+  );
+  if (hardFailures.length > 0) return "failed";
   const warnings = checks.filter((c) => c.class === "warning" && c.outcome === "failed");
   return warnings.length > 0 ? "passed_with_warnings" : "passed";
 };
@@ -76,9 +80,15 @@ export const audit = (ctx: AuditContext): AuditOutcome => {
   );
 
   const status = verdict(checks);
+  // A run that failed because a check aborted is a precondition finding, not a
+  // gate finding: git.ts's contract is that a git or filesystem failure is a
+  // claim about the audit's own preconditions, never a false citation.
+  const abortedRun = checks.some((c) => c.aborted && c.outcome === "failed");
   return {
     status,
-    ...(status === "failed" ? { failure_kind: "gate" as const } : {}),
+    ...(status === "failed"
+      ? { failure_kind: (abortedRun ? "precondition" : "gate") as "gate" | "precondition" }
+      : {}),
     checks,
     preconditions: [],
     notes: pre.notes,

@@ -95,4 +95,21 @@ describe("repo-atlas audit", () => {
     expect(await main(["audit", "--help"])).toBe(0);
     expect(out.join("\n")).toMatch(/never a pass and never a silent skip/);
   });
+
+  it("exits non-zero with a message, not a stack trace, when its inputs cannot be read", async () => {
+    // The command must convert an unreadable input into a defined non-zero exit,
+    // the same discipline the per-check boundary imposes inside the run: a throw
+    // never escapes as a stack trace.
+    const code = await main([
+      "audit",
+      "does-not-exist.html",
+      "--atlas",
+      fixture("swe-prep.atlas.json"),
+      "--clone",
+      ".",
+    ]);
+    expect(code).not.toBe(0);
+    expect(err.join("\n")).toMatch(/^failed:/m);
+    expect(err.join("\n")).not.toMatch(/\bat .*\(.*:\d+:\d+\)/); // no stack frames
+  });
 });

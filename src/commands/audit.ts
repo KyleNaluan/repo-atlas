@@ -60,19 +60,32 @@ export const auditCommand = async (argv: string[]): Promise<number> => {
     return 64;
   }
 
-  const ctx: AuditContext = {
-    artifact: readFileSync(artifactPath, "utf8"),
-    atlas: loadAtlas(atlasPath),
-    clone: resolve(clone),
-    ...(flag(argv, "--private-clone") === undefined
-      ? {}
-      : { privateClone: resolve(flag(argv, "--private-clone")!) }),
-  };
-
-  const outcome = audit(ctx);
+  let ctx: AuditContext;
+  let outcome: ReturnType<typeof audit>;
+  try {
+    ctx = {
+      artifact: readFileSync(artifactPath, "utf8"),
+      atlas: loadAtlas(atlasPath),
+      clone: resolve(clone),
+      ...(flag(argv, "--private-clone") === undefined
+        ? {}
+        : { privateClone: resolve(flag(argv, "--private-clone")!) }),
+    };
+    outcome = audit(ctx);
+  } catch (e) {
+    // The per-check boundary means audit() does not throw for a check failure;
+    // this catches the surrounding I/O (unreadable artifact, invalid atlas) so
+    // the command exits non-zero with a message rather than a stack trace.
+    console.error(`failed: ${e instanceof Error ? e.message : String(e)}`);
+    return 70; // EX_SOFTWARE
+  }
 
   console.log(`audit ${artifactPath} against ${atlasPath} at ${ctx.atlas.subject.sha}`);
-  if (outcome.failure_kind === "precondition") {
+  // Only the pre-check preconditions (clone missing, HEAD mismatch, dirty tree)
+  // stop the run before any check; those carry problems and report here. A check
+  // that aborted mid-run is a precondition-class failure too, but its checks ran,
+  // so it prints through the normal check list below rather than short-circuiting.
+  if (outcome.preconditions.length > 0) {
     console.error("failed: precondition");
     for (const p of outcome.preconditions) console.error(`  - ${p}`);
     return 78; // EX_CONFIG

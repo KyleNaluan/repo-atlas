@@ -65,7 +65,11 @@ The existence gate runs in **both directions** (#7 point 7), and the single-dire
 
 `src/rank/rank.ts` is the **only** place deletion happens. Both mechanisms are required - floor and per-section budgets - and every cut is recorded with id, score and reason for #8's G2.
 
-Scoring sits behind the `Scorer` seam in `src/rank/scorer.ts` and is deliberately unwired: #2 puts it behind a model, and how that is credentialed and verified in CI is an open decision. `rank --scores` reads them from a file, which is neutral about what fills it.
+Scoring sits behind the `Scorer` seam in `src/rank/scorer.ts`. `repo-atlas score` runs the model scorer locally through an authenticated CLI; its output is **committed** as `test/fixtures/swe-prep.scores.json`, so CI verifies the deterministic machinery against real scores without holding a credential. CI never calls a model.
+
+Refresh the pinned scores with `repo-atlas score` after any rubric change. The loader refuses a score set whose **rubric digest** no longer matches - a rubric can be reworded without its version moving, and reusing scores made against the old wording would be the "verified, not asserted" failure one level up.
+
+The scorer gets one call for the whole graph (ranking is comparative, and a per-call cost multiplied by node count is real), no tools (it orders what was established and may not add to it), and no evidence in its prompt (the rubric says evidence is a gate, not a score).
 
 Note on the reference fixture: `test/fixtures/swe-prep.atlas.json` keeps two nodes scored below the floor its own deletion record states, because its scores are hand-authored rather than model-produced (see #7's report). The resolution governs over the fixture; the discrepancy is pinned by a test in `test/rank/rank.test.ts` rather than accommodated.
 

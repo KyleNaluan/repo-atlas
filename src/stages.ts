@@ -37,6 +37,12 @@ export const STAGES: Stage[] = [
     run: async (argv) => (await import("./commands/probe.js")).gateCommand(argv),
   },
   {
+    name: "score",
+    summary: "score interview_value with a model under the versioned rubric (#2, #9)",
+    implemented: true,
+    run: async (argv) => (await import("./commands/score.js")).scoreCommand(argv),
+  },
+  {
     name: "rank",
     summary: "score interview_value under the versioned rubric; delete by floor and budget (#9)",
     implemented: true,

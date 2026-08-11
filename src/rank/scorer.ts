@@ -11,10 +11,16 @@
  * decide what a node is worth; it may not decide what survives, because #9 gives
  * deletion to the rank stage and #8's G2 audits the record it leaves.
  *
- * The model-backed implementation is deliberately not wired here yet: how its
- * ground-truth fixture test is credentialed and verified in CI is an open
- * decision, and committing one shape now would foreclose the other. What is
- * settled and built is everything on this side of the interface.
+ * The model-backed implementation lives in `model-scorer.ts`. Its output is
+ * PINNED as a committed fixture, produced locally through an authenticated CLI
+ * and refreshed by an explicit command, so CI can verify the deterministic
+ * machinery against real scores without holding a credential.
+ *
+ * A pinned measurement rots silently unless something notices, so the file
+ * records the rubric it was produced under - by version AND by digest - and the
+ * loader refuses a set whose rubric has since changed. Reusing scores made under
+ * an edited rubric would be exactly the "verified, not asserted" failure this
+ * project exists to refuse, one level up.
  */
 import type { AtlasNode } from "../schema/types.js";
 import type { Profile } from "./profile.js";
@@ -40,6 +46,11 @@ export type Scorer = (request: ScoreRequest) => Promise<ScoredNode[]>;
 export interface ScoreFile {
   profile: string;
   rubric_version: string;
+  /** Digest of the rubric text these scores were produced under. */
+  rubric_sha256?: string;
+  /** When the pinned set was produced, and by what. Provenance, not input. */
+  generated_at?: string;
+  model?: string;
   scores: { id: string; score: number; because?: string }[];
 }
 
@@ -74,6 +85,31 @@ export class ProfileMismatchError extends Error {
     this.name = "ProfileMismatchError";
   }
 }
+
+export class StaleScoresError extends Error {
+  constructor(fileDigest: string, currentDigest: string) {
+    super(
+      `these scores were produced under rubric text ${fileDigest} but the rubric now digests to ` +
+        `${currentDigest}. The rubric changed since the scores were pinned, so they are a measurement ` +
+        `of something that no longer exists. Refresh them with \`repo-atlas score\` rather than ` +
+        `ranking under scores nobody made against this rubric.`,
+    );
+    this.name = "StaleScoresError";
+  }
+}
+
+/**
+ * Refuse a pinned score set whose rubric has since been edited.
+ *
+ * The version alone is not enough: a rubric can be reworded without its version
+ * moving, and scores made against the old wording would then be silently reused
+ * as though they measured the new one.
+ */
+export const assertScoresFresh = (file: ScoreFile, rubric: string, digest: (s: string) => string) => {
+  if (file.rubric_sha256 === undefined) return;
+  const current = digest(rubric);
+  if (file.rubric_sha256 !== current) throw new StaleScoresError(file.rubric_sha256, current);
+};
 
 export const scoresFromFile = (file: ScoreFile, p: Profile) => {
   if (file.profile !== p.name) {

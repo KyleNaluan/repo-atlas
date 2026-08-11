@@ -72,6 +72,10 @@ That record is what makes the ruthlessness defensible rather than arbitrary, and
 
 This is the only stage that deletes. The renderer renders everything it is handed, or it becomes a second authority over what survives.
 
+Scoring is the one place judgement enters the pipeline, and it is a single model call over the whole graph under the rubric - with no tools, so it can order what was established but never add to it.
+Its output is pinned as a committed fixture, which is how the ranking is checked without a credential: on the reference subject the rubric reproduces the hand-made overview's five deep dives exactly, in the same order and at the same scores.
+Refreshing that fixture is an explicit, credentialed command, and a score set whose rubric has since been edited is refused rather than reused.
+
 ## The artifact
 
 One HTML file, nine sections, zero external requests: what this is, the interviewer Q&A index, the real shape, one flow end to end, the decision trail, ranked deep dives, honest edges, the record, and a generated source index.

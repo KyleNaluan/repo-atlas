@@ -12,9 +12,10 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { profile } from "../rank/profile.js";
+import { profile, rubricText } from "../rank/profile.js";
 import { rank } from "../rank/rank.js";
-import { scoresFromFile, type ScoreFile } from "../rank/scorer.js";
+import { rubricDigest } from "../rank/model-scorer.js";
+import { assertScoresFresh, scoresFromFile, type ScoreFile } from "../rank/scorer.js";
 import { EMPTY_OVERRIDES, validateOverrides, type Overrides } from "../rank/overrides.js";
 import type { GatedCandidate } from "../gate/gate.js";
 import type { AtlasNode } from "../schema/types.js";
@@ -66,6 +67,11 @@ export const rankCommand = async (argv: string[]): Promise<number> => {
     overridesPath === undefined
       ? EMPTY_OVERRIDES
       : validateOverrides(JSON.parse(readFileSync(overridesPath, "utf8")) as Overrides);
+
+  // A pinned score set is a measurement of the rubric it was made under. If that
+  // rubric has since been edited, reusing them would rank under scores nobody
+  // ever made against this text.
+  assertScoresFresh(scoreFile, rubricText(p), rubricDigest);
 
   const nodes: AtlasNode[] = gatedFile.gated.map((g) => g.node);
   const scored = scoresFromFile(scoreFile, p)(nodes);

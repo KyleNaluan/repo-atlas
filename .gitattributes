@@ -1,0 +1,6 @@
+# Generated from src/schema/types.ts by `npm run schema:gen`. Never hand-edited;
+# CI fails if it is stale (see .github/workflows/ci.yml).
+schema/atlas.schema.json linguist-generated=true
+
+# Reference fixtures carried in from the #7 render prototype.
+test/fixtures/*.atlas.json -diff

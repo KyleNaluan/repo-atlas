@@ -1,0 +1,57 @@
+{
+  "name": "repo-atlas",
+  "version": "0.1.0",
+  "description": "Evidence-linked, self-contained static overviews of a repository: a decision trail with rejected alternatives, honest edges, and ranked deep dives, every claim pinned to a commit.",
+  "keywords": [
+    "codebase",
+    "documentation",
+    "static-site",
+    "evidence",
+    "architecture"
+  ],
+  "homepage": "https://github.com/KyleNaluan/repo-atlas",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KyleNaluan/repo-atlas.git"
+  },
+  "bugs": {
+    "url": "https://github.com/KyleNaluan/repo-atlas/issues"
+  },
+  "type": "module",
+  "bin": {
+    "repo-atlas": "dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./schema": "./schema/atlas.schema.json"
+  },
+  "files": [
+    "dist",
+    "schema",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "schema:gen": "tsx scripts/gen-schema.ts",
+    "schema:check": "tsx scripts/gen-schema.ts --check",
+    "atlas": "tsx src/cli.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "ts-json-schema-generator": "^2.3.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.10"
+  },
+  "license": "UNLICENSED",
+  "private": false,
+  "dependencies": {
+    "ajv": "^8.20.0"
+  }
+}

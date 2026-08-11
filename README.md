@@ -10,9 +10,10 @@ Anything that could not be traced is cut, not hedged.
 On a repository with no decision record, the artifact says so - it never reconstructs a decision trail from commit archaeology.
 
 **Status: under construction.** The complete v1 design is closed on this tracker: issues [#1](https://github.com/KyleNaluan/repo-atlas/issues/1)-[#10](https://github.com/KyleNaluan/repo-atlas/issues/10), each with a binding `## Resolution:` comment recording the decision, the why, and the rejected alternatives.
-This build ships the `atlas.json` contract, the render stage, and the audit's deterministic passes with its stamp; the extraction stages and the model pass land stage by stage.
+This build ships the `atlas.json` contract, the harvest stage, the render stage, and the audit's deterministic passes with its stamp; the remaining extraction stages and the model pass land stage by stage.
 
 ```
+npx repo-atlas harvest --clone ../subject -o harvest.json
 npx repo-atlas render atlas.json -o overview.html
 npx repo-atlas audit overview.html --atlas atlas.json --clone ../subject
 ```
@@ -31,6 +32,18 @@ The mechanical stages are plain deterministic code; only `rank` and `audit` call
 | `render` | `atlas.json` -> one self-contained HTML artifact | [#7](https://github.com/KyleNaluan/repo-atlas/issues/7) |
 | `audit` | twenty checks, fifteen hard gates; stamps its own result into the artifact | [#8](https://github.com/KyleNaluan/repo-atlas/issues/8) |
 | `validate` | check an `atlas.json` against the generated JSON Schema, fail closed | [#3](https://github.com/KyleNaluan/repo-atlas/issues/3) |
+
+## Harvest
+
+Issues and comments come through raw `gh api` paths only.
+A convenience CLI's issue view truncates comment bodies - it cut every one of the reference subject's nine resolution comments to about 15% of its content, hiding ~39 KB of the richest input the engine has - and its own character accounting was wrong, so a wrapper's self-report is not a fidelity check.
+
+Completeness is **verified**, per issue, against the count GitHub itself reports; a mismatch is a hard failure rather than a warning, because a truncating fetch returns well-formed JSON that simply contains less than it should.
+A byte-pinned tripwire test holds a real comment's exact length and SHA-256, so a regression fails loudly instead of quietly shortening the decision record.
+
+The cache is keyed on `(repo, issue, issue.updated_at, comment_count, max(comment.updated_at))`, so editing a comment invalidates the entry - `issue.updated_at` does not move when a comment changes - and comments are stored individually by id, because an issue body and its resolution are different artifacts.
+
+A declared-private side is never read. That it exists is recorded, because the audit's private-source check has three applicability states and the middle one must never be silent.
 
 ## The artifact
 

@@ -10,7 +10,15 @@ Anything that could not be traced is cut, not hedged.
 On a repository with no decision record, the artifact says so - it never reconstructs a decision trail from commit archaeology.
 
 **Status: under construction.** The complete v1 design is closed on this tracker: issues [#1](https://github.com/KyleNaluan/repo-atlas/issues/1)-[#10](https://github.com/KyleNaluan/repo-atlas/issues/10), each with a binding `## Resolution:` comment recording the decision, the why, and the rejected alternatives.
-This build ships the `atlas.json` contract, the harvest stage, the probe library, the write stage that reads each decision record into a candidate, the existence gate over both, the model scorer and the rank stage's deterministic half, the assemble stage that joins a run into the `atlas.json` contract, the render stage, and the full audit - its deterministic passes and the advisory model pass - with its stamp; only the run orchestrator remains.
+This build ships the `atlas.json` contract, the harvest stage, the probe library, the write stage that reads each decision record into a candidate, the existence gate over both, the model scorer and the rank stage's deterministic half, the assemble stage that joins a run into the `atlas.json` contract, the render stage, the full audit - its deterministic passes and the advisory model pass - with its stamp, and the `run` orchestrator that drives all nine stages over one SHA-keyed work directory that acts as the cache.
+Every registered stage is now built.
+What remains is not a missing stage but a shortfall in what the pipeline surfaces: the one-flow-end-to-end section still has no producer, so the artifact does not yet reach the reference overview's node count - a gap pinned by `test/run/parity.test.ts` so it cannot silently close or widen.
+
+```
+npx repo-atlas run --clone ../subject -o overview.html
+```
+
+Or drive the stages by hand; `run` calls the same command functions the subcommands do, so the two cannot diverge:
 
 ```
 npx repo-atlas harvest --clone ../subject -o harvest.json
@@ -34,6 +42,7 @@ The mechanical stages are plain deterministic code; only `write`, `score` and `a
 | `assemble` | join harvest, gate and rank into one `atlas.json`, validated closed - adds no claim of its own | [#3](https://github.com/KyleNaluan/repo-atlas/issues/3), [#6](https://github.com/KyleNaluan/repo-atlas/issues/6) |
 | `render` | `atlas.json` -> one self-contained HTML artifact | [#7](https://github.com/KyleNaluan/repo-atlas/issues/7) |
 | `audit` | twenty checks, fifteen hard gates; stamps its own result into the artifact | [#8](https://github.com/KyleNaluan/repo-atlas/issues/8) |
+| `run` | drive every stage over one SHA-keyed work directory that acts as the cache | [#2](https://github.com/KyleNaluan/repo-atlas/issues/2) |
 | `validate` | check an `atlas.json` against the generated JSON Schema, fail closed | [#3](https://github.com/KyleNaluan/repo-atlas/issues/3) |
 
 ## Harvest
@@ -50,7 +59,8 @@ A declared-private side is never read. That it exists is recorded, because the a
 
 ## Probes and the existence gate
 
-Eight probes, each encoding one piece of human judgement about what is worth finding - a sealed hierarchy's closed enumeration, a method that refuses where its siblings return, a predicate repeated across queries until it is an invariant, a CI step that guards policy rather than testing code.
+Eight discovery probes, each encoding one piece of human judgement about what is worth finding - a sealed hierarchy's closed enumeration, a method that refuses where its siblings return, a predicate repeated across queries until it is an invariant, a CI step that guards policy rather than testing code.
+Two further probes fill node types nothing else in the pipeline mints: one restates the harvest's already-measured figures as the stat tiles the overview opens with, each citing the command that reproduces it at the pinned SHA, and one turns a source citation the record never explains into a `coverage_gap` edge rather than inventing a rationale for it ([#6](https://github.com/KyleNaluan/repo-atlas/issues/6) point 3).
 They are pure deterministic functions: no network, no model calls, cheap enough to be cacheable and small enough to be unit-tested against fixtures.
 
 Probes propose; they never decide. Every candidate goes to the existence gate, which resolves it against the tree at the pinned SHA and can **overturn the record in either direction**:

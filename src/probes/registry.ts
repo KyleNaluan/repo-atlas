@@ -26,7 +26,10 @@ import { detectToolchains, type Probe, type ProbeContext, type ProbeOutcome } fr
 import type { AtlasNode } from "../schema/types.js";
 import type { Harvest } from "../harvest/types.js";
 
-/** All eight discovery probes ship in v1 (#5, point 1). */
+/**
+ * #5's eight discovery probes, plus the two node producers nothing else mints:
+ * `unresolved-references` (#6 point 3) and `measured-scale` (the stat tiles).
+ */
 export const PROBES: readonly Probe[] = [
   decidedButUnbuilt,
   dependencyDivergence,

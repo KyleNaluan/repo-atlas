@@ -10,7 +10,7 @@ Anything that could not be traced is cut, not hedged.
 On a repository with no decision record, the artifact says so - it never reconstructs a decision trail from commit archaeology.
 
 **Status: under construction.** The complete v1 design is closed on this tracker: issues [#1](https://github.com/KyleNaluan/repo-atlas/issues/1)-[#10](https://github.com/KyleNaluan/repo-atlas/issues/10), each with a binding `## Resolution:` comment recording the decision, the why, and the rejected alternatives.
-This build ships the `atlas.json` contract, the harvest stage, the probe library and its existence gate, the model scorer and the rank stage's deterministic half, the assemble stage that joins a run into the `atlas.json` contract, the render stage, and the full audit - its deterministic passes and the advisory model pass - with its stamp; the run orchestrator and the remaining extraction stages land stage by stage.
+This build ships the `atlas.json` contract, the harvest stage, the probe library, the write stage that reads each decision record into a candidate, the existence gate over both, the model scorer and the rank stage's deterministic half, the assemble stage that joins a run into the `atlas.json` contract, the render stage, and the full audit - its deterministic passes and the advisory model pass - with its stamp; only the run orchestrator remains.
 
 ```
 npx repo-atlas harvest --clone ../subject -o harvest.json
@@ -21,12 +21,13 @@ npx repo-atlas audit overview.html --atlas atlas.json --clone ../subject
 ## The pipeline
 
 Each stage is a subcommand (per [#2](https://github.com/KyleNaluan/repo-atlas/issues/2)), reading and writing a content-addressed cache keyed on the pinned SHA, with a top-level `run` orchestrator.
-The mechanical stages are plain deterministic code; only `score` and `audit` call a model, and the model controls no flow.
+The mechanical stages are plain deterministic code; only `write`, `score` and `audit` call a model, and the model controls no flow.
 
 | Stage | What it does | Ticket |
 |---|---|---|
 | `harvest` | fetch the subject at a pinned SHA through raw API paths, count-verified | [#4](https://github.com/KyleNaluan/repo-atlas/issues/4) |
 | `probe` | run the mechanical probe library, emitting candidate nodes | [#5](https://github.com/KyleNaluan/repo-atlas/issues/5) |
+| `write` | read each resolution comment into a decision candidate, and write the prose | [#2](https://github.com/KyleNaluan/repo-atlas/issues/2) |
 | `gate` | confirm each candidate against the tree, in both directions | [#5](https://github.com/KyleNaluan/repo-atlas/issues/5), [#7](https://github.com/KyleNaluan/repo-atlas/issues/7) |
 | `score` | score `interview_value` with a model under the versioned rubric, one call for the whole graph | [#2](https://github.com/KyleNaluan/repo-atlas/issues/2), [#9](https://github.com/KyleNaluan/repo-atlas/issues/9) |
 | `rank` | delete by floor and budget under the pinned scores | [#9](https://github.com/KyleNaluan/repo-atlas/issues/9) |
@@ -59,6 +60,23 @@ Probes propose; they never decide. Every candidate goes to the existence gate, w
 On the reference subject the gate overturns an open ticket for a "second language adapter" whose implementation fully exists at the pinned commit.
 A confirmed contradiction becomes a `divergence` edge rather than being dropped - the record and the build disagreeing is the finding, not noise to filter.
 A claim nothing in the tree can settle is demoted rather than admitted, because a claim nobody checked must never arrive looking checked.
+
+## Writing the decision record
+
+A resolution comment carries the richest input the engine has - the decision, its reasons, and the alternative that lost - and no deterministic probe can read it, because probes are pure functions over the tree and [#5](https://github.com/KyleNaluan/repo-atlas/issues/5) forecloses model-assisted probes.
+So `write` is a model stage, and the second place judgement is allowed to enter (per [#2](https://github.com/KyleNaluan/repo-atlas/issues/2)): it reads each resolution comment on its own and returns a decision candidate's fields, while the code stamps the citation from the record so the model can never produce one that does not resolve.
+Each record is read **alone** - extraction is not comparative, and a writer shown two records at once can borrow a rationale from the wrong one - which is the exact opposite of the scorer's one call for the whole graph.
+
+The writer proposes; it never decides.
+It mints a candidate with `attested` confidence and a status of `decided` or `superseded` only, and names where it would expect the decision to live; that candidate goes through the same existence gate, which settles whether the thing was built and fills `implemented_by` with the paths the gate itself located - never anything the model proposed.
+An `implementation_claim` must be about the decision's own subject and name something machine-checkable, a path or a compilable pattern, never a prose-matchable word, or the gate demotes it as unresolvable.
+A comment that settles no decision yields an inadmissible candidate carrying `absent` confidence rather than no candidate at all, so the record can report that a decision-shaped comment existed and did not survive - a different statement from a subject with no decision trail.
+
+The same stage writes the two prose passages the artifact opens with: the product sentence and the annotated tree.
+Both read the README at the pinned SHA, the source the file listing is taken from, so the summarized bytes and the `{path, sha}` citation they carry agree by construction rather than by a clean checkout holding; a README absent at that SHA cannot support a product sentence, so the writer reports the prose inadmissible rather than guessing from the working tree.
+
+Like the scorer, the model runs locally through an authenticated CLI and its output is committed, so CI assembles from the pinned file and holds no credential.
+The prompt is a versioned asset at [`prompts/write-v1.md`](prompts/write-v1.md), changed only by commit, and a pinned output whose prompt has since been reworded, whose version moved, or whose subject SHA differs is refused rather than reused.
 
 ## Ranking, and what gets cut
 
@@ -147,7 +165,7 @@ The tool is distributed for `npx`, so the footprint is a design constraint rathe
 | Package | Why | Where |
 |---|---|---|
 | `ajv` | validates `atlas.json` against the generated schema | contract |
-| `@anthropic-ai/claude-agent-sdk` | the one authenticated model call that scores `interview_value` | score |
+| `@anthropic-ai/claude-agent-sdk` | the tool-free model calls, reached through one call site: reading decisions, scoring `interview_value`, the audit's judge | write, score, audit |
 | `puppeteer-core` | drives an already-installed browser for the audit's pass B | audit |
 | `web-tree-sitter` | structural parsing for the three probes that need a parse tree | probes |
 | `@hpcc-js/wasm-graphviz` | diagram layout as WebAssembly - no native binary, no system package | render |

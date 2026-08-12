@@ -23,7 +23,7 @@
  * G2 audits the record that stage leaves. A scorer that could delete would be a
  * second authority over what ships.
  */
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { askModel } from "../model/ask.js";
 import type { AtlasNode } from "../schema/types.js";
 import type { ScoredNode } from "./rank.js";
 import type { ScoreRequest } from "./scorer.js";
@@ -133,27 +133,17 @@ export interface ModelScorerOptions {
   ask?: (prompt: string) => Promise<string>;
 }
 
-/** The model(s) the SDK charged the run to, joined if it used more than one. */
-const modelOf = (message: unknown): string | undefined => {
-  const usage = (message as { modelUsage?: Record<string, unknown> }).modelUsage;
-  if (usage === undefined || usage === null) return undefined;
-  const names = Object.keys(usage);
-  return names.length > 0 ? names.join(", ") : undefined;
-};
-
-export const askViaSdk = async (prompt: string): Promise<ScorerReply> => {
-  // No tools: the scorer orders what was established and may not add to it.
-  const run = query({ prompt, options: { maxTurns: 1, allowedTools: [] } });
-  for await (const message of run) {
-    if (message.type === "result") {
-      if ("result" in message && typeof message.result === "string") {
-        return { text: message.result, model: modelOf(message) };
-      }
-      throw new ScorerError(`the scorer run ended without a result: ${JSON.stringify(message).slice(0, 200)}`);
-    }
-  }
-  throw new ScorerError("the scorer run produced no result message");
-};
+/**
+ * No tools: the scorer orders what was established and may not add to it.
+ *
+ * Enforced by `model/ask.ts` rather than here. The option this file used to pass
+ * was an empty permission allowlist, which leaves the built-in tools in the
+ * model's context, so a scorer deliberately shown no evidence (#9: evidence is a
+ * gate, not a score) could have read the tree and scored on it. That would never
+ * have failed; it would have quietly stopped being the scorer this docblock
+ * describes.
+ */
+export const askViaSdk = (prompt: string): Promise<ScorerReply> => askModel(prompt, "scorer");
 
 export const modelScorer =
   (options: ModelScorerOptions = {}) =>

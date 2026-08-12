@@ -43,11 +43,18 @@ export interface GatedCandidate {
  * dependency. Treating that as "not declared" would let the gate confirm a
  * divergence it never established - so the claim comes back undecidable and the
  * candidate is demoted rather than confirmed.
+ *
+ * The same third answer covers a pattern that will not compile. Claims now
+ * originate from model output as well as deterministic probes, so a malformed
+ * regex is reachable input, not a code bug. Searching cannot proceed, so the
+ * claim is undecidable exactly as an unreadable manifest is - the gate must
+ * never crash on it, and never pass it silently as though the tree had been
+ * read. `undecidableReason` names the specific cause for the finding.
  */
 const treeHas = (
   ctx: ProbeContext,
   claim: ExistenceClaim,
-): { found: boolean; where: string[]; undecidable: boolean } => {
+): { found: boolean; where: string[]; undecidable: boolean; undecidableReason?: string } => {
   const where: string[] = [];
   let undecidable = false;
 
@@ -56,8 +63,23 @@ const treeHas = (
   }
 
   if (claim.pattern) {
-    const include = claim.pattern.include ? new RegExp(claim.pattern.include) : null;
-    const regex = new RegExp(claim.pattern.regex, "i");
+    let include: RegExp | null;
+    let regex: RegExp;
+    try {
+      include = claim.pattern.include ? new RegExp(claim.pattern.include) : null;
+      regex = new RegExp(claim.pattern.regex, "i");
+    } catch {
+      const bad =
+        claim.pattern.include !== undefined
+          ? `include \`${claim.pattern.include}\` / regex \`${claim.pattern.regex}\``
+          : `regex \`${claim.pattern.regex}\``;
+      return {
+        found: where.length > 0,
+        where,
+        undecidable: true,
+        undecidableReason: `its search pattern did not compile (${bad}), so the tree could not be searched for it`,
+      };
+    }
     for (const path of ctx.paths) {
       if (include && !include.test(path)) continue;
       const text = ctx.read(path);
@@ -122,8 +144,55 @@ const toDivergence = (candidate: Candidate, claim: ExistenceClaim, where: string
   };
 };
 
+/**
+ * The gate settles whether a decision was built, in both directions.
+ *
+ * The write stage never sets this, and must not: a resolution comment states what
+ * was decided, never that it was built, and treating the record as evidence of
+ * implementation is the exact failure #7 point 7 wrote a bidirectional gate to
+ * prevent. So the settlement happens here, on the strength of the gate's own
+ * reading of the tree, and `implemented_by` carries the paths the gate actually
+ * located rather than anything a model proposed. Verification recorded, not
+ * assertion trusted.
+ *
+ * A confirmed present-claim promotes to `decided_and_built` with the paths the
+ * gate located. A confirmed absent-claim settles the mirror: `decided_not_built`,
+ * with `implemented_by` left empty per #8's E2, because confirming a thing is not
+ * there is not a citation of where it is built. A decision with neither is left
+ * alone - `decided` is the honest state for a decision nothing in the tree was
+ * asked to confirm, and moving one on the strength of a claim nobody checked would
+ * be the thing this function exists to avoid.
+ *
+ * Only a `decided` node moves. A `superseded` decision is a statement about the
+ * decision's standing - a later decision replaced it - not about its build state,
+ * and its old code lingering in the tree is exactly what one would expect, not
+ * evidence to relabel it `decided_and_built`. Confirming that stale code would
+ * erase the fact that the decision was overtaken, so `superseded` is left untouched.
+ */
+const settleBuild = (
+  node: AtlasNode,
+  confirmedAt: string[],
+  confirmedAbsent: boolean,
+  sha: string,
+): AtlasNode => {
+  if (node.type !== "decision" || node.status !== "decided") return node;
+  if (confirmedAt.length > 0) {
+    const seen = new Set<string>();
+    const implemented_by: Evidence[] = confirmedAt
+      .filter((path) => !seen.has(path) && seen.add(path))
+      .map((path) => ({ kind: "file" as const, path, sha }));
+    return { ...node, status: "decided_and_built", implemented_by };
+  }
+  if (confirmedAbsent) return { ...node, status: "decided_not_built", implemented_by: [] };
+  return node;
+};
+
 export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCandidate => {
   const claims = candidate.claims ?? [];
+  /** Where a confirmed present-claim was found, for the settlement below. */
+  const confirmedAt: string[] = [];
+  /** True once the tree confirms an absent-claim, settling `decided_not_built`. */
+  let confirmedAbsent = false;
   if (claims.length === 0) {
     return {
       probe_id: candidate.probe_id,
@@ -148,19 +217,30 @@ export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCan
       };
     }
 
-    const { found, where, undecidable } = treeHas(ctx, claim);
+    const { found, where, undecidable, undecidableReason } = treeHas(ctx, claim);
     if (undecidable) {
-      // A build manifest is present but in a form the shared rule cannot read.
-      // Confirming the divergence would assert a contradiction the gate did not
-      // establish, so the candidate is demoted exactly as an unreadable claim is.
+      // The gate looked but could not settle the claim: a build manifest present
+      // in a form the shared rule cannot read, or a model-authored pattern that
+      // will not compile. Either way, confirming the divergence would assert a
+      // contradiction the gate did not establish, so the candidate is demoted
+      // exactly as an unreadable claim is.
       return {
         probe_id: candidate.probe_id,
         node: { ...candidate.node, confidence: "attested" },
         verdict: "unresolved",
-        finding: `${claim.description}: a build manifest is present but in a form this gate cannot read, so whether it declares this is undecided`,
+        finding: `${claim.description}: ${undecidableReason ?? "a build manifest is present but in a form this gate cannot read, so whether it declares this is undecided"}`,
       };
     }
     const agrees = claim.expect === "present" ? found : !found;
+    if (agrees && claim.expect === "present") {
+      // Remembered so a confirmed decision can record WHERE the gate found it.
+      // Discarding these would throw away a verification the gate performed.
+      confirmedAt.push(...where);
+    }
+    if (agrees && claim.expect === "absent") {
+      // The mirror verification: the tree confirms the decision was not built.
+      confirmedAbsent = true;
+    }
     if (!agrees) {
       const divergence = toDivergence(candidate, claim, where);
       const evidence = divergence.evidence.map((e) =>
@@ -177,9 +257,12 @@ export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCan
 
   return {
     probe_id: candidate.probe_id,
-    node: candidate.node,
+    node: settleBuild(candidate.node, confirmedAt, confirmedAbsent, ctx.sha),
     verdict: "confirmed",
-    finding: "the tree agrees with the record",
+    finding:
+      confirmedAt.length === 0
+        ? "the tree agrees with the record"
+        : `the tree agrees with the record, and carries it at ${confirmedAt.slice(0, 3).join(", ")}`,
   };
 };
 

@@ -5,7 +5,7 @@
  * same separation the rank stage needed, for the same reason: a credential-free
  * path must stay credential-free.
  */
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { askModel } from "../model/ask.js";
 import type { Judge, JudgeRequest, Verdict } from "./checks/model.js";
 
 const EXCERPT_LIMIT = 4000;
@@ -36,29 +36,27 @@ ${JSON.stringify(request.node, null, 1)}
 ${request.evidence.map((e) => `[${e.citation}]\n${excerpt(e.text)}`).join("\n\n") || "(none resolved)"}
 --- END EVIDENCE ---`;
 
+/**
+ * No tools: the judge weighs the node against the evidence it was HANDED and may
+ * not go looking for more, or it would be grading a different claim from the one
+ * pass D asked about. That is `model/ask.ts`'s guarantee - the option this file
+ * used to pass left every built-in tool in the model's context.
+ */
 export const sdkJudge: Judge = async (request, question): Promise<Verdict> => {
-  // No tools: the judge weighs the node against the evidence it was handed and
-  // may not go looking for more, or it would be grading a different claim.
-  const run = query({ prompt: prompt(request, question), options: { maxTurns: 1, allowedTools: [] } });
-  for await (const message of run) {
-    if (message.type === "result" && "result" in message && typeof message.result === "string") {
-      const text = message.result;
-      const start = text.indexOf("{");
-      const end = text.lastIndexOf("}");
-      if (start === -1 || end <= start) {
-        // A verdict that cannot be read is not a finding against the artifact.
-        return { supported: true, note: "the judge returned no readable verdict" };
-      }
-      try {
-        const parsed = JSON.parse(text.slice(start, end + 1)) as Partial<Verdict>;
-        return {
-          supported: parsed.supported !== false,
-          note: typeof parsed.note === "string" ? parsed.note : "no note given",
-        };
-      } catch {
-        return { supported: true, note: "the judge returned unparseable JSON" };
-      }
-    }
+  const { text } = await askModel(prompt(request, question), "judge");
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end <= start) {
+    // A verdict that cannot be read is not a finding against the artifact.
+    return { supported: true, note: "the judge returned no readable verdict" };
   }
-  return { supported: true, note: "the judge produced no result" };
+  try {
+    const parsed = JSON.parse(text.slice(start, end + 1)) as Partial<Verdict>;
+    return {
+      supported: parsed.supported !== false,
+      note: typeof parsed.note === "string" ? parsed.note : "no note given",
+    };
+  } catch {
+    return { supported: true, note: "the judge returned unparseable JSON" };
+  }
 };

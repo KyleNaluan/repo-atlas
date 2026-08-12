@@ -23,9 +23,11 @@ import { gate, gateCandidate } from "../../src/gate/gate.js";
 import {
   detectToolchains,
   type Candidate,
+  type ExistenceClaim,
   type ProbeContext,
   type ProbeOutcome,
 } from "../../src/probes/types.js";
+import type { DecisionNode } from "../../src/schema/types.js";
 import type { Harvest, HarvestedIssue } from "../../src/harvest/types.js";
 
 /* ---------------------------------------------------------- fixtures */
@@ -1085,6 +1087,64 @@ describe("the existence gate overturns the record in BOTH directions", () => {
     expect(result.node.confidence).toBe("attested");
   }, 60_000);
 
+  it("demotes rather than crashes on a model-authored regex that will not compile", () => {
+    // Claims now come from model output, so a malformed pattern is reachable
+    // input, not a code bug. It must never throw out of the gate, and must never
+    // pass as though the tree had been searched.
+    const ctx = contextFor({ "A.java": "class A {}\n" });
+    const candidate: Candidate = {
+      probe_id: "write",
+      claims: [{ description: "a Grader abstraction", expect: "present", pattern: { regex: "class (Grader" } }],
+      node: {
+        type: "mechanism",
+        id: "m-bad-regex",
+        title: "x",
+        what: "w",
+        why_interesting: "y",
+        enforcement: "type-level",
+        gotchas: [],
+        evidence: [],
+        confidence: "verified",
+        interview_value: 0,
+      },
+    };
+    const result = gateCandidate(ctx, candidate);
+    expect(result.verdict).toBe("unresolved");
+    expect(result.node.confidence).toBe("attested");
+    // The finding names the pattern that would not compile.
+    expect(result.finding).toContain("class (Grader");
+  }, 60_000);
+
+  it("demotes on a malformed include filter, not only a malformed regex", () => {
+    const ctx = contextFor({ "A.java": "class A {}\n" });
+    const candidate: Candidate = {
+      probe_id: "write",
+      claims: [
+        {
+          description: "a Grader abstraction",
+          expect: "present",
+          pattern: { regex: "class Grader", include: "src/**[" },
+        },
+      ],
+      node: {
+        type: "mechanism",
+        id: "m-bad-include",
+        title: "x",
+        what: "w",
+        why_interesting: "y",
+        enforcement: "type-level",
+        gotchas: [],
+        evidence: [],
+        confidence: "verified",
+        interview_value: 0,
+      },
+    };
+    const result = gateCandidate(ctx, candidate);
+    expect(result.verdict).toBe("unresolved");
+    expect(result.node.confidence).toBe("attested");
+    expect(result.finding).toContain("src/**[");
+  }, 60_000);
+
   it("passes through a candidate grounded in what the probe already read", () => {
     const ctx = contextFor({ "A.java": "class A {}\n" });
     const candidate: Candidate = {
@@ -1105,4 +1165,130 @@ describe("the existence gate overturns the record in BOTH directions", () => {
     expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
     expect(gate(ctx, [candidate])).toHaveLength(1);
   }, 60_000);
+});
+
+describe("a decision the gate found is a decision the artifact may call built", () => {
+  const decision = (claims?: ExistenceClaim[]): Candidate => ({
+    probe_id: "write",
+    node: {
+      type: "decision",
+      id: "d-issue-6",
+      title: "Grader/Runner split",
+      question: "q",
+      decision: "d",
+      why: "w",
+      rejected: [],
+      // What the write stage emits, and must: a resolution comment states what
+      // was decided, never that it was built.
+      status: "decided",
+      implemented_by: [],
+      soundbite: "s",
+      evidence: [{ kind: "issue", number: 6, comment_id: 1 }],
+      confidence: "attested",
+      interview_value: 0,
+    },
+    ...(claims === undefined ? {} : { claims }),
+  });
+
+  it("promotes on a confirmed present-claim and records where it looked", async () => {
+    const ctx = contextFor({ "src/main/java/Grader.java": "interface Grader {}" });
+    const result = gateCandidate(ctx, decision([
+      { description: "a Grader abstraction", expect: "present", paths: ["src/main/java/Grader.java"] },
+    ]));
+    const node = result.node as DecisionNode;
+    expect(result.verdict).toBe("confirmed");
+    expect(node.status).toBe("decided_and_built");
+    // The gate's own reading, pinned - never a path the writer proposed.
+    expect(node.implemented_by).toEqual([
+      { kind: "file", path: "src/main/java/Grader.java", sha: ctx.sha },
+    ]);
+    expect(result.finding).toContain("src/main/java/Grader.java");
+  });
+
+  it("leaves a decision alone when nothing was asked of the tree", async () => {
+    // `decided` is the honest state for a decision no claim was checked for.
+    // Promoting one would be asserting an implementation nobody verified, which
+    // is the failure the promotion exists to avoid rather than commit.
+    const ctx = contextFor({ "src/main/java/Grader.java": "interface Grader {}" });
+    const node = gateCandidate(ctx, decision()).node as DecisionNode;
+    expect(node.status).toBe("decided");
+    expect(node.implemented_by).toEqual([]);
+  });
+
+  it("settles a confirmed ABSENT claim to decided_not_built with empty implemented_by", async () => {
+    // The mirror of promotion: the gate confirmed the decision is not built, which
+    // is a settlement the gate alone may make. implemented_by stays empty per #8's
+    // E2 - confirming a thing is not there is never a citation of where it is built.
+    const ctx = contextFor({ "README.md": "no statements here" });
+    const result = gateCandidate(
+      ctx,
+      decision([{ description: "no problem prose", expect: "absent", paths: ["statements/"] }]),
+    );
+    const node = result.node as DecisionNode;
+    expect(result.verdict).toBe("confirmed");
+    expect(node.status).toBe("decided_not_built");
+    expect(node.implemented_by).toEqual([]);
+  });
+
+  it("leaves a superseded decision alone even when the tree confirms its claim", async () => {
+    // `superseded` is a statement about the decision's standing, not its build
+    // state. Stale code a later decision has not yet removed is exactly what one
+    // would expect to find, never grounds to relabel the node `decided_and_built`.
+    const ctx = contextFor({ "src/main/java/Grader.java": "interface Grader {}" });
+    const node: DecisionNode = { ...(decision().node as DecisionNode), status: "superseded" };
+    const result = gateCandidate(ctx, {
+      probe_id: "write",
+      node,
+      claims: [
+        { description: "a Grader abstraction", expect: "present", paths: ["src/main/java/Grader.java"] },
+      ],
+    });
+    const out = result.node as DecisionNode;
+    expect(result.verdict).toBe("confirmed");
+    expect(out.status).toBe("superseded");
+    expect(out.implemented_by).toEqual([]);
+  });
+
+  it("does not promote a decision the tree overturned", async () => {
+    const ctx = contextFor({ "README.md": "x" });
+    const result = gateCandidate(ctx, decision([
+      { description: "a Grader abstraction", expect: "present", paths: ["src/main/java/Grader.java"] },
+    ]));
+    expect(result.verdict).toBe("overturned");
+    expect(result.node.type).toBe("edge");
+  });
+
+  it("records each path once when two claims land on the same file", async () => {
+    const ctx = contextFor({ "src/main/java/Grader.java": "interface Grader {}" });
+    const node = gateCandidate(ctx, decision([
+      { description: "a Grader", expect: "present", paths: ["src/main/java/Grader.java"] },
+      { description: "the same file again", expect: "present", paths: ["src/main/java/Grader.java"] },
+    ])).node as DecisionNode;
+    expect(node.implemented_by).toHaveLength(1);
+  });
+
+  it("leaves a non-decision node's fields alone", async () => {
+    const ctx = contextFor({ "src/main/java/Grader.java": "interface Grader {}" });
+    const candidate: Candidate = {
+      probe_id: "p",
+      node: {
+        type: "mechanism",
+        id: "m-1",
+        title: "x",
+        what: "w",
+        why_interesting: "y",
+        enforcement: "type-level",
+        gotchas: [],
+        evidence: [],
+        confidence: "verified",
+        interview_value: 0,
+      },
+      claims: [
+        { description: "a Grader", expect: "present", paths: ["src/main/java/Grader.java"] },
+      ],
+    };
+    const result = gateCandidate(ctx, candidate);
+    expect(result.verdict).toBe("confirmed");
+    expect(result.node).toEqual(candidate.node);
+  });
 });

@@ -24,7 +24,7 @@ This project measures decision density; its own history is expected to exhibit i
 Concretely, and these recur in every stage:
 
 - **Silence is never how absence is communicated** (#6). An empty section renders an explicit panel in its own slot. Two phrasings, deliberately: only the decision section may say "absent from the record", because only it makes a claim *about* a record; every other empty section says "nothing surfaced".
-- **Mechanics propose, judgement deletes** (#2, #5). Probes emit candidates; the gate verifies; the rank stage owns acceptance and deletion. No other stage may become a second authority over what survives - which is why budgets live in `rank` and not in `render` (#7), and why the audit may reject an artifact but never edit one outside its own slot (#8).
+- **Mechanics propose, judgement deletes** (#2, #5). Probes and the write stage emit candidates; the gate verifies; the rank stage owns acceptance and deletion. No other stage may become a second authority over what survives - which is why budgets live in `rank` and not in `render` (#7), and why the audit may reject an artifact but never edit one outside its own slot (#8).
 - **No sentence in the artifact may state an audit conclusion except inside the audit slot** (#8). The render prototype violated this; it is the defect the audit contract was written around.
 
 ## Layout
@@ -58,6 +58,14 @@ Probes emit **candidates**, never final nodes. The gate confirms, the rank stage
 The existence gate runs in **both directions** (#7 point 7), and the single-direction version is the one already found wrong on the reference subject: a stated decision is not evidence of implementation, and an open ticket is not evidence of absence. A confirmed contradiction becomes a `divergence` edge rather than being dropped. A claim nothing in the tree can settle is **demoted, never admitted as checked**.
 
 `assets/tree-sitter-java.wasm` is vendored deliberately. The only npm package shipping a prebuilt Java grammar bundles ~40 of them at 50 MB for one 430 KB file, which is not a defensible npx footprint. `web-tree-sitter` is pinned to the ABI that grammar was built against - **the two move together or not at all**.
+
+## Write
+
+The one model stage besides scoring, and the only place a model reads a decision record (#2). Probes are pure deterministic functions and #5 forecloses model-assisted ones, so nothing mechanical can turn a resolution comment into a decision, a why and the alternative that lost. `repo-atlas write` runs the model locally through an authenticated CLI and commits `written.json`, exactly as `score` commits its scores; CI assembles from the pinned file and holds no credential. The prompt is a versioned asset (`prompts/write-v1.md`, #9's rule), and `assertWriteFresh` - the loader, not a caller that must remember - refuses a set whose prompt digest, version or subject SHA no longer matches.
+
+The writer emits **candidates, not nodes**, and runs BEFORE the gate: nothing else could mint a Decision, yet whether one was built is a claim about the tree only the gate may settle. So `clampStatus` allows the model `decided` or `superseded` only, and `settleBuild` in the gate promotes a confirmed present-claim to `decided_and_built` - filling `implemented_by` with the paths the gate itself located - a confirmed absent-claim to `decided_not_built`, and never moves a `superseded` node. Two rules the prompt and `claimOf` enforce: a comment settling nothing yields an `absent` candidate (cut, not dropped, so #6's silence rule holds - and only a well-formed model verdict may produce that cut, an unreadable reply is not a record that a comment settles nothing), and an `implementation_claim` must be about the decision's OWN subject and name something machine-checkable, a path or a compilable pattern, never a prose-matchable word.
+
+`src/model/ask.ts` is the **one SDK call site**, and `test/model/ask-lint.test.ts` fails the build if a second import of `@anthropic-ai/claude-agent-sdk` appears - the same rule as the renderer's `raw()`. The three callers (write, score, the audit judge) each wrote their own options and each got the tool restriction wrong the same way: `allowedTools: []` is a permission allowlist that leaves the built-in tools in the model's context, while `tools: []` removes them. A scorer or judge that can read the tree still returns plausible output, so nothing fails and the guarantee just stops holding - which is why it is structural, not remembered.
 
 ## Ranking
 

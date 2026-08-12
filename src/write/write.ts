@@ -174,8 +174,17 @@ export const assertWriteFresh = (file: WrittenFile, prompt: string, subjectSha: 
   if (file.prompt_sha256 !== current) throw new StaleWriteError(file.prompt_sha256, current);
 };
 
-/** A stable id for a decision, from the record it was read from rather than its prose. */
-export const decisionId = (issue: number): string => `d-issue-${issue}`;
+/**
+ * A stable id for a decision, from the record it was read from rather than its prose.
+ *
+ * The comment id is always part of it, never only when a second resolution
+ * comment appears: `recordsIn` emits one record per resolution comment (#7 found
+ * issue #2 carrying two, cited as distinct artifacts), so keying on the issue
+ * alone would mint colliding node ids - and colliding `{id}-divergence` edge ids
+ * in the gate - for two decisions the subject genuinely records apart. The id is
+ * derived from the record, so it does not shift when a second comment arrives.
+ */
+export const decisionId = (issue: number, commentId: number): string => `d-issue-${issue}-c${commentId}`;
 
 /**
  * The only status the writer may mint: `decided`, or `superseded` when the record
@@ -230,7 +239,7 @@ export const toCandidate = (record: RecordToRead, w: WrittenDecision): Candidate
   const evidence = [
     { kind: "issue" as const, number: record.issue.number, comment_id: record.comment.id },
   ];
-  const id = decisionId(record.issue.number);
+  const id = decisionId(record.issue.number, record.comment.id);
 
   if (!w.admissible) {
     // Cut, not hedged (#3). It is emitted rather than dropped so the record can

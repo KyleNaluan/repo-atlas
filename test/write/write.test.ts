@@ -158,10 +158,30 @@ describe("the writer proposes; it does not cite and it does not implement", () =
   it("gives a decision an id from the record, not from its prose", () => {
     // Prose changes when the prompt is reworded; the record it was read from does
     // not, and the id is used verbatim as a rendered element id.
-    expect(toCandidate(RECORD, ADMISSIBLE).node.id).toBe(decisionId(3));
+    expect(toCandidate(RECORD, ADMISSIBLE).node.id).toBe(decisionId(3, 5180801286));
     expect(toCandidate(RECORD, { ...ADMISSIBLE, title: "Something else" }).node.id).toBe(
-      decisionId(3),
+      decisionId(3, 5180801286),
     );
+  });
+
+  it("mints distinct node and divergence-edge ids for two resolution comments on one issue", () => {
+    // #7 found issue #2 carrying two resolution comments, cited as distinct
+    // artifacts, and `recordsIn` reads both. Keying the node id on the issue alone
+    // would collide them - and collide their `{id}-divergence` edge ids in the
+    // gate - collapsing two decisions the subject records apart into one malformed
+    // node. The reference subject has one resolution per issue, so nothing else
+    // exercises this.
+    const first: RecordToRead = {
+      issue: issue(2, [comment(5181222288, "## Resolution: one"), comment(5243059657, "### Resolution: two")]),
+      comment: comment(5181222288, "## Resolution: one"),
+    };
+    const second: RecordToRead = { ...first, comment: comment(5243059657, "### Resolution: two") };
+    const idA = toCandidate(first, ADMISSIBLE).node.id;
+    const idB = toCandidate(second, ADMISSIBLE).node.id;
+    expect(idA).toBe("d-issue-2-c5181222288");
+    expect(idB).toBe("d-issue-2-c5243059657");
+    expect(idA).not.toBe(idB);
+    expect(`${idA}-divergence`).not.toBe(`${idB}-divergence`);
   });
 });
 
@@ -242,8 +262,8 @@ describe("a pinned written set cannot go quietly stale", () => {
     });
     const issues = [issue(3, [comment(1, "x")]), issue(9, [comment(2, "y")])];
     expect(candidatesFrom(two, issues, writePromptText(), SHA).map((c) => c.node.id)).toEqual([
-      decisionId(3),
-      decisionId(9),
+      decisionId(3, 1),
+      decisionId(9, 2),
     ]);
   });
 

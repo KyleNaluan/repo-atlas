@@ -63,7 +63,21 @@ ${record.issue.body}
 ${record.comment.body}
 --- END COMMENT ---`;
 
-const prosePrompt = (request: ProseRequest, prompt: string): string => `${prompt}
+const README_LIMIT = 20_000;
+const PATHS_LIMIT = 600;
+
+const prosePrompt = (request: ProseRequest, prompt: string): string => {
+  const readmeDropped = Math.max(0, request.readme.length - README_LIMIT);
+  const pathsDropped = Math.max(0, request.paths.length - PATHS_LIMIT);
+  const readmeNote =
+    readmeDropped > 0
+      ? `\n[${readmeDropped} more README characters were withheld from you. You are seeing a truncated README; decline rather than describe a repository you were shown a fraction of.]`
+      : "";
+  const pathsNote =
+    pathsDropped > 0
+      ? `\n[${pathsDropped} more paths were withheld from you. You are seeing a truncated listing; decline rather than annotate a tree you were shown a fraction of.]`
+      : "";
+  return `${prompt}
 
 You are writing the product sentence and the annotated tree.
 
@@ -80,16 +94,17 @@ aligned after the path. Include only directories and files present in the listin
 below.
 
 --- README ---
-${request.readme.slice(0, 20_000)}
+${request.readme.slice(0, README_LIMIT)}${readmeNote}
 --- END README ---
 
 --- PATHS AT THE PINNED SHA ---
-${request.paths.slice(0, 600).join("\n")}
+${request.paths.slice(0, PATHS_LIMIT).join("\n")}${pathsNote}
 --- END PATHS ---
 
 --- DECISIONS THAT SURVIVED ---
 ${request.decisions.map((d) => `${d.title}: ${d.decision}`).join("\n") || "(none)"}
 --- END DECISIONS ---`;
+};
 
 /** Pull the JSON object out of a reply, tolerating a stray fence or preamble. */
 export const parseWritten = <T>(text: string): T => {
@@ -162,15 +177,12 @@ export const modelWriter = (options: ModelWriterOptions = {}): Writer => {
     // records at once can borrow a rationale from the wrong one.
     decision: async (record, prompt) => readDecision(await ask(decisionPrompt(record, prompt))),
     prose: async (request, prompt) => {
-      // ask() stays OUTSIDE the try, matching the decision path: an AskError from
-      // the SDK seam (a tool-use reply, no result) must propagate loudly rather
-      // than be reported as prose that could not be read, which would mask the
-      // exact regression the empty-allowlist fix exists to surface. Only a parse
-      // failure becomes admissible:false.
-      // Same rule as the decision path: `admissible: false` here means the README
-      // and listing could not support a product sentence, which is a claim about
-      // the subject. A reply that is not a verdict is a failed run, not a subject
-      // with no describable shape.
+      // Same rule as the decision path: the only route to `admissible: false` is a
+      // well-formed verdict saying so, which is a claim about the subject - that
+      // the README and listing could not support a product sentence. Anything else
+      // - no JSON, unparseable JSON, a reply missing the field - throws WriterError
+      // and fails the run, because a reply that is not a verdict is the model
+      // missing the question, never a subject with no describable shape.
       const text = await ask(prosePrompt(request, prompt));
       const parsed = parseWritten<WrittenProse>(text);
       if (typeof parsed.admissible !== "boolean") {

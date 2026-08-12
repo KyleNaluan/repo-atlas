@@ -82,7 +82,9 @@ describe("what the pinned set yields", () => {
 
   it("mints one decision candidate per record", () => {
     expect(candidates).toHaveLength(9);
-    expect(candidates.map((c) => c.node.id)).toEqual(pinned.decisions.map((d) => decisionId(d.issue)));
+    expect(candidates.map((c) => c.node.id)).toEqual(
+      pinned.decisions.map((d) => decisionId(d.issue, d.comment_id)),
+    );
   });
 
   it("cites the record each decision was read from", () => {

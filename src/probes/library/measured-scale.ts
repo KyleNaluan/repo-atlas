@@ -14,13 +14,23 @@
  * checked, which is exactly why each one carries the command that produced it.
  *
  * A citation only earns that trust if running it yields the number the tile
- * shows. The audit's evidenceResolver never executes a command's excerpt, so a
- * tile whose cited command selects a DIFFERENT set than its value counts - the
- * whole tree instead of the production-source subset, say - ships a number that
- * looks checkable and is not, which is worse than no citation. So the count and
- * the command are built from ONE `select`: a path filter is a predicate AND the
- * `grep -iE` pipeline that reproduces it, both off the same regex sources
- * (`SOURCE_EXTENSION_ERE`, `TEST_PATH_ERE`), so the two cannot diverge by review.
+ * shows - the one rule three findings on these tiles all reduce to. The audit's
+ * evidenceResolver never executes a command's excerpt, so a tile whose cited
+ * command selects a DIFFERENT set than its value counts - the whole tree instead
+ * of the production-source subset, say - ships a number that looks checkable and
+ * is not, which is worse than no citation. So the count and the command are built
+ * from ONE `select`: a path filter is a predicate AND the `grep -iE` pipeline that
+ * reproduces it, both off the same regex sources (`SOURCE_EXTENSION_ERE`,
+ * `TEST_PATH_ERE`), so the two cannot diverge by review.
+ *
+ * The same rule governs HOW the lines tile counts, not just WHICH files it reads.
+ * `scale.lines` is `countLines` summed per file (`tree.ts`), which counts a final
+ * line with no trailing newline as a line; a bare `wc -l` counts newline bytes, so
+ * it under-reports by one per file lacking a trailing newline, and `xargs`
+ * concatenation merges such a file's last line into the next file's first. Piping
+ * each blob through `awk 1` re-emits every record newline-terminated before the
+ * count, so `wc -l` then reproduces `countLines` exactly. The command is fixed to
+ * match the measured figure; the figure is never adjusted to suit the command.
  *
  * It emits nothing rather than a zero for a figure the harvest could not
  * establish: "0 commits" is a claim, and an unmeasured value rendered as 0 is a
@@ -107,7 +117,7 @@ const find = async (ctx: ProbeContext): Promise<Candidate[]> => {
         "lines of production source",
         thousands(scale.lines),
         "How much code there is",
-        `${source.listing} | xargs -I{} git cat-file -p ${ctx.sha}:{} | wc -l`,
+        `${source.listing} | xargs -I{} sh -c 'git cat-file -p ${ctx.sha}:{} | awk 1' | wc -l`,
         `${thousands(scale.lines)} lines across ${thousands(source.paths.length)} production source files`,
       ),
     );

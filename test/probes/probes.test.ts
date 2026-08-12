@@ -1596,4 +1596,23 @@ describe("measured-scale", () => {
     );
     expect(testsCmd).not.toContain(`grep -ivE '${TEST_PATH_ERE}'`);
   });
+
+  it("counts the lines tile per file so wc -l reproduces countLines", async () => {
+    // `scale.lines` counts a final unterminated line as a line; a bare `wc -l`
+    // over concatenated blobs counts newline bytes, under-reporting by one per
+    // file lacking a trailing newline and merging its last line into the next
+    // file's first. Normalising each blob through `awk 1` before the count is what
+    // makes the printed command reproduce the number the tile shows, so the raw
+    // concatenation form must never come back.
+    const lines = (await candidatesFrom("measured-scale", withScale({ lines: 100 }))).find(
+      (c) => c.node.id === "f-scale-lines",
+    );
+    const ev = lines!.node.evidence[0]!;
+    const cmd = ev.kind === "command" ? ev.cmd : "";
+    expect(cmd, "each blob must be normalised per file, not concatenated raw").toContain(
+      "xargs -I{} sh -c 'git cat-file -p",
+    );
+    expect(cmd, "awk 1 re-emits every record newline-terminated before wc -l").toContain("awk 1");
+    expect(cmd).not.toMatch(/xargs -I\{\} git cat-file -p [^|]*\| wc -l/);
+  });
 });

@@ -48,8 +48,18 @@ export const treeFiles = (repo: string, sha: string): string[] =>
 const SOURCE_EXTENSIONS = /\.(java|ts|tsx|js|jsx|py|go|rb|rs|kt|scala|c|cc|cpp|h|hpp|cs|php|sql)$/i;
 const TEST_PATH = /(^|\/)(test|tests|spec|__tests__)(\/|$)|\.(test|spec)\./i;
 
+/**
+ * Does a path carry a source-code extension? "Is a source file" has exactly ONE
+ * definition of which languages exist, so a production counter and a test counter
+ * cannot disagree about it. `isSourceFile` is this predicate minus the test paths;
+ * a test-file counter is this predicate AND a test path.
+ */
+export const hasSourceExtension = (path: string): boolean => SOURCE_EXTENSIONS.test(path);
+
+export const isTestPath = (path: string): boolean => TEST_PATH.test(path);
+
 export const isSourceFile = (path: string): boolean =>
-  SOURCE_EXTENSIONS.test(path) && !TEST_PATH.test(path);
+  hasSourceExtension(path) && !isTestPath(path);
 
 /** A blob's text at a commit, or null when the path is absent at that SHA. */
 export const fileAt = (repo: string, sha: string, path: string): string | null => {

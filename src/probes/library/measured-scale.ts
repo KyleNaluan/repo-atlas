@@ -18,11 +18,9 @@
  * false one. #5's rule that a probe finding nothing emits nothing applies per
  * figure, not just per probe.
  */
-import { isSourceFile } from "../../harvest/tree.js";
+import { hasSourceExtension, isSourceFile, isTestPath } from "../../harvest/tree.js";
 import type { Candidate, Probe, ProbeContext } from "../types.js";
 import type { Evidence } from "../../schema/types.js";
-
-const TEST_PATH = /(^|\/)(test|tests|spec|__tests__)(\/|$)|\.(test|spec)\./i;
 
 const fact = (
   id: string,
@@ -55,7 +53,7 @@ const find = async (ctx: ProbeContext): Promise<Candidate[]> => {
   const out: Candidate[] = [];
   const { scale } = ctx.harvest;
   const source = ctx.paths.filter(isSourceFile);
-  const tests = ctx.paths.filter((p) => TEST_PATH.test(p) && /\.(java|ts|tsx|py|go|rb|kt)$/i.test(p));
+  const tests = ctx.paths.filter((p) => hasSourceExtension(p) && isTestPath(p));
 
   if (scale.lines > 0) {
     out.push(

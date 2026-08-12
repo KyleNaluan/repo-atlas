@@ -10,7 +10,7 @@
  * this SHA is not re-run. That is what makes the expensive halves - a harvest
  * over the network, a writer and a scorer that call a model - payable once and
  * re-runnable for free while the deterministic stages downstream are iterated
- * on. `--force` from a stage onwards re-does that stage and everything after it,
+ * on. `--from` a stage onwards re-does that stage and everything after it,
  * because a stale downstream file is worse than a slow run.
  *
  * TWO STAGES NEED A CREDENTIAL, and both can be supplied instead. `write` reads
@@ -35,7 +35,7 @@ export type StageName =
   | "render"
   | "audit";
 
-/** In order. The orchestrator runs exactly this list, and `--force` cuts into it. */
+/** In order. The orchestrator runs exactly this list, and `--from` cuts into it. */
 export const PIPELINE: StageName[] = [
   "harvest",
   "write",

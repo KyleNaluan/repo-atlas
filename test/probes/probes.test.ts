@@ -1507,4 +1507,31 @@ describe("measured-scale", () => {
     expect(history!.node.type === "fact" && history!.node.label).toContain("7 calendar days");
     expect(history!.node.type === "fact" && history!.node.value).toBe("47");
   });
+
+  it("counts tests in EVERY source language, not a narrow subset", async () => {
+    // The test counter reads the one shared 'is a source file' extension set, so
+    // a JS or Rust or C++ subject with tests does not silently lose its "How much
+    // of it is tested" tile - a missing tile reads as "this repo has no tests",
+    // which is a claim.
+    for (const [prod, test] of [
+      ["src/app.js", "src/app.test.js"],
+      ["src/lib.rs", "tests/lib_test.rs"],
+      ["src/widget.cpp", "test/widget_test.cpp"],
+    ] as const) {
+      const ctx = contextFor({ [prod]: "x\n", [test]: "x\n" });
+      const found = await candidatesFrom("measured-scale", { ...ctx, harvest: { ...ctx.harvest, scale: { ...ctx.harvest.scale, lines: 2 } } });
+      const tile = found.find((c) => c.node.id === "f-scale-tests");
+      expect(tile, `${test} should produce a test tile`).toBeDefined();
+      expect(tile!.node.type === "fact" && tile!.node.value).toBe("1");
+    }
+  });
+
+  it("treats .test.ts and .test.js alike", async () => {
+    const tsCtx = contextFor({ "a.ts": "x\n", "a.test.ts": "x\n" });
+    const jsCtx = contextFor({ "a.js": "x\n", "a.test.js": "x\n" });
+    const tsTests = (await candidatesFrom("measured-scale", { ...tsCtx, harvest: { ...tsCtx.harvest, scale: { ...tsCtx.harvest.scale, lines: 2 } } })).find((c) => c.node.id === "f-scale-tests");
+    const jsTests = (await candidatesFrom("measured-scale", { ...jsCtx, harvest: { ...jsCtx.harvest, scale: { ...jsCtx.harvest.scale, lines: 2 } } })).find((c) => c.node.id === "f-scale-tests");
+    expect(tsTests!.node.type === "fact" && tsTests!.node.value).toBe("1");
+    expect(jsTests!.node.type === "fact" && jsTests!.node.value).toBe("1");
+  });
 });

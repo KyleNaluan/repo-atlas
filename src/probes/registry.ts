@@ -18,13 +18,18 @@ import { dependencyDivergence } from "./library/dependency-divergence.js";
 import { repeatedSqlPredicates } from "./library/repeated-sql-predicates.js";
 import { sealedHierarchies } from "./library/sealed-hierarchies.js";
 import { throwWhereSiblingsReturn } from "./library/throw-where-siblings-return.js";
+import { unresolvedReferences } from "./library/unresolved-references.js";
+import { measuredScale } from "./library/measured-scale.js";
 import { tunedConfigProperties } from "./library/tuned-config-properties.js";
 import { parseJava, type SyntaxNode } from "./java.js";
 import { detectToolchains, type Probe, type ProbeContext, type ProbeOutcome } from "./types.js";
 import type { AtlasNode } from "../schema/types.js";
 import type { Harvest } from "../harvest/types.js";
 
-/** All eight discovery probes ship in v1 (#5, point 1). */
+/**
+ * #5's eight discovery probes, plus the two node producers nothing else mints:
+ * `unresolved-references` (#6 point 3) and `measured-scale` (the stat tiles).
+ */
 export const PROBES: readonly Probe[] = [
   decidedButUnbuilt,
   dependencyDivergence,
@@ -34,6 +39,8 @@ export const PROBES: readonly Probe[] = [
   dependencyAsymmetry,
   repeatedSqlPredicates,
   tunedConfigProperties,
+  unresolvedReferences,
+  measuredScale,
 ] as const;
 
 const git = (repo: string, args: string[]): string =>

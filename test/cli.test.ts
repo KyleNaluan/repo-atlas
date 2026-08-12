@@ -56,13 +56,27 @@ describe("repo-atlas <stage>", () => {
     expect(out.join("\n")).toMatch(/^repo-atlas \d+\.\d+\.\d+ \(atlas\.json schema \d+\.\d+\.\d+\)$/);
   });
 
+  it("has every registered stage built, which is what v1 means", () => {
+    // This assertion replaced one requiring at least one UNBUILT stage. That
+    // test was right while the register documented gaps, and #22 closed the last
+    // of them; keeping it would have made finishing the pipeline fail the suite.
+    // The mechanism it protected is still tested, immediately below, against a
+    // synthetic entry rather than a real gap - so the dispatcher's loud refusal
+    // stays covered without the register having to carry a hole to prove it.
+    expect(STAGES.filter((s) => !s.implemented)).toEqual([]);
+  });
+
   it("refuses an unbuilt stage loudly instead of no-opping", async () => {
-    const unbuilt = STAGES.filter((s) => !s.implemented);
-    expect(unbuilt.length).toBeGreaterThan(0);
-    for (const stage of unbuilt) {
-      err = [];
-      expect(await main([stage.name])).toBe(70);
+    // #2's rule: a stage cannot be documented without existing, and one that does
+    // not exist exits 70 rather than quietly succeeding. Exercised through the
+    // real dispatcher on a stage appended to the register for this test.
+    const placeholder = { name: "fictional", summary: "not real", implemented: false, run: async () => 70 };
+    STAGES.push(placeholder);
+    try {
+      expect(await main(["fictional"])).toBe(70);
       expect(err.join("\n")).toContain("not built yet");
+    } finally {
+      STAGES.pop();
     }
   });
 });

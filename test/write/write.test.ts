@@ -28,6 +28,7 @@ import {
 } from "../../src/write/write.js";
 import { modelWriter, parseWritten, WriterError } from "../../src/write/model-writer.js";
 import { recordsIn } from "../../src/commands/write.js";
+import { findReadme } from "../../src/harvest/tree.js";
 import type { DecisionNode } from "../../src/schema/types.js";
 import type { Harvest, HarvestedIssue } from "../../src/harvest/types.js";
 
@@ -281,7 +282,17 @@ describe("the product sentence and the annotated tree", () => {
   it("carries evidence pinned to the SHA it was written at", () => {
     const prose = proseFrom({ admissible: true, statement: "s", tree: "t" }, SHA, "README.md")!;
     expect(prose.synopsis.evidence).toEqual([{ kind: "file", path: "README.md", sha: SHA }]);
-    expect(prose.shape.evidence).toEqual([{ kind: "file", path: ".", sha: SHA }]);
+    // The annotated tree is derived from every path at this commit, not from a
+    // file. An earlier version cited the path "." and audit check L1 rightly
+    // refused it: no such entry exists in the tree, and a citation nobody can
+    // resolve is worse than none. This one a reader can run.
+    expect(prose.shape.evidence).toEqual([
+      {
+        kind: "command",
+        cmd: `git ls-tree -r --name-only ${SHA}`,
+        output_excerpt: "(the listing this tree was annotated from)",
+      },
+    ]);
   });
 
   it("is absent rather than blank when the writer could not produce it", () => {
@@ -401,5 +412,35 @@ describe("the model writer", () => {
 
   it("says so plainly when there is no JSON at all", () => {
     expect(() => parseWritten("no json here")).toThrow(WriterError);
+  });
+});
+
+/* ------------------------------------------- finding the README */
+
+describe("the README is found, not assumed", () => {
+  it("prefers a markdown README at the root", () => {
+    expect(findReadme(["README.md", "docs/README.md", "src/A.java"])).toBe("README.md");
+  });
+
+  it("finds a README whatever extension it carries", () => {
+    // The degradation subject's is `README.markdown`. A hardcoded `README.md`
+    // handed the writer an empty string, which it correctly refused to write
+    // from - failing the run three stages later for a reason that had nothing to
+    // do with the subject.
+    expect(findReadme(["README.markdown", "pom.xml"])).toBe("README.markdown");
+    expect(findReadme(["README", "pom.xml"])).toBe("README");
+    expect(findReadme(["README.rst", "pom.xml"])).toBe("README.rst");
+  });
+
+  it("ignores a README that is not at the root", () => {
+    // `docs/README.md` is documentation about a part; the product sentence is
+    // about the whole.
+    expect(findReadme(["docs/README.md", "src/A.java"])).toBeUndefined();
+  });
+
+  it("returns nothing when the subject has none", () => {
+    // The writer then declines rather than describing what a repository of this
+    // shape usually is.
+    expect(findReadme(["pom.xml", "src/A.java"])).toBeUndefined();
   });
 });

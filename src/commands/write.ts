@@ -12,7 +12,7 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { modelWriter } from "../write/model-writer.js";
+import { modelWriter, PROSE_PATH_LIMIT } from "../write/model-writer.js";
 import {
   promptDigest,
   proseFrom,
@@ -22,7 +22,7 @@ import {
   type WrittenFile,
 } from "../write/write.js";
 import { RESOLUTION_HEADING } from "../harvest/issues.js";
-import { fileAt, treeFiles } from "../harvest/tree.js";
+import { fileAt, findReadme, treeFiles } from "../harvest/tree.js";
 import type { Harvest } from "../harvest/types.js";
 
 const USAGE = `usage: repo-atlas write --harvest <harvest.json> --clone <path> [-o <written.json>]
@@ -109,7 +109,14 @@ export const writeCommand = async (argv: string[]): Promise<number> => {
     );
   }
 
-  const readmePath = flag(argv, "--readme") ?? "README.md";
+  const paths = treeFiles(resolve(clone), harvest.subject.sha);
+  // FOUND, not assumed. The degradation subject's README is `README.markdown`,
+  // and a hardcoded `README.md` handed the writer an empty string - which it
+  // correctly refused to write from, failing the run three stages later for a
+  // reason that had nothing to do with the subject. The name is discovered from
+  // the tree at the pinned SHA and recorded, so the synopsis cites the file that
+  // was actually read.
+  const readmePath = flag(argv, "--readme") ?? findReadme(paths) ?? "README.md";
   // Read at the pinned SHA, the same source treeFiles reads the listing from, so
   // the summarized bytes and the {path, sha} citation proseFrom stamps agree by
   // construction rather than by a clean-checkout precondition holding. A README
@@ -120,7 +127,7 @@ export const writeCommand = async (argv: string[]): Promise<number> => {
   const prose = await writer.prose(
     {
       readme,
-      paths: treeFiles(resolve(clone), harvest.subject.sha),
+      paths,
       decisions: decisions
         .filter((d) => d.written.admissible)
         .map((d) => ({ title: d.written.title ?? "", decision: d.written.decision ?? "" })),
@@ -139,8 +146,9 @@ export const writeCommand = async (argv: string[]): Promise<number> => {
     generated_at: new Date().toISOString(),
     ...(model === undefined ? {} : { model }),
     subject_sha: harvest.subject.sha,
+    readme_path: readmePath,
     decisions,
-    prose,
+    prose: { ...prose, paths_total: paths.length, paths_shown: Math.min(paths.length, PROSE_PATH_LIMIT) },
   };
 
   const output = resolve(flag(argv, "-o", "--out") ?? "out/written.json");

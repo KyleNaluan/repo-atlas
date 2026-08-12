@@ -45,11 +45,47 @@ export const treeFiles = (repo: string, sha: string): string[] =>
     .split("\n")
     .filter((l) => l.length > 0);
 
+/**
+ * The subject's README, whatever it is called.
+ *
+ * One definition of "which file is this subject's README", so no stage reads a
+ * hardcoded `README.md` and silently misses a subject whose README is
+ * `README.markdown`. Root-level only and in preference order: a `docs/README.md`
+ * is documentation about a part, while the product sentence is about the whole. A
+ * subject with no README at all returns undefined, and the caller then reports
+ * that rather than reading an empty string.
+ */
+export const findReadme = (paths: string[]): string | undefined => {
+  const roots = paths.filter((p) => !p.includes("/") && /^readme(\.|$)/i.test(p));
+  const preferred = roots.find((p) => /\.md$/i.test(p));
+  return preferred ?? roots.sort()[0];
+};
+
 const SOURCE_EXTENSIONS = /\.(java|ts|tsx|js|jsx|py|go|rb|rs|kt|scala|c|cc|cpp|h|hpp|cs|php|sql)$/i;
 const TEST_PATH = /(^|\/)(test|tests|spec|__tests__)(\/|$)|\.(test|spec)\./i;
 
+/**
+ * Does a path carry a source-code extension? "Is a source file" has exactly ONE
+ * definition of which languages exist, so a production counter and a test counter
+ * cannot disagree about it. `isSourceFile` is this predicate minus the test paths;
+ * a test-file counter is this predicate AND a test path.
+ */
+export const hasSourceExtension = (path: string): boolean => SOURCE_EXTENSIONS.test(path);
+
+export const isTestPath = (path: string): boolean => TEST_PATH.test(path);
+
+/**
+ * The two path filters as POSIX ERE, for citing a `grep -iE` that selects the
+ * SAME set the predicates above count. Both are `.source` off the very regexes
+ * `hasSourceExtension`/`isTestPath` compile, so a filtered count and the command
+ * that claims to reproduce it cannot drift apart. The `\/` a JS literal needs is
+ * unescaped to `/`, which grep -E takes verbatim.
+ */
+export const SOURCE_EXTENSION_ERE = SOURCE_EXTENSIONS.source;
+export const TEST_PATH_ERE = TEST_PATH.source.replace(/\\\//g, "/");
+
 export const isSourceFile = (path: string): boolean =>
-  SOURCE_EXTENSIONS.test(path) && !TEST_PATH.test(path);
+  hasSourceExtension(path) && !isTestPath(path);
 
 /** A blob's text at a commit, or null when the path is absent at that SHA. */
 export const fileAt = (repo: string, sha: string, path: string): string | null => {
@@ -120,8 +156,22 @@ const commentStart = (line: string, path: string): number => {
   return marks.length === 0 ? -1 : Math.min(...marks);
 };
 
-const citesIssue = (text: string, path: string): boolean => {
-  for (const line of text.split("\n")) {
+/**
+ * Every issue number a source file cites from a comment, with its line.
+ *
+ * #6's density signal 3 counts the FILES that do this; its point 3 needs the
+ * citations themselves, to turn a reference the record never explains into a
+ * `coverage_gap` edge. Both read the same rule from here rather than from two
+ * copies - a second definition of "cites an issue" would let the signal and the
+ * finding disagree about the same file.
+ */
+export const sourceIssueCitations = (
+  text: string,
+  path: string,
+): { number: number; line: number }[] => {
+  const out: { number: number; line: number }[] = [];
+  const lines = text.split("\n");
+  for (const [i, line] of lines.entries()) {
     const start = commentStart(line, path);
     if (start === -1) continue;
     CITATION_TOKEN.lastIndex = 0;
@@ -134,11 +184,14 @@ const citesIssue = (text: string, path: string): boolean => {
       if (!/^\d+$/.test(rest)) continue;
       const before = m.index > 0 ? line[m.index - 1] : "";
       if (before === '"' || before === "'" || before === "=") continue;
-      return true;
+      out.push({ number: Number(rest), line: i + 1 });
     }
   }
-  return false;
+  return out;
 };
+
+const citesIssue = (text: string, path: string): boolean =>
+  sourceIssueCitations(text, path).length > 0;
 
 /**
  * One pass over the source tree.
@@ -282,7 +335,8 @@ export const detectPrivateSplit = (
   sha: string,
   subjectRepo: string,
 ): PrivateSplit => {
-  const readme = blob(repo, sha, "README.md") ?? "";
+  const readmePath = findReadme(treeFiles(repo, sha));
+  const readme = readmePath ? (blob(repo, sha, readmePath) ?? "") : "";
   const owner = subjectRepo.split("/")[0] ?? "";
 
   // A companion repository named in the README and described as private.

@@ -5,7 +5,7 @@
  * same separation the rank stage needed, for the same reason: a credential-free
  * path must stay credential-free.
  */
-import { askModel } from "../model/ask.js";
+import { askModel, firstJsonObject } from "../model/ask.js";
 import type { Judge, JudgeRequest, Verdict } from "./checks/model.js";
 
 const EXCERPT_LIMIT = 4000;
@@ -44,14 +44,13 @@ ${request.evidence.map((e) => `[${e.citation}]\n${excerpt(e.text)}`).join("\n\n"
  */
 export const sdkJudge: Judge = async (request, question): Promise<Verdict> => {
   const { text } = await askModel(prompt(request, question), "judge");
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end <= start) {
+  const json = firstJsonObject(text);
+  if (json === null) {
     // A verdict that cannot be read is not a finding against the artifact.
     return { supported: true, note: "the judge returned no readable verdict" };
   }
   try {
-    const parsed = JSON.parse(text.slice(start, end + 1)) as Partial<Verdict>;
+    const parsed = JSON.parse(json) as Partial<Verdict>;
     return {
       supported: parsed.supported !== false,
       note: typeof parsed.note === "string" ? parsed.note : "no note given",

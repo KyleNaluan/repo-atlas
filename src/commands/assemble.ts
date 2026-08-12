@@ -13,7 +13,7 @@ import { AtlasValidationError, validateAtlas } from "../schema/validate.js";
 import type { Harvest } from "../harvest/types.js";
 import type { GatedCandidate } from "../gate/gate.js";
 import type { RankResult } from "../rank/rank.js";
-import type { Shape, Synopsis } from "../schema/types.js";
+import { proseFrom, type WrittenFile } from "../write/write.js";
 
 const USAGE = `usage: repo-atlas assemble --harvest <harvest.json> --gated <gated.json> --ranked <ranked.json> --prose <prose.json> [-o <atlas.json>]
 
@@ -48,10 +48,13 @@ const flag = (argv: string[], ...names: string[]): string | undefined => {
 
 const read = <T>(path: string): T => JSON.parse(readFileSync(path, "utf8")) as T;
 
-export interface ProseFile {
-  synopsis: Synopsis;
-  shape: Shape;
-}
+/**
+ * The write stage's own output file, read directly rather than through an
+ * intermediate shape. One file means the SHA it was written at and the README it
+ * cites travel with the prose, so `proseFrom` stamps the citation from what was
+ * actually read rather than from a default this command would have to guess.
+ */
+export type ProseFile = WrittenFile;
 
 export const assembleCommand = async (argv: string[]): Promise<number> => {
   if (argv.includes("-h") || argv.includes("--help")) {
@@ -70,7 +73,26 @@ export const assembleCommand = async (argv: string[]): Promise<number> => {
   const harvest = read<Harvest>(harvestPath);
   const gatedFile = read<{ subject_sha: string; gated: GatedCandidate[] }>(gatedPath);
   const ranked = read<RankResult>(rankedPath);
-  const prose = read<ProseFile>(prosePath);
+  const proseFile = read<ProseFile>(prosePath);
+  if (proseFile.subject_sha !== harvest.subject.sha) {
+    console.error(
+      `assemble: the prose was written at ${proseFile.subject_sha} but the harvest is at ` +
+        `${harvest.subject.sha}; a product sentence describing one tree must not be assembled ` +
+        `into a document naming another`,
+    );
+    return 65;
+  }
+  const prose = proseFrom(proseFile.prose, harvest.subject.sha, proseFile.readme_path ?? "README.md");
+  if (prose === undefined) {
+    // Its own failure, never a blank sentence. #6 forbids communicating absence
+    // by silence, and an artifact whose product sentence is empty asserts nothing
+    // and admits nothing.
+    console.error(
+      `assemble failed: the write stage produced no product sentence or annotated tree` +
+        `${proseFile.prose.because === undefined ? "" : ` (${proseFile.prose.because})`}`,
+    );
+    return 65;
+  }
 
   if (gatedFile.subject_sha !== harvest.subject.sha) {
     // The same check the gate makes of the probe stage, for the same reason: a

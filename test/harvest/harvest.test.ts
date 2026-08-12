@@ -405,6 +405,20 @@ describe("scale and density from the pinned tree", () => {
     expect(split.readable_at_harvest).toBe(false);
   });
 
+  it("finds the declaration when the README is not called README.md", () => {
+    // The degradation subject's README is `README.markdown`. A hardcoded
+    // `README.md` read an empty string and recorded declared:false, so P1 would
+    // say "no public/private split" about a subject that has one - the
+    // declared-but-not-readable middle state #8 insisted must never go silent.
+    const split = buildRepo({
+      "README.markdown": "A public engine. Content lives in o/r-content.git, a PRIVATE repo.\n",
+      "a.ts": "export {};\n",
+    });
+    const detected = detectPrivateSplit(split.path, split.sha, "o/r");
+    expect(detected.declared).toBe(true);
+    expect(detected.repo).toBe("o/r-content");
+  });
+
   it("reports no split when the subject declares none", () => {
     const plain = buildRepo({ "README.md": "Just a repository.\n", "a.ts": "export {};\n" });
     expect(detectPrivateSplit(plain.path, plain.sha, "o/r").declared).toBe(false);

@@ -89,6 +89,10 @@ export interface WrittenProse {
   because?: string;
   statement?: string;
   tree?: string;
+  /** How many paths the tree at the pinned SHA held, for the shape's citation. */
+  paths_total?: number;
+  /** How many the writer was actually shown, when the listing had to be capped. */
+  paths_shown?: number;
 }
 
 export interface ProseRequest {
@@ -122,6 +126,13 @@ export interface WrittenFile {
   /** The model the SDK reported, so a refresh shows whether prompt or model moved. */
   model?: string;
   subject_sha: string;
+  /**
+   * Which README the product sentence was written from, recorded here because it
+   * is what the synopsis cites. A citation assembled from a default rather than
+   * from the file actually read would name the wrong evidence for a subject whose
+   * README lives elsewhere.
+   */
+  readme_path?: string;
   decisions: { issue: number; comment_id: number; written: WrittenDecision }[];
   prose: WrittenProse;
 }
@@ -300,6 +311,8 @@ export const proseFrom = (
   readmePath: string,
 ): { synopsis: Synopsis; shape: Shape } | undefined => {
   if (!written.admissible || !written.statement?.trim() || !written.tree?.trim()) return undefined;
+  const total = written.paths_total;
+  const shown = written.paths_shown;
   return {
     synopsis: {
       statement: written.statement,
@@ -307,7 +320,23 @@ export const proseFrom = (
     },
     shape: {
       tree: written.tree,
-      evidence: [{ kind: "file", path: ".", sha: subjectSha }],
+      // The listing, cited as the command that produces it. The annotated tree is
+      // derived from every path at this commit, not from a file - an earlier
+      // version cited the path "." and audit check L1 rightly refused it, because
+      // no such entry exists in the tree and a citation nobody can resolve is
+      // worse than none. This one a reader can run.
+      evidence: [
+        {
+          kind: "command",
+          cmd: `git ls-tree -r --name-only ${subjectSha}`,
+          output_excerpt:
+            total === undefined
+              ? "(the listing this tree was annotated from)"
+              : `(${total} path${total === 1 ? "" : "s"} at this commit${
+                  shown !== undefined && shown < total ? `; the tree was written from the first ${shown}` : ""
+                })`,
+        },
+      ],
     },
   };
 };

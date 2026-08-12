@@ -38,14 +38,48 @@ interviewer nothing they could not assume.
 - A mechanism that is genuinely interesting but enforced only by convention.
 - A boundary that matters but that a reader would infer from the tree anyway.
 
+## Orientation figures are not inventory
+
+A measured figure that tells a reader what size and age of thing they are looking
+at - how much production source, how long it took, how much of it is tested - is
+ORIENTATION, and it is read before anything else rather than said out loud. Score
+it in the middle: it earns its place by being measured and load-bearing for
+everything after it, not by being interesting on its own.
+
+The distinction from inventory is what the figure does for the reader. "47
+commits over 7 calendar days" changes how every other finding is read. "18
+packages" is a listing wearing a number. If removing the figure would not change
+how a reader interprets the rest, it is inventory.
+
 ## Bottom marks (0-1)
 
 - **Inventory.** Endpoint listings, package tours, dependency counts. These are
   the identified filler: they read as thorough and say nothing, and they are the
-  first thing to cut.
+  first thing to cut. A figure that only counts things is inventory however it is
+  displayed; see above for the orientation figures that are not.
 - Anything a reader would assume from the stack. That the web layer has
   controllers is not a finding.
 - Anything whose interest is in the domain rather than in the engineering.
+
+## Scoring against what the subject actually offers
+
+Value is comparative, and the comparison is against THIS subject's record - not
+against an imagined well-documented one. A repository whose tracker settles
+nothing still has something true to say about itself, and on such a subject the
+findings below carry the weight that decisions carry elsewhere. Score them there.
+
+- **An unresolved reference, where the record resolves nothing.** Source citing
+  an issue number that the record never explains is a coverage gap, and on a
+  subject with no decision trail it is the most informative thing available: it
+  locates precisely where the reasoning went, and says out loud that it is not in
+  the repository. Score it as you would a decision on a subject that had one.
+  Where the record IS rich, the same finding is a footnote beside the decisions
+  it sits among, and scores like one.
+- The general rule: a finding's value depends on what else the reader has. The
+  same node is worth more in a thin record than in a dense one, and scoring every
+  subject against a mental picture of a well-documented codebase leaves the thin
+  ones with nothing rendered at all - which is the one outcome that would make
+  the artifact silent about a subject rather than honest about it.
 
 ## How to weigh evidence
 

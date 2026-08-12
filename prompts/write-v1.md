@@ -74,6 +74,12 @@ For the record you are given:
   stamp the entire decision as never built when its subject plainly was. Ask what
   this decision is FOR, and claim that.
 
+  **A `pattern.regex` is a JavaScript regular expression.** No inline flags:
+  `(?i)` is not valid there and makes the pattern uncompilable, which costs the
+  decision its check - it comes back unresolved and the artifact says less than
+  the tree could have told it. Write the alternatives out (`[Ss]treak`) instead.
+  The search is already case-insensitive.
+
   **An absent claim must name something machine-checkable** - a dependency
   coordinate, a type or symbol name, a path, a schema object. Never a word that
   can occur in ordinary prose. Absence claims fail asymmetrically: a comment

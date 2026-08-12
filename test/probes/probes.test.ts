@@ -1312,6 +1312,9 @@ describe("an overturned present-claim cites the search that came back empty", ()
     expect(command!.kind === "command" && command!.cmd).toContain(ctx.sha);
     expect(command!.kind === "command" && command!.cmd).toContain("order_items");
     expect(command!.kind === "command" && command!.output_excerpt).toMatch(/no file .* matches/);
+    // No include, so the whole tree was searched: the command is unscoped and the
+    // excerpt may speak universally.
+    expect(command!.kind === "command" && command!.cmd).not.toContain("ls-tree");
   });
 
   it("cites the path check when a path claim found nothing", async () => {
@@ -1326,7 +1329,11 @@ describe("an overturned present-claim cites the search that came back empty", ()
     expect(command!.kind === "command" && command!.cmd).toContain("Session.java");
   });
 
-  it("records the path filter rather than implying the whole tree was searched", async () => {
+  it("carries the path filter IN the runnable command, not a side note, so it searches exactly what the gate searched", async () => {
+    // The gate restricted to files whose PATH matches `include`; an unscoped grep
+    // searches a superset and can return matches from excluded files, which would
+    // contradict the excerpt - the fabricated-citation failure one level down. The
+    // filter lives in the command and the excerpt names the scope, not a side note.
     const ctx = contextFor({ "README.md": "x" });
     const result = gateCandidate(ctx, candidate({
       description: "a thing",
@@ -1334,7 +1341,13 @@ describe("an overturned present-claim cites the search that came back empty", ()
       pattern: { regex: "Grader", include: "\\.java$" },
     }));
     const command = result.node.evidence.find((e) => e.kind === "command");
-    expect(command!.kind === "command" && command!.note).toContain("\\.java$");
+    expect(command!.kind === "command" && command!.cmd).toBe(
+      `git grep -I -i -E 'Grader' ${ctx.sha} -- $(git ls-tree -r --name-only ${ctx.sha} | grep -E '\\.java$')`,
+    );
+    expect(command!.kind === "command" && command!.output_excerpt).toBe(
+      "(no output: no file whose path matches /\\.java$/ contains this pattern at this commit)",
+    );
+    expect(command!.kind === "command" && command!.note).toBeUndefined();
   });
 
   it("keeps citing the files when an ABSENT claim was overturned by finding them", async () => {

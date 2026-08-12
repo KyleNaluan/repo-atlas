@@ -145,13 +145,24 @@ const negativeEvidence = (ctx: ProbeContext, claim: ExistenceClaim): Evidence[] 
   }
   if (claim.pattern !== undefined) {
     const include = claim.pattern.include;
+    // The gate restricted the search to files whose PATH matches `include`
+    // (treeHas, above). git grep's pathspec is not a regex, so the filter is
+    // reproduced by substituting the equivalently-filtered listing as the
+    // pathspec - running the printed command then searches exactly the set the
+    // gate searched, not the superset an unrestricted grep would. The excerpt
+    // states that scope rather than claiming universality: a reader who ran an
+    // unscoped command and hit a match in an excluded file would have a result
+    // that contradicts the citation, the exact failure this evidence prevents.
     out.push({
       kind: "command",
-      cmd: `git grep -I -i -E ${quoted(claim.pattern.regex)} ${ctx.sha}`,
-      output_excerpt: "(no output: no file at this commit matches)",
-      ...(include === undefined
-        ? {}
-        : { note: `the gate searched only files whose path matches /${include}/` }),
+      cmd:
+        include === undefined
+          ? `git grep -I -i -E ${quoted(claim.pattern.regex)} ${ctx.sha}`
+          : `git grep -I -i -E ${quoted(claim.pattern.regex)} ${ctx.sha} -- $(git ls-tree -r --name-only ${ctx.sha} | grep -E ${quoted(include)})`,
+      output_excerpt:
+        include === undefined
+          ? "(no output: no file at this commit matches)"
+          : `(no output: no file whose path matches /${include}/ contains this pattern at this commit)`,
     });
   }
   if (claim.declares !== undefined) {

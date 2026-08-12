@@ -15,9 +15,10 @@
  * which is exactly the seam the bug lived in.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { OUTPUT, PIPELINE } from "../../src/run/run.js";
 
 const passthrough = () => vi.fn(async () => 0);
 const harvestCommand = passthrough();
@@ -100,5 +101,68 @@ describe("a cold run with both credentialed stages supplied and no model", () =>
     const dir = join(work, "a".repeat(40));
     expect(readFileSync(join(dir, "written.json"), "utf8")).toBe(WRITTEN_BYTES);
     expect(readFileSync(join(dir, "scores.json"), "utf8")).toBe(SCORES_BYTES);
+  });
+});
+
+describe("a warm work dir given a --written file that differs from the cache", () => {
+  // A fully-built cache for this SHA, its written.json holding OLD decisions.
+  const warmDir = (work: string): string => {
+    const dir = join(work, "a".repeat(40));
+    mkdirSync(dir, { recursive: true });
+    for (const stage of PIPELINE) writeFileSync(join(dir, OUTPUT[stage]), "{}", "utf8");
+    // The cached decisions the supplied file will supersede.
+    writeFileSync(join(dir, OUTPUT["write"]), `${JSON.stringify({ subject_sha: "a".repeat(40), decisions: ["old"] })}\n`, "utf8");
+    // Assemble's atlas.json also carries the mirrored audit status, so audit is
+    // otherwise cached: the only thing forcing it to re-run is the supersession.
+    writeFileSync(join(dir, OUTPUT["assemble"]), JSON.stringify({ record: { audit: { status: "passed" } } }), "utf8");
+    return dir;
+  };
+
+  it("re-runs every downstream stage so the artifact reflects the new decisions, without running write", async () => {
+    const work = join(root, "work");
+    warmDir(work);
+
+    const code = await runCommand([
+      "--clone", clone,
+      "--repo", "owner/subject",
+      "--sha", "a".repeat(40),
+      "--work", work,
+      "--written", written,
+      "--no-browser",
+    ]);
+
+    expect(code).toBe(0);
+    // The supplied stage never runs, and the cached upstream is untouched.
+    expect(writeCommand).not.toHaveBeenCalled();
+    expect(harvestCommand).not.toHaveBeenCalled();
+    // Everything downstream of the superseded write re-runs against the new file.
+    for (const fn of [probeCommand, gateCommand, rankCommand, assembleCommand, renderCommand, auditCommand]) {
+      expect(fn).toHaveBeenCalledOnce();
+    }
+    // The supplied bytes replaced the cached ones.
+    const dir = join(work, "a".repeat(40));
+    expect(readFileSync(join(dir, "written.json"), "utf8")).toBe(WRITTEN_BYTES);
+  });
+
+  it("changes nothing when the supplied file is byte-identical to the cache", async () => {
+    const work = join(root, "work");
+    const dir = warmDir(work);
+    // Seed the cache with exactly the bytes about to be supplied.
+    writeFileSync(join(dir, OUTPUT["write"]), WRITTEN_BYTES, "utf8");
+
+    const code = await runCommand([
+      "--clone", clone,
+      "--repo", "owner/subject",
+      "--sha", "a".repeat(40),
+      "--work", work,
+      "--written", written,
+      "--no-browser",
+    ]);
+
+    expect(code).toBe(0);
+    // Identical input is not new input: the warm cache stays valid, nothing runs.
+    for (const fn of [harvestCommand, writeCommand, probeCommand, gateCommand, scoreCommand, rankCommand, assembleCommand, renderCommand, auditCommand]) {
+      expect(fn).not.toHaveBeenCalled();
+    }
   });
 });

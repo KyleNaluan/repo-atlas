@@ -129,6 +129,17 @@ export interface PlanOptions {
    * uses, which is what makes treating supplied input as authoritative safe.
    */
   supplied?: StageName[];
+  /**
+   * Supplied stages whose file DIFFERS from the one already cached in the work
+   * directory - new input, not the same input re-declared. A supplied file is
+   * authoritative (so the stage still never runs), but a CHANGED one supersedes a
+   * cached output its downstream consumers were built against: `gate` reads
+   * `written.json`, `rank` reads `scores.json`, and serving those from cache would
+   * emit an artifact reflecting the OLD decisions. So a superseded stage forces
+   * everything after it to re-run, exactly as `--from` would, while itself staying
+   * skipped. Must be a subset of `supplied`.
+   */
+  superseded?: StageName[];
 }
 
 /**
@@ -141,11 +152,22 @@ export interface PlanOptions {
  * A `supplied` stage is the one exception in the other direction: it is skipped
  * even when an upstream stage re-runs, because supplied input is not derived from
  * that upstream. It does not itself count as a re-run, so stages after it still
- * obey the no-skip-after-a-rerun rule.
+ * obey the no-skip-after-a-rerun rule - UNLESS it also appears in `superseded`,
+ * meaning the supplied file differs from the cached one it replaced. A superseded
+ * stage still does not run, but its cached downstream consumers were built against
+ * the old content, so everything after it is forced exactly as `--from` does.
  */
-export const plan = (dir: string, { from, only, supplied = [] }: PlanOptions = {}): RunPlan => {
+export const plan = (
+  dir: string,
+  { from, only, supplied = [], superseded = [] }: PlanOptions = {},
+): RunPlan => {
   const wanted = only ?? PIPELINE;
   const forcedAt = from === undefined ? PIPELINE.length : PIPELINE.indexOf(from);
+  // The earliest supplied stage whose new content invalidates its downstream.
+  const supersededAt =
+    superseded.length === 0
+      ? PIPELINE.length
+      : Math.min(...superseded.map((stage) => PIPELINE.indexOf(stage)));
   const run: StageName[] = [];
   const skipped: StageName[] = [];
   for (const [i, stage] of PIPELINE.entries()) {
@@ -155,8 +177,9 @@ export const plan = (dir: string, { from, only, supplied = [] }: PlanOptions = {
       continue;
     }
     const done = stageDone(dir, stage);
-    // Once anything is being re-run, nothing after it may be skipped.
-    if (i >= forcedAt || run.length > 0 || !done) run.push(stage);
+    // Once anything is being re-run - forced, superseded upstream, or the first
+    // missing output - nothing after it may be skipped.
+    if (i >= forcedAt || i > supersededAt || run.length > 0 || !done) run.push(stage);
     else skipped.push(stage);
   }
   return { run, skipped };

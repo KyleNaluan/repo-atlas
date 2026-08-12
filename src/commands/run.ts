@@ -12,7 +12,7 @@
  * downstream file produced against a previous version of an upstream one is the
  * cross-stage mismatch `assemble` already refuses.
  */
-import { copyFileSync, existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, copyFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { harvestCommand } from "./harvest.js";
 import { writeCommand } from "./write.js";
@@ -189,21 +189,38 @@ export const runCommand = async (argv: string[]): Promise<number> => {
   // upstream - it is authoritative input carrying its own guards (subject_sha for
   // written, rubric digest for scores) - so it must never be overwritten by
   // re-running the model, which is what keying purely on file existence did.
+  //
+  // But a supplied file that DIFFERS from one already cached here is new input,
+  // not the same input re-declared: its downstream consumers (gate reads
+  // written.json, rank reads scores.json) were built against the old bytes and
+  // must be rebuilt. So compare before copying and record a changed one as
+  // SUPERSEDED, which forces everything after it to re-run while the supplied
+  // stage itself still never runs. Overwriting silently and skipping downstream
+  // would ship an artifact reflecting the old decisions.
   const supplied: StageName[] = [];
+  const superseded: StageName[] = [];
   for (const [option, stage] of [["--written", "write"], ["--scores", "score"]] as const) {
     const pinned = flag(argv, option);
     if (pinned !== undefined) {
-      copyFileSync(resolve(pinned), join(dir, OUTPUT[stage]));
+      const dest = join(dir, OUTPUT[stage]);
+      const incoming = readFileSync(resolve(pinned));
+      if (existsSync(dest) && !readFileSync(dest).equals(incoming)) superseded.push(stage);
+      writeFileSync(dest, incoming);
       supplied.push(stage);
     }
   }
 
   const from = fromRaw as StageName | undefined;
-  const { run, skipped } = plan(dir, { from, supplied });
+  const { run, skipped } = plan(dir, { from, supplied, superseded });
 
   console.log(`run ${repo} at ${sha}`);
   console.log(`  work ${dir}`);
   if (skipped.length > 0) console.log(`  skip ${skipped.join(", ")} (already built for this SHA)`);
+  if (superseded.length > 0) {
+    console.log(
+      `  fresh ${superseded.join(", ")} (supplied file differs from cache; re-running downstream stages)`,
+    );
+  }
 
   for (const stage of run) {
     // A credentialed stage ABOUT TO RUN with no usable model is its own failure,

@@ -136,6 +136,28 @@ describe("what a run skips", () => {
     expect(run).toEqual(["harvest", "probe", "gate", "score", "rank", "assemble", "render", "audit"]);
   });
 
+  it("forces every stage after a superseded supplied one, while never running it", () => {
+    // A warm work dir: everything is cached. A --written file whose bytes differ
+    // from the cached written.json is new input, not the same input re-declared -
+    // gate and assemble were built against the old decisions. So write stays
+    // skipped (supplied never runs) but probe onward must all re-run.
+    built(...PIPELINE);
+    withAuditStatus("passed");
+    const { run, skipped } = plan(dir, { supplied: ["write"], superseded: ["write"] });
+    expect(skipped).toEqual(["harvest", "write"]);
+    expect(run).toEqual(["probe", "gate", "score", "rank", "assemble", "render", "audit"]);
+  });
+
+  it("does not force downstream for a supplied stage whose content is unchanged", () => {
+    // Re-supplying the identical file is not new input: the cache stays valid and
+    // a fully-built warm dir skips everything.
+    built(...PIPELINE);
+    withAuditStatus("passed");
+    const { run, skipped } = plan(dir, { supplied: ["write", "score"] });
+    expect(run).toEqual([]);
+    expect(skipped).toEqual(PIPELINE);
+  });
+
   it("skips an audit that has mirrored a real result", () => {
     for (const status of ["passed", "passed_with_warnings", "failed"] as const) {
       built(...PIPELINE);

@@ -74,6 +74,16 @@ export const hasSourceExtension = (path: string): boolean => SOURCE_EXTENSIONS.t
 
 export const isTestPath = (path: string): boolean => TEST_PATH.test(path);
 
+/**
+ * The two path filters as POSIX ERE, for citing a `grep -iE` that selects the
+ * SAME set the predicates above count. Both are `.source` off the very regexes
+ * `hasSourceExtension`/`isTestPath` compile, so a filtered count and the command
+ * that claims to reproduce it cannot drift apart. The `\/` a JS literal needs is
+ * unescaped to `/`, which grep -E takes verbatim.
+ */
+export const SOURCE_EXTENSION_ERE = SOURCE_EXTENSIONS.source;
+export const TEST_PATH_ERE = TEST_PATH.source.replace(/\\\//g, "/");
+
 export const isSourceFile = (path: string): boolean =>
   hasSourceExtension(path) && !isTestPath(path);
 

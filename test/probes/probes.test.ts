@@ -28,6 +28,7 @@ import {
   type ProbeOutcome,
 } from "../../src/probes/types.js";
 import type { DecisionNode } from "../../src/schema/types.js";
+import { SOURCE_EXTENSION_ERE, TEST_PATH_ERE } from "../../src/harvest/tree.js";
 import type { Harvest, HarvestedIssue } from "../../src/harvest/types.js";
 
 /* ---------------------------------------------------------- fixtures */
@@ -1566,5 +1567,33 @@ describe("measured-scale", () => {
     const jsTests = (await candidatesFrom("measured-scale", { ...jsCtx, harvest: { ...jsCtx.harvest, scale: { ...jsCtx.harvest.scale, lines: 2 } } })).find((c) => c.node.id === "f-scale-tests");
     expect(tsTests!.node.type === "fact" && tsTests!.node.value).toBe("1");
     expect(jsTests!.node.type === "fact" && jsTests!.node.value).toBe("1");
+  });
+
+  it("cites a command that selects the same set the tile's value counts", async () => {
+    // A filtered tile whose command lists the WHOLE tree ships a number a reader
+    // running it cannot reproduce. The audit never executes the excerpt, so the
+    // command has to carry the same filters as the predicate by construction. The
+    // production tiles must scope to source extensions AND out of test paths; the
+    // test tile must scope to source extensions AND into test paths.
+    const cmdOf = async (id: string): Promise<string> => {
+      const c = (await candidatesFrom("measured-scale", withScale({ lines: 100, commits: 3, days: 1 }))).find(
+        (x) => x.node.id === id,
+      );
+      const ev = c!.node.evidence[0]!;
+      return ev.kind === "command" ? ev.cmd : "";
+    };
+    for (const id of ["f-scale-lines", "f-scale-files"]) {
+      const cmd = await cmdOf(id);
+      expect(cmd, `${id} must carry the source-extension filter`).toContain(
+        `grep -iE '${SOURCE_EXTENSION_ERE}'`,
+      );
+      expect(cmd, `${id} must exclude test paths`).toContain(`grep -ivE '${TEST_PATH_ERE}'`);
+    }
+    const testsCmd = await cmdOf("f-scale-tests");
+    expect(testsCmd).toContain(`grep -iE '${SOURCE_EXTENSION_ERE}'`);
+    expect(testsCmd, "the test tile must keep test paths, not drop them").toContain(
+      `grep -iE '${TEST_PATH_ERE}'`,
+    );
+    expect(testsCmd).not.toContain(`grep -ivE '${TEST_PATH_ERE}'`);
   });
 });

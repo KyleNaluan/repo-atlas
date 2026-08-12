@@ -13,12 +13,27 @@
  * SHA. A stat tile is the easiest place in an artifact to put a number nobody
  * checked, which is exactly why each one carries the command that produced it.
  *
+ * A citation only earns that trust if running it yields the number the tile
+ * shows. The audit's evidenceResolver never executes a command's excerpt, so a
+ * tile whose cited command selects a DIFFERENT set than its value counts - the
+ * whole tree instead of the production-source subset, say - ships a number that
+ * looks checkable and is not, which is worse than no citation. So the count and
+ * the command are built from ONE `select`: a path filter is a predicate AND the
+ * `grep -iE` pipeline that reproduces it, both off the same regex sources
+ * (`SOURCE_EXTENSION_ERE`, `TEST_PATH_ERE`), so the two cannot diverge by review.
+ *
  * It emits nothing rather than a zero for a figure the harvest could not
  * establish: "0 commits" is a claim, and an unmeasured value rendered as 0 is a
  * false one. #5's rule that a probe finding nothing emits nothing applies per
  * figure, not just per probe.
  */
-import { hasSourceExtension, isSourceFile, isTestPath } from "../../harvest/tree.js";
+import {
+  SOURCE_EXTENSION_ERE,
+  TEST_PATH_ERE,
+  hasSourceExtension,
+  isSourceFile,
+  isTestPath,
+} from "../../harvest/tree.js";
 import type { Candidate, Probe, ProbeContext } from "../types.js";
 import type { Evidence } from "../../schema/types.js";
 
@@ -49,11 +64,41 @@ const fact = (
 
 const thousands = (n: number): string => n.toLocaleString("en-US");
 
+/**
+ * A path filter as both the predicate that counts and the `grep -iE` pipeline
+ * that reproduces it. The pipeline is rendered from `SOURCE_EXTENSION_ERE` and
+ * `TEST_PATH_ERE`, the exact sources `isSourceFile`/`isTestPath` compile, so the
+ * grep can never select a set the predicate would not.
+ */
+interface PathFilter {
+  keep: (path: string) => boolean;
+  pipe: string;
+}
+
+const productionSource: PathFilter = {
+  keep: isSourceFile,
+  pipe: `grep -iE '${SOURCE_EXTENSION_ERE}' | grep -ivE '${TEST_PATH_ERE}'`,
+};
+
+const testFiles: PathFilter = {
+  keep: (p) => hasSourceExtension(p) && isTestPath(p),
+  pipe: `grep -iE '${SOURCE_EXTENSION_ERE}' | grep -iE '${TEST_PATH_ERE}'`,
+};
+
+/** The matching paths and the listing command that selects exactly them. */
+const select = (
+  ctx: ProbeContext,
+  filter: PathFilter,
+): { paths: string[]; listing: string } => ({
+  paths: ctx.paths.filter(filter.keep),
+  listing: `git ls-tree -r --name-only ${ctx.sha} | ${filter.pipe}`,
+});
+
 const find = async (ctx: ProbeContext): Promise<Candidate[]> => {
   const out: Candidate[] = [];
   const { scale } = ctx.harvest;
-  const source = ctx.paths.filter(isSourceFile);
-  const tests = ctx.paths.filter((p) => hasSourceExtension(p) && isTestPath(p));
+  const source = select(ctx, productionSource);
+  const tests = select(ctx, testFiles);
 
   if (scale.lines > 0) {
     out.push(
@@ -62,21 +107,21 @@ const find = async (ctx: ProbeContext): Promise<Candidate[]> => {
         "lines of production source",
         thousands(scale.lines),
         "How much code there is",
-        `git ls-tree -r --name-only ${ctx.sha} | xargs -I{} git cat-file -p ${ctx.sha}:{} | wc -l`,
-        `${thousands(scale.lines)} lines across ${thousands(source.length)} production source files`,
+        `${source.listing} | xargs -I{} git cat-file -p ${ctx.sha}:{} | wc -l`,
+        `${thousands(scale.lines)} lines across ${thousands(source.paths.length)} production source files`,
       ),
     );
   }
 
-  if (source.length > 0) {
+  if (source.paths.length > 0) {
     out.push(
       fact(
         "f-scale-files",
         "production source files",
-        thousands(source.length),
+        thousands(source.paths.length),
         "How many files carry it",
-        `git ls-tree -r --name-only ${ctx.sha}`,
-        `${thousands(source.length)} production source files, ${thousands(tests.length)} test files`,
+        source.listing,
+        `${thousands(source.paths.length)} production source files, ${thousands(tests.paths.length)} test files`,
       ),
     );
   }
@@ -102,15 +147,15 @@ const find = async (ctx: ProbeContext): Promise<Candidate[]> => {
     );
   }
 
-  if (tests.length > 0) {
+  if (tests.paths.length > 0) {
     out.push(
       fact(
         "f-scale-tests",
         "test files",
-        thousands(tests.length),
+        thousands(tests.paths.length),
         "How much of it is tested",
-        `git ls-tree -r --name-only ${ctx.sha}`,
-        `${thousands(tests.length)} test files alongside ${thousands(source.length)} production files`,
+        tests.listing,
+        `${thousands(tests.paths.length)} test files alongside ${thousands(source.paths.length)} production files`,
       ),
     );
   }

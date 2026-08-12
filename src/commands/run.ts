@@ -72,6 +72,19 @@ const flag = (argv: string[], ...names: string[]): string | undefined => {
   return undefined;
 };
 
+/**
+ * Whether this run has no way to reach a model for a credentialed stage.
+ *
+ * `ATLAS_NO_MODEL` is the explicit declaration CI and the tests set: no
+ * credential exists and none should be sought. It is deliberately the only
+ * signal read here, because it is the only false-positive-free one - the SDK
+ * authenticates from a stored CLI session with NO environment variable set, so an
+ * absent `ANTHROPIC_API_KEY` is not proof of a missing credential and reading it
+ * as one would block the documented local run through the authenticated CLI and
+ * tell it to supply a file it does not need.
+ */
+const noModelCredential = (): boolean => process.env["ATLAS_NO_MODEL"] !== undefined;
+
 /** Each stage's argv, built from the work directory rather than passed through. */
 const argvFor = (
   stage: StageName,
@@ -170,27 +183,39 @@ export const runCommand = async (argv: string[]): Promise<number> => {
   const sha = flag(argv, "--sha") ?? headSha(clone);
   const dir = workDir(resolve(flag(argv, "--work") ?? ".atlas-work"), sha);
 
-  // A pinned file is copied in under the name the stage would have written, so
-  // everything downstream reads one path and the skip logic needs no special
-  // case for "supplied" versus "produced".
+  // A pinned file is copied in under the name the stage would have written, and
+  // the stage is recorded as SUPPLIED so it is skipped whatever ran upstream. A
+  // supplied set is not a cache entry that can go stale against a rebuilt
+  // upstream - it is authoritative input carrying its own guards (subject_sha for
+  // written, rubric digest for scores) - so it must never be overwritten by
+  // re-running the model, which is what keying purely on file existence did.
+  const supplied: StageName[] = [];
   for (const [option, stage] of [["--written", "write"], ["--scores", "score"]] as const) {
-    const supplied = flag(argv, option);
-    if (supplied !== undefined) copyFileSync(resolve(supplied), join(dir, OUTPUT[stage]));
+    const pinned = flag(argv, option);
+    if (pinned !== undefined) {
+      copyFileSync(resolve(pinned), join(dir, OUTPUT[stage]));
+      supplied.push(stage);
+    }
   }
 
   const from = fromRaw as StageName | undefined;
-  const { run, skipped } = plan(dir, from);
+  const { run, skipped } = plan(dir, { from, supplied });
 
   console.log(`run ${repo} at ${sha}`);
   console.log(`  work ${dir}`);
   if (skipped.length > 0) console.log(`  skip ${skipped.join(", ")} (already built for this SHA)`);
 
   for (const stage of run) {
-    // A credentialed stage with no pinned file and no credential is its own
-    // failure. Proceeding would emit an artifact missing its decision trail, and
-    // #6 makes an absent decision section a claim about the RECORD - which would
-    // be untrue when the record is full and this run simply never read it.
-    if (CREDENTIALED.includes(stage) && !existsSync(join(dir, OUTPUT[stage])) && process.env["ATLAS_NO_MODEL"]) {
+    // A credentialed stage ABOUT TO RUN with no usable model is its own failure,
+    // reported before the stage overwrites anything. A supplied file never reaches
+    // here - `plan` skips a supplied stage - so a credentialed stage in `run` has
+    // no pinned file by construction; the old `!existsSync` guard was the very
+    // bypass this finding names, and it also let a `--from`-forced re-run of a
+    // cached credentialed stage overwrite it and crash. Proceeding without a model
+    // would emit an artifact missing its decision trail, and #6 makes an absent
+    // decision section a claim about the RECORD - untrue when the record is full
+    // and this run simply never read it.
+    if (CREDENTIALED.includes(stage) && noModelCredential()) {
       const problem = new MissingModelStage(stage);
       console.error(`run failed: ${problem.message}`);
       return 78; // EX_CONFIG

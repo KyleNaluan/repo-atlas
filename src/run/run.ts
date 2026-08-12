@@ -113,6 +113,24 @@ const auditMirrored = (dir: string): boolean => {
   }
 };
 
+export interface PlanOptions {
+  /** Re-run this stage and everything after it. */
+  from?: StageName;
+  /** Limit the run to these stages, in pipeline order. */
+  only?: StageName[];
+  /**
+   * Stages whose file arrived as explicit input (`--written`, `--scores`) rather
+   * than as an upstream stage's output. A supplied stage NEVER runs, whatever ran
+   * before it - it is not a cache entry that can go stale against a rebuilt
+   * upstream, it is authoritative input carrying its own freshness guards:
+   * `candidatesFrom` refuses a written set whose `subject_sha` does not match the
+   * harvest, and `scoresFromFile` refuses a score set whose rubric digest has
+   * moved. Those refusals are stronger than the filename-existence test the cache
+   * uses, which is what makes treating supplied input as authoritative safe.
+   */
+  supplied?: StageName[];
+}
+
 /**
  * What to run and what is already done.
  *
@@ -120,14 +138,22 @@ const auditMirrored = (dir: string): boolean => {
  * possible once a stage has been forced: re-running `gate` and then skipping
  * `rank` because ranked.json exists would rank against a gate result that no
  * longer matches, which is exactly the cross-stage mismatch `assemble` refuses.
+ * A `supplied` stage is the one exception in the other direction: it is skipped
+ * even when an upstream stage re-runs, because supplied input is not derived from
+ * that upstream. It does not itself count as a re-run, so stages after it still
+ * obey the no-skip-after-a-rerun rule.
  */
-export const plan = (dir: string, from?: StageName, only?: StageName[]): RunPlan => {
+export const plan = (dir: string, { from, only, supplied = [] }: PlanOptions = {}): RunPlan => {
   const wanted = only ?? PIPELINE;
   const forcedAt = from === undefined ? PIPELINE.length : PIPELINE.indexOf(from);
   const run: StageName[] = [];
   const skipped: StageName[] = [];
   for (const [i, stage] of PIPELINE.entries()) {
     if (!wanted.includes(stage)) continue;
+    if (supplied.includes(stage)) {
+      skipped.push(stage);
+      continue;
+    }
     const done = stageDone(dir, stage);
     // Once anything is being re-run, nothing after it may be skipped.
     if (i >= forcedAt || run.length > 0 || !done) run.push(stage);

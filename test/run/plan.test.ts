@@ -82,14 +82,14 @@ describe("what a run skips", () => {
 
   it("re-runs a named stage and everything after it", () => {
     built(...PIPELINE);
-    const { run, skipped } = plan(dir, "rank");
+    const { run, skipped } = plan(dir, { from: "rank" });
     expect(run).toEqual(["rank", "assemble", "render", "audit"]);
     expect(skipped).toEqual(["harvest", "write", "probe", "gate", "score"]);
   });
 
   it("re-runs the whole pipeline when forced from the first stage", () => {
     built(...PIPELINE);
-    expect(plan(dir, "harvest").run).toEqual(PIPELINE);
+    expect(plan(dir, { from: "harvest" }).run).toEqual(PIPELINE);
   });
 
   it("skips nothing at all when every output is missing but one late file exists", () => {
@@ -111,6 +111,29 @@ describe("what a run skips", () => {
     const { run, skipped } = plan(dir);
     expect(run).toEqual(["audit"]);
     expect(skipped).not.toContain("audit");
+  });
+
+  it("never runs a supplied stage, even when an upstream stage is rebuilt", () => {
+    // The cold-dir hole: --written/--scores are copied in, but harvest is not
+    // cached so it runs, and the no-skip-after-a-rerun rule would then force write
+    // and score to run too - overwriting the pinned files with a model call that
+    // has no credential. A supplied stage is authoritative input, not a cache
+    // entry, so it is skipped whatever ran before it. Nothing else is supplied
+    // here, so a cold dir runs everything but the two pinned stages.
+    const { run, skipped } = plan(dir, { supplied: ["write", "score"] });
+    expect(run).toEqual(["harvest", "probe", "gate", "rank", "assemble", "render", "audit"]);
+    expect(skipped).toEqual(["write", "score"]);
+  });
+
+  it("keeps forcing every stage after a supplied one, since supplied is not a re-run", () => {
+    // A supplied stage is skipped but does not itself reset the re-run guard: the
+    // stages after it still obey the rule that nothing following a rebuilt upstream
+    // may be skipped. Here harvest re-runs, write is supplied (skipped), and probe
+    // onward must all run against the fresh harvest.
+    built(...PIPELINE);
+    const { run, skipped } = plan(dir, { from: "harvest", supplied: ["write"] });
+    expect(skipped).toContain("write");
+    expect(run).toEqual(["harvest", "probe", "gate", "score", "rank", "assemble", "render", "audit"]);
   });
 
   it("skips an audit that has mirrored a real result", () => {

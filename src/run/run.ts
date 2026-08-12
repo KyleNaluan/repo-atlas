@@ -21,7 +21,7 @@
  * stage and says which one, rather than emitting an artifact missing a section
  * and letting the reader infer the subject was thin.
  */
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export type StageName =
@@ -64,12 +64,54 @@ export const OUTPUT: Record<StageName, string> = {
 /** Stages that call a model, and can be satisfied by a pinned file instead. */
 export const CREDENTIALED: StageName[] = ["write", "score"];
 
+/**
+ * Whether a string names a real stage.
+ *
+ * `--from` is a user string; an unrecognised value must be rejected by name, not
+ * fed to `plan()`. There `PIPELINE.indexOf(from)` would return -1, forcing every
+ * stage - silently re-harvesting over the network and re-paying for the model
+ * over a typo.
+ */
+export const isStageName = (value: string): value is StageName =>
+  (PIPELINE as string[]).includes(value);
+
 export interface RunPlan {
   /** Stages that will actually execute, in order. */
   run: StageName[];
   /** Stages skipped because this SHA's output is already there. */
   skipped: StageName[];
 }
+
+/**
+ * Whether a stage's work is already done for this SHA.
+ *
+ * Every stage is keyed on its output file EXCEPT `audit`, which shares
+ * `atlas.html` with `render` (it rewrites render's reserved slot in place rather
+ * than emitting a second document). So the file's mere existence is `render`'s
+ * completion signal, not the audit's: a run that reaches audit and then fails or
+ * is interrupted leaves atlas.html present but un-audited, and keying audit on
+ * that file would skip it on the next run and copy an unaudited artifact out. The
+ * audit's real completion signal is the result it mirrors into the document
+ * itself (#8, 7.1) - `record.audit.status`, which starts `not_run`. Reading the
+ * document rather than a stamp file means the signal cannot disagree with the
+ * artifact it describes.
+ */
+export const stageDone = (dir: string, stage: StageName): boolean => {
+  if (stage === "audit") return auditMirrored(dir);
+  return existsSync(join(dir, OUTPUT[stage]));
+};
+
+/** True once the audit has mirrored a real result into `atlas.json` (#8, 7.1). */
+const auditMirrored = (dir: string): boolean => {
+  const atlasPath = join(dir, OUTPUT["assemble"]);
+  if (!existsSync(atlasPath)) return false;
+  try {
+    const status = JSON.parse(readFileSync(atlasPath, "utf8"))?.record?.audit?.status;
+    return typeof status === "string" && status !== "not_run";
+  } catch {
+    return false;
+  }
+};
 
 /**
  * What to run and what is already done.
@@ -86,7 +128,7 @@ export const plan = (dir: string, from?: StageName, only?: StageName[]): RunPlan
   const skipped: StageName[] = [];
   for (const [i, stage] of PIPELINE.entries()) {
     if (!wanted.includes(stage)) continue;
-    const done = existsSync(join(dir, OUTPUT[stage]));
+    const done = stageDone(dir, stage);
     // Once anything is being re-run, nothing after it may be skipped.
     if (i >= forcedAt || run.length > 0 || !done) run.push(stage);
     else skipped.push(stage);

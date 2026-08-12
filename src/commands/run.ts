@@ -24,8 +24,10 @@ import { renderCommand } from "./render.js";
 import { auditCommand } from "./audit.js";
 import {
   CREDENTIALED,
+  isStageName,
   MissingModelStage,
   OUTPUT,
+  PIPELINE,
   plan,
   StageFailure,
   workDir,
@@ -143,6 +145,13 @@ export const runCommand = async (argv: string[]): Promise<number> => {
     console.log(USAGE);
     return 0;
   }
+  const fromRaw = flag(argv, "--from");
+  if (fromRaw !== undefined && !isStageName(fromRaw)) {
+    console.error(
+      `run: unknown --from stage '${fromRaw}'. valid stages: ${PIPELINE.join(", ")}`,
+    );
+    return 64;
+  }
   const clonePath = flag(argv, "--clone");
   if (clonePath === undefined) {
     console.error(USAGE);
@@ -169,7 +178,7 @@ export const runCommand = async (argv: string[]): Promise<number> => {
     if (supplied !== undefined) copyFileSync(resolve(supplied), join(dir, OUTPUT[stage]));
   }
 
-  const from = flag(argv, "--from") as StageName | undefined;
+  const from = fromRaw as StageName | undefined;
   const { run, skipped } = plan(dir, from);
 
   console.log(`run ${repo} at ${sha}`);

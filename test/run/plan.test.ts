@@ -25,6 +25,11 @@ const built = (...stages: (typeof PIPELINE)[number][]) => {
   for (const s of stages) writeFileSync(join(dir, OUTPUT[s]), "{}", "utf8");
 };
 
+/** Write atlas.json with the audit result the audit stage mirrors in (#8, 7.1). */
+const withAuditStatus = (status: string) => {
+  writeFileSync(join(dir, OUTPUT["assemble"]), JSON.stringify({ record: { audit: { status } } }), "utf8");
+};
+
 describe("the pipeline order", () => {
   it("runs the stages in the order the design fixes", () => {
     // write BEFORE gate (the W1 ruling: decision candidates are gated exactly
@@ -92,6 +97,29 @@ describe("what a run skips", () => {
     // while everything feeding it is rebuilt.
     built("render");
     expect(plan(dir).run).toEqual(PIPELINE);
+  });
+
+  it("re-runs an interrupted audit even though render's atlas.html is present", () => {
+    // The hole audit's shared output name opens: a full run reached audit, render
+    // wrote atlas.html, but audit failed or was interrupted before mirroring its
+    // result. atlas.html exists, atlas.json exists, but record.audit.status is
+    // still `not_run`. Keying audit on the file alone would skip it and copy an
+    // unaudited artifact to the output path while exiting 0. The completion signal
+    // is the mirrored status, not the file.
+    built(...PIPELINE);
+    withAuditStatus("not_run");
+    const { run, skipped } = plan(dir);
+    expect(run).toEqual(["audit"]);
+    expect(skipped).not.toContain("audit");
+  });
+
+  it("skips an audit that has mirrored a real result", () => {
+    for (const status of ["passed", "passed_with_warnings", "failed"] as const) {
+      built(...PIPELINE);
+      withAuditStatus(status);
+      expect(plan(dir).run).toEqual([]);
+      expect(plan(dir).skipped).toEqual(PIPELINE);
+    }
   });
 });
 

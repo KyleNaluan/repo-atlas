@@ -11,6 +11,7 @@
  */
 import type { Candidate, Probe } from "../types.js";
 import { declaredManifests } from "../manifests.js";
+import { findReadme } from "../../harvest/tree.js";
 
 /**
  * Technologies a README claims, from a small vocabulary worth being wrong about.
@@ -44,8 +45,9 @@ export const dependencyDivergence: Probe = {
   finds: "a technology the record names that the build file does not declare",
   toolchain: "any",
   run: (ctx) => {
-    const readme = ctx.read("README.md");
-    if (readme === null) return [];
+    const readmePath = findReadme(ctx.paths);
+    const readme = readmePath ? ctx.read(readmePath) : null;
+    if (readmePath === undefined || readme === null) return [];
     const lower = readme.toLowerCase();
 
     const manifests = declaredManifests(ctx);
@@ -77,11 +79,11 @@ export const dependencyDivergence: Probe = {
           kind: "divergence",
           id: `e-divergence-${tech}`,
           title: `The record names ${tech}; the build file does not declare it`,
-          statement: `README.md refers to ${tech}, but no build manifest in the tree declares a dependency on it.`,
+          statement: `${readmePath} refers to ${tech}, but no build manifest in the tree declares a dependency on it.`,
           why_it_matters:
             "The stack a project says it uses and the stack it declares drift apart quietly, and the drift is what a reviewer finds first.",
           how_to_say_it: `The README still mentions ${tech}; the build no longer depends on it.`,
-          evidence: [{ kind: "file", path: "README.md", sha: ctx.sha }],
+          evidence: [{ kind: "file", path: readmePath, sha: ctx.sha }],
           confidence: "verified",
           interview_value: 0,
           probe_id: "dependency-divergence",

@@ -22,7 +22,7 @@ import {
   type WrittenFile,
 } from "../write/write.js";
 import { RESOLUTION_HEADING } from "../harvest/issues.js";
-import { fileAt, treeFiles } from "../harvest/tree.js";
+import { fileAt, findReadme, treeFiles } from "../harvest/tree.js";
 import type { Harvest } from "../harvest/types.js";
 
 const USAGE = `usage: repo-atlas write --harvest <harvest.json> --clone <path> [-o <written.json>]
@@ -58,20 +58,6 @@ const flag = (argv: string[], ...names: string[]): string | undefined => {
 };
 
 /** Every resolution-shaped comment in the harvest, with the issue carrying it. */
-/**
- * The subject's README, whatever it is called.
- *
- * Root-level only and in preference order: a `docs/README.md` is documentation
- * about a part, while the product sentence is about the whole. A subject with no
- * README at all returns undefined, and the writer then declines rather than
- * describing what a repository of that shape usually is.
- */
-export const findReadme = (paths: string[]): string | undefined => {
-  const roots = paths.filter((p) => !p.includes("/") && /^readme(\.|$)/i.test(p));
-  const preferred = roots.find((p) => /\.md$/i.test(p));
-  return preferred ?? roots.sort()[0];
-};
-
 export const recordsIn = (harvest: Harvest): RecordToRead[] =>
   harvest.issues
     .flatMap((issue) =>

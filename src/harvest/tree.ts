@@ -45,6 +45,22 @@ export const treeFiles = (repo: string, sha: string): string[] =>
     .split("\n")
     .filter((l) => l.length > 0);
 
+/**
+ * The subject's README, whatever it is called.
+ *
+ * One definition of "which file is this subject's README", so no stage reads a
+ * hardcoded `README.md` and silently misses a subject whose README is
+ * `README.markdown`. Root-level only and in preference order: a `docs/README.md`
+ * is documentation about a part, while the product sentence is about the whole. A
+ * subject with no README at all returns undefined, and the caller then reports
+ * that rather than reading an empty string.
+ */
+export const findReadme = (paths: string[]): string | undefined => {
+  const roots = paths.filter((p) => !p.includes("/") && /^readme(\.|$)/i.test(p));
+  const preferred = roots.find((p) => /\.md$/i.test(p));
+  return preferred ?? roots.sort()[0];
+};
+
 const SOURCE_EXTENSIONS = /\.(java|ts|tsx|js|jsx|py|go|rb|rs|kt|scala|c|cc|cpp|h|hpp|cs|php|sql)$/i;
 const TEST_PATH = /(^|\/)(test|tests|spec|__tests__)(\/|$)|\.(test|spec)\./i;
 
@@ -309,7 +325,8 @@ export const detectPrivateSplit = (
   sha: string,
   subjectRepo: string,
 ): PrivateSplit => {
-  const readme = blob(repo, sha, "README.md") ?? "";
+  const readmePath = findReadme(treeFiles(repo, sha));
+  const readme = readmePath ? (blob(repo, sha, readmePath) ?? "") : "";
   const owner = subjectRepo.split("/")[0] ?? "";
 
   // A companion repository named in the README and described as private.

@@ -827,6 +827,26 @@ describe("dependency-divergence", () => {
     expect(found.map((c) => c.node.id)).toEqual(["e-divergence-redis"]);
   }, 60_000);
 
+  it("reads a README that is not called README.md, and cites it by its real name", async () => {
+    // On a `README.markdown` subject the probe read `README.md`, got null, and
+    // emitted NOTHING - silently finding no divergence at all. Worse, it also
+    // hardcoded `README.md` into the statement and the evidence path, so on any
+    // other README name it would cite a file that exists in no tree and audit L1
+    // would fail it. The discovered name flows into both.
+    const ctx = contextFor({
+      "README.markdown": "Runs on Redis.\n",
+      "pom.xml":
+        "<project><dependencies><dependency><artifactId>guava</artifactId></dependency></dependencies></project>\n",
+    });
+    const found = await candidatesFrom("dependency-divergence", ctx);
+    expect(found.map((c) => c.node.id)).toEqual(["e-divergence-redis"]);
+    const node = found[0]!.node;
+    if (node.type !== "edge") throw new Error("expected an edge");
+    expect(node.statement).toContain("README.markdown");
+    expect(node.statement).not.toContain("README.md refers");
+    expect(node.evidence).toEqual([{ kind: "file", path: "README.markdown", sha: ctx.sha }]);
+  }, 60_000);
+
   it("emits ONE candidate for a technology the README spells with an overlapping alias", async () => {
     // "PostgreSQL" is the common spelling and it contains "postgres", so a flat
     // vocabulary carrying both would match twice and emit two divergence edges

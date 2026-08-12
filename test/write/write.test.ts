@@ -27,7 +27,8 @@ import {
   type WrittenFile,
 } from "../../src/write/write.js";
 import { modelWriter, parseWritten, WriterError } from "../../src/write/model-writer.js";
-import { findReadme, recordsIn } from "../../src/commands/write.js";
+import { recordsIn } from "../../src/commands/write.js";
+import { findReadme } from "../../src/harvest/tree.js";
 import type { DecisionNode } from "../../src/schema/types.js";
 import type { Harvest, HarvestedIssue } from "../../src/harvest/types.js";
 

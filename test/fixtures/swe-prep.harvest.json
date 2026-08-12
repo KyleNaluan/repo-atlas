@@ -1,0 +1,1042 @@
+{
+  "harvest_version": "1.0.0",
+  "subject": {
+    "owner": "KyleNaluan",
+    "repo": "swe-prep",
+    "url": "https://github.com/KyleNaluan/swe-prep",
+    "branch": "HEAD",
+    "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+    "read_on": "2026-08-12",
+    "visibility": "public"
+  },
+  "issues": [
+    {
+      "number": 1,
+      "title": "swe-prep: the way to a build-ready spec",
+      "body": "## Destination\n\nA build-ready spec for **swe-prep**: a single-user, habit-forming interview-prep app that runs your code, with the exercise/runner seam designed to hold multiple languages and multiple SWE domains.\nThe map is done when nothing is left to decide before someone opens an editor and builds it.\n\n## Notes\n\n**Domain.** Personal interview-prep tool for an entry-level SWE job hunt, on a few-months horizon.\n\n**Skills every session should consult.** `/grilling` and `/domain-modeling` by default; `/prototype` for the tickets labelled `wayfinder:prototype`; `/research` for `wayfinder:research`.\n\n**The overriding constraint.** The captain is not currently studying consistently.\nThe tool's real job is to *manufacture* the daily habit, not to organise an existing one.\nEvery decision on this map should be weighed against one question: does this get him doing a drill every day, sooner?\nA feature that delays the first daily session is working against the project's purpose, however good it is.\n\n**Settled while charting (do not relitigate without new information):**\n\n- **Single user, forever.** Built in public so the repo and commit history work as a portfolio artifact, but there is exactly one user and no multi-user tax is paid anywhere.\n- **The app runs code.** Because there is no untrusted code (the only author is the only user), execution needs no sandbox or container. This collapses the hardest part of a LeetCode clone into a subprocess or a WASM runtime.\n- **Content is a curated fixed set**, starting from Blind 75, expandable to NeetCode 150 later without structural change. Problems are chosen by firstmate; the captain does not approve them individually. Volume is explicitly not the goal - re-solving the right problems on a schedule is.\n- **Java is the default solving language**, because it is what the captain would type in a real interview. Languages are pluggable behind a runner adapter, not hardcoded.\n- **Sequencing.** Design the exercise abstraction to hold every domain; ship Java algorithms in v1; SQL close behind, because grading it is the same shape as grading code and needs only an embedded engine. Front end is deliberately NOT in v1 - auto-grading it needs a headless browser plus per-exercise DOM assertions, it is the domain where auto-grading is weakest, and it would push the first daily session out by a month or more.\n\n## Decisions so far\n\n<!-- one line per closed ticket: enough to judge relevance, then open the link for the detail -->\n\n- [What one daily session actually looks like](https://github.com/KyleNaluan/swe-prep/issues/3) - Three tiers, only the first required: a ~4-minute, ~8-rep warm-up that alone earns the streak; an optional ~30-minute main exercise; then open-ended continuation. The small core exists because bad days are the only days that matter. The session is domain-agnostic - nothing in it may assume the content is an algorithm problem.\n\n**The session is domain-agnostic (settled by the daily-session ticket).**\nAlgorithms are not the only purpose of this app.\nWarm-up reps and main exercises draw from whatever domains are active.\nNo part of the session shape may assume algorithm content.\nThis is a hard requirement on the exercise abstraction rather than a later enhancement.\n\n- [How a submission is judged](https://github.com/KyleNaluan/swe-prep/issues/5) - Pass/fail, no partial credit. On failure the app reports only how many tests failed; the failing case is revealed on request, recorded visibly, never penalised. Claimed complexity is self-reported first, then checked by measuring scaling empirically at growing input sizes. Style feedback none; resource limits reported not graded; every attempt persisted as scheduler input.\n\n- [Where swe-prep runs, and what it is built with](https://github.com/KyleNaluan/swe-prep/issues/2) - A local web app (the only shape that holds front-end grading later), on the captain's existing banking-app stack: Spring Boot 3.4.3 / Java 21, Postgres, React + Vite, Monaco editor, autostarted as a user service. Reached over the tailnet rather than hosted. Hosting later is protected by three cheap decisions taken now, not built.\n\n- [The exercise and runner abstraction](https://github.com/KyleNaluan/swe-prep/issues/6) - `Grader` decides pass/fail, `Runner` only executes, and keeping them apart is what lets concept exercises need no Runner at all. Test cases are **language-neutral JSON data**, with a per-language adapter supplying the harness, so a case is authored once and runs in every language ever added. `Form` (Rep vs Challenge) is an attribute, not a type. LeetCode's tree/list serialisation adopted rather than reinvented.\n\n- [What a warm-up rep is, across domains](https://github.com/KyleNaluan/swe-prep/issues/9) - Five types (pattern ID, complexity, fill-in-the-blank, predict-output, spot-the-bug), multiple choice by default with predict-output free text. Reps train recognition; production is what Challenges are for. **Nearly all reps derive from the problem set** (~5-6 per problem, so ~400 from 75), which collapses the feared second content pile into one. Explanations shown on wrong answers, one keystroke away on correct ones, and asking is recorded as a confidence signal.\n\n- [How the app chooses what you practise next](https://github.com/KyleNaluan/swe-prep/issues/8) - **Two schedulers over one record**: a due-date SRS queue for Reps (cheap, so classic spacing works) and a priority score for Challenges (scarce, so \"what is worth 40 minutes today\" beats \"what is owed\"). Attempt records collapse to a 0-5 quality score; time-taken deliberately excluded as noise. Review debt first, weekly cap on new problems, retire rather than delete. Plus an \"interview soon\" mode that re-weights toward broad recency.\n\n- [What makes a single-player streak actually stick](https://github.com/KyleNaluan/swe-prep/issues/7) - **No invented currency at all.** Solutions commit to a *private* repo with private contributions shown, so the GitHub graph is a true external record without publishing solutions. XP is replaced by an honest readiness picture (patterns covered, shaky topics, solved-cold count) derived from records already kept - which also settles what \"ready\" means. Plus a scheduled cue, the streak as a record rather than a currency, and a capped repair mechanic so one bad evening does not end the habit.\n\n- [What a SQL exercise actually looks like](https://github.com/KyleNaluan/swe-prep/issues/10) - The same Postgres, a separate fixture database, per-attempt transaction rollback and a read-only role; dialect parity is why it is not an embedded engine. Two or three **shared** schemas with many exercises each, so a schema is learned once rather than re-read every exercise. Multiset row comparison, columns by position, names and row order ignored unless asked; row count is the minimal failure signal and is unusually diagnostic (over-count means join fan-out). ~25-40 exercises. No complexity target.\n\n- [Whether Blind 75 problem statements can ship in a public repo](https://github.com/KyleNaluan/swe-prep/issues/4) - **Public engine, private content.** The private-solutions decision already collapsed this: statements, tests, reference solutions and generators all live in the private content repo (loaded via private submodule or gitignored path), so the public repo holds the engine, the problem *titles* (a free fact) and optionally a few original demo statements - zero protected prose. Scraping is barred by LeetCode's ToS independent of copyright. A permissive wrapper licence does not cure scraped provenance (APPS, CodeContests); only HumanEval, MBPP and Exercism are genuinely clean, and none of them are interview-curated. Full report: `data/swe-license-r4/report.md`.\n\n## Not yet specified\n\n- **Query plans as a SQL topic.** Deferred by the SQL decision, not rejected. A real interview topic but shallow at entry level, and grading on `EXPLAIN` output is a research project. If it ever happens it belongs as a rep type (\"which of these uses the index?\"), never a graded exercise.\n- **Which second language proves the seam, and when.** The abstraction claims a test case authored once runs in any language, but that claim is untested until a second adapter exists. Until then it is a design intention rather than a demonstrated property. Decide which language, and whether it lands in v1 or immediately after.\n- **The concepts and flashcard layer.** Wanted, and explicitly a later phase riding the same rails as the coding drills. Cannot be specified until the exercise abstraction exists.\n- **Front-end practice.** In scope for the product eventually, but the decision to build it is deferred until the habit is real and the abstraction is proven. Revisit as its own decision with the grading cost understood, not as an assumed feature.\n- **The content-entry workflow.** The authoring unit is **statement + test cases + reference solution + input generator**, all of it living in the private content repo, with the warm-up reps derived from it. Licensing is settled, so what remains is purely practical: how the first tranche actually gets entered, and whether any tooling is worth building for it. Still the most likely place this project stalls after the fun engineering is done.\n- **LLM code analysis as a complement to empirical complexity measurement.** Deliberately deferred, not rejected - the captain wants this open for later. The two methods fail in completely different ways: measurement is ground truth but coarse and cannot name a complexity or explain it, while an LLM reading the code is precise and explanatory but occasionally confidently wrong, with no reliable signal for when. The design to build if it happens: run both and **surface disagreement rather than picking a winner**, since a disagreement is either a missed subtlety or a case where constant factors lie, and both deserve attention. Known weak spots for the model: amortised analysis, memoised recursion, and hidden library costs (Java string concatenation in a loop, `List.contains()`, `substring()` copying). A confidently wrong verdict in a study tool is worse than no verdict.\n- **Large-input generators for complexity measurement.** Required by the judging decision, one per problem, on top of correctness cases. Shape depends on the exercise format; adds to the content-authoring load.\n- **Whether reference solutions are shown, and when.** Interacts with how a submission is judged and with the spaced-repetition schedule.\n\n## Out of scope\n\n<!-- ruled beyond the destination; closed, never graduates -->\n\n- **Multi-user support**: accounts, signup, onboarding, hosting for *other learners*. Ruled out by the single-user destination. If this is ever wanted it is a fresh effort, not a resumption of this map.\n  **A small shared instance for a few close acquaintances was raised and deliberately left out of scope** (2026-08-04), with the cost understood so it is not rediscovered from scratch. Already paid for by decisions taken for other reasons: authentication (every person-owned row already carries a user id), hosting (Postgres from the start), and per-user progress. **Not** paid for: the execution sandbox, which is the real jump and which \"close acquaintances\" does not soften - the risk is an accidental infinite loop and the fact that any internet-reachable code-execution service gets probed, so it needs per-submission containers, resource caps, timeouts and network isolation. The `Runner` interface makes that a swap rather than a rewrite, but the container runner is genuine security-sensitive work. Content licensing also gets sharper, since distributing problem statements to other people is a stronger exposure than a private personal copy. One genuine upside if it ever happens: shared use supplies the human accountability that no solo mechanic can replicate.\n  **Do not confuse this with single-user hosted access.** The captain deploying swe-prep so *he* can reach it without his PC running is in scope as a protected future goal (see the platform ticket) and is explicitly not this. The distinction is other people, not deployment.\n",
+      "state": "open",
+      "created_at": "2026-08-04T14:46:31Z",
+      "updated_at": "2026-08-04T18:04:36Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "wayfinder:map"
+      ],
+      "comment_count": 0,
+      "comments": []
+    },
+    {
+      "number": 2,
+      "title": "Where swe-prep runs, and what it is built with",
+      "body": "Part of #1\n\n## Question\n\nWhere does swe-prep run, and what is it built with?\n\nA daily-habit app lives or dies on friction at the moment of opening it.\nWhatever is chosen has to be openable and into-a-problem in seconds, on whatever machine the captain is actually at when the habit is supposed to fire.\n\nDecide the shape (local web app, desktop app, CLI/TUI, or something else), where state lives, and the stack.\nWeigh it primarily against time-to-first-keystroke, and secondarily against being a credible portfolio artifact, since the repo is public and doubles as interview evidence.\n\nConstraints already settled on the map: single user, no auth, no hosting for others, code executes locally with no sandbox required, Java is the default solving language.\n\nNote the interaction with the runner: whatever the shape, it must be able to invoke a JDK and capture results.\n",
+      "state": "closed",
+      "created_at": "2026-08-04T14:47:26Z",
+      "updated_at": "2026-08-10T16:30:34Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "wayfinder:grilling"
+      ],
+      "comment_count": 2,
+      "comments": [
+        {
+          "id": 5181222288,
+          "body": "## Resolution: a local Spring Boot web app on the captain's existing stack, designed so hosting later is a deployment project rather than a rewrite\n\n**Shape: a local web app.**\nThe captain wants front-end practice eventually, and grading that means rendering and asserting in a browser.\nA terminal app can never do it and a desktop app would have to embed a browser to fake it, so a web app is the only shape that holds every named domain without a second platform later.\nThis is decided by domain coverage, not by friction - a TUI would genuinely have had the lowest friction for a heavy terminal user.\n\n**The friction objection is answered by autostart.**\nA web app's weakness is \"is the server running\", and this machine already runs systemd user units for exactly this purpose.\nAutostart it, bookmark it, and time-to-first-keystroke is one click with no cold start.\n\n**Stack: reuse [Team-7-Banking-Application](https://github.com/KyleNaluan/Team-7-Banking-Application).**\nThat repo is already almost exactly this stack, so there is no learning cost and no stack-selection risk:\n\n- **Spring Boot 3.4.3 on Java 21**, with Spring Web, Data JPA, Actuator, Lombok.\n- **Postgres**, not SQLite. Already in use, already behind JPA, industry default, a resume keyword, and it removes any database migration if the app is ever hosted. SQLite's only real advantage was needing no service, which is worth little against something already configured.\n- **React + Vite** for the front end, as in the banking app.\n- **Monaco** for the code editor - what VS Code and LeetCode both use, so it will feel immediately familiar.\n\nBuilding the backend in Java on Spring Boot is deliberate: entry-level Java postings overwhelmingly screen for Spring Boot, so the codebase itself is portfolio evidence, and the captain writes Java daily while building the tool that trains him in it.\n\n**Reach: tailnet now, hosting protected for later.**\n\nThe captain does not need hosted access today.\nTailscale is already working on this machine and already used to reach another local service from a phone, so running locally and reaching it over the tailnet covers the real cases at zero cost, with the one accepted limitation that the PC must be on.\n\nHosting later is an explicit goal the design must protect, but it is not being built now.\n**Note that this is single-user hosted access, which is distinct from the multi-user product ruled out on the map. Do not confuse the two.**\n\nThree cheap decisions buy hosting-later entirely, and cost nothing today:\n\n1. **Postgres from the start** - no migration.\n2. **The runner stays behind an interface** - a local-process runner now, a container runner later, swapped rather than rewritten. This is a requirement on the exercise/runner abstraction.\n3. **Model the user from day one; skip authentication.** Every row belonging to a person (attempts, streak, schedule state) carries a user id, and exactly one user is seeded. No login screen, no password, no session.\n\nThat last one is the important one and is often got backwards.\nThe expensive part of adding auth later is not Spring Security - the captain has already built that once - it is discovering the schema assumed a single implicit user and threading ownership through every table and query afterwards.\nCarrying a user id from the start makes adding auth roughly a day's work; omitting it makes it a refactor that touches everything.\n\nBuilding the login now would also put a login screen between the captain and his daily drill, which is added friction to the one thing whose entire purpose is removing friction.\n\n**What actually gets expensive when hosted, for whoever picks this up later:** not the database - code execution.\nRunning locally there is no untrusted code, which is what collapsed the hardest part of a LeetCode clone.\nOn a server, even single-user, a runaway submission consumes a paid box, so timeouts and resource limits become mandatory; opening it to anyone else brings the full untrusted-code problem (per-submission containers, resource caps, network isolation).\nA VM that runs a JVM and spawns JDK processes is realistically $5-20/month.\n",
+          "created_at": "2026-08-04T15:32:41Z",
+          "updated_at": "2026-08-04T15:32:41Z",
+          "author": "KyleNaluan",
+          "bytes": 4134
+        },
+        {
+          "id": 5243059657,
+          "body": "Record-keeping note: the build diverged from this decision as shipped - spring-boot-starter-jdbc (JdbcClient) instead of Spring Data JPA, no Lombok, and Boot 3.4.7 rather than 3.4.3. Noting it here so the decision record stays honest; the divergence is deliberate-in-practice and documented in the repo overview.",
+          "created_at": "2026-08-10T16:30:34Z",
+          "updated_at": "2026-08-10T16:30:34Z",
+          "author": "KyleNaluan",
+          "bytes": 312
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "title": "What one daily session actually looks like",
+      "body": "Part of #1\n\n## Question\n\nWhat does one daily session actually look like?\n\nThis is the unit the whole product is built to deliver, so its shape constrains nearly everything else on the map.\n\nSettle: how long a session is meant to take, how many exercises it contains, what happens when the captain gets one wrong, what happens when he gets stuck, and what \"done for today\" means.\nAlso settle whether a session is a fixed daily serving or an open-ended practice surface, and whether partial completion counts.\n\nBuild a cheap, rough artifact to react to rather than deciding this in the abstract - an outline, a paper sketch, or a throwaway stub of the session flow.\nThe honest test to apply: would the captain, on a bad day with low motivation, actually open this and finish it?\n\nBear in mind the session has to work for a hard algorithm problem that might take 40 minutes, which sits awkwardly with a Duolingo-style short daily serving. Resolving that tension is the substance of this ticket.\n",
+      "state": "closed",
+      "created_at": "2026-08-04T14:47:27Z",
+      "updated_at": "2026-08-04T14:57:36Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "wayfinder:prototype"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5180801286,
+          "body": "## Resolution: a two-tier session, with a small core that earns the streak\n\n**The session is three tiers, and only the first is required.**\n\n1. **Warm-up: ~8 quick reps, about 4 minutes. This alone completes the day.**\n   Short recall and recognition reps - identify the pattern a problem needs, give the complexity of a snippet, fill in a missing line of a known algorithm, predict what a fragment returns for a given input.\n2. **Main exercise: one full problem, roughly 30 minutes. Optional.**\n   Offered after the warm-up, and declining it still counts as a completed day.\n3. **Open continuation: after the main exercise, keep going with whatever lesson or exercise you like.**\n   No cap, no fixed serving beyond tier 1.\n\n**Why the small core is the whole point.**\nThe minimum session has to be small enough that it is never skipped, because bad days are the only days that matter - good days were never the problem.\nA 40-minute minimum is a session you skip when tired, and one skip usually ends the habit.\n\nThe warm-up is not filler protecting a streak.\nPattern recognition is the highest-value-per-minute training available for entry-level interviews: recognising \"this is a sliding window\" in ten seconds matters more than typing a full solution slowly.\nThe main exercises are how recognition converts into execution.\n\nThis also keeps the streak honest, which matters because a single-player streak has no external enforcement.\nThe streak measures showing up; the exercises measure improving. Conflating the two is what makes self-imposed streaks feel fake.\n\n**The session is domain-agnostic.**\nAlgorithms are not the only purpose of this app.\nWarm-up reps and main exercises both draw from whatever domains are active - algorithms now, SQL close behind, concepts later, front end if it is ever built.\nNothing in the session shape may assume the content is an algorithm problem.\nThis is a hard requirement on the exercise abstraction, not a later enhancement.\n\n**Sub-questions settled:**\n\n- **Wrong answer on a warm-up rep** - correct it immediately, show the right answer, and re-queue that rep later in the same session. Reps are cheap, so in-session repetition is free.\n- **Stuck on a main exercise** - a hint ladder the user chooses to climb: pattern name, then approach, then the key insight, then the solution. Every rung taken is recorded, because \"solved after three hints\" and \"solved cold\" are different data points and the scheduler needs to tell them apart.\n- **Done for today** - warm-up complete. Nothing more.\n- **Fixed serving or open-ended** - a fixed serving followed by an open door. The serving protects the habit; the door lets a good day be a good day.\n- **Does partial completion count** - for the streak, yes. For the scheduler, an abandoned exercise is real signal and is recorded as abandoned rather than discarded.\n\n**Calibration confirmed with the captain:** the warm-up reads as genuinely valuable rather than busywork, and four minutes is small enough for a bad day.\n",
+          "created_at": "2026-08-04T14:57:34Z",
+          "updated_at": "2026-08-04T14:57:34Z",
+          "author": "KyleNaluan",
+          "bytes": 3004
+        }
+      ]
+    },
+    {
+      "number": 4,
+      "title": "Whether Blind 75 problem statements can ship in a public repo",
+      "body": "Part of #1\n\n## Question\n\nCan Blind 75 problem statements ship in a public repository, and if not, what is the cheapest lawful source of problem text?\n\nThe repo is public and doubles as a portfolio artifact, so this is a real constraint rather than a technicality.\nThe *list* of problems is almost certainly fine - titles and the fact that a problem is considered interview-relevant are not protectable.\nThe **problem statements themselves are LeetCode's copyrighted prose**, and copying 75 of them into a public repo is infringement that can get the repo taken down.\n\nEstablish, with sources:\n\n1. What is actually protectable here, and what is not.\n2. Whether any openly-licensed collection of interview-style problem statements exists that permits reuse, and under what licence and attribution terms.\n3. Whether existing open datasets of coding problems (and their test cases) are usable, and how their licences read.\n4. The practical fallback: writing fresh statements for known problems. Confirm that describing a well-known problem in original words is clean, and note any pitfalls.\n5. Whether keeping the repo public but the problem content private is a workable middle path.\n\nDeliverable is a recommendation with the licence citations behind it, not a general survey.\n",
+      "state": "closed",
+      "created_at": "2026-08-04T14:47:29Z",
+      "updated_at": "2026-08-04T18:04:23Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "wayfinder:research"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5182805341,
+          "body": "## Resolution: public engine, private content - the private-solutions decision already collapsed this question\n\nFull report with citations: `data/swe-license-r4/report.md` (firstmate-local).\n\n**Not legal advice.** Engineering diligence for a low-stakes, single-user personal decision. Nothing in the recommended path warrants a professional; the one circumstance that would is named below.\n\n### The answer\n\n**Ship the engine publicly; keep all problem *content* in the private repo the solutions already go to.**\n\nThe ticket was written assuming problem content would live publicly alongside the code.\n[The streak decision](https://github.com/KyleNaluan/swe-prep/issues/7) killed that assumption by sending solutions to a separate private repo.\nSince the authoring unit is *statement + test cases + reference solution + input generator*, three of those four were already going private. Moving the statement across costs nothing and leaves the public, portfolio-facing repo containing **zero protected prose**.\n\nConcretely:\n\n- **Public `swe-prep`**: the engine (runner, grader, schedulers, UI), the **list of problem titles** (a free fact), and optionally a few **original** demo statements so the format is legible to a portfolio reader.\n- **Private content repo**: statements, test data, reference solutions, generators. Loaded by the app via a private submodule or a gitignored local path.\n\nThis is also the fastest path to the first daily session, which is the map's binding constraint: no 75-statement authoring project stands between now and drilling.\n\n### What is actually protectable\n\n- **Free to publish:** the list of problems, the titles, the fact that each is interview-relevant, and the underlying algorithmic idea. Ideas, procedures and methods are excluded by 17 U.S.C. §102(b), and facts and plain lists of facts are not copyrightable.\n- **Not free:** LeetCode's statement prose, its distinctive worked examples, and its constraint framing - original literary expression - plus any paraphrase close enough to be substantially similar.\n\n### Sources checked, and one trap worth knowing\n\n**No openly-licensed source of Blind 75 / NeetCode 150 statements exists, and none can.** \"Blind 75\" is a curated list *of LeetCode's problems*. Repos claiming to \"have Blind 75\" either licence only their author's solution code (e.g. `kamyu104/LeetCode-Solutions`, MIT over the code, not the prose) or reproduce LeetCode text with no right to grant.\n\n**Clean, genuinely reusable datasets** (original-authored, permissive): **HumanEval** (MIT, 164 hand-written problems) and **MBPP** (CC BY 4.0, 974 crowd-sourced). Also **Exercism `problem-specifications`** (MIT, statements plus canonical test data). All are general or entry-level programming katas rather than interview-algorithm curation, so adopting them would mean abandoning the curated set - useful as a format demo, not as the content pile.\n\n**The trap: a permissive wrapper licence does not cure scraped provenance.**\n**APPS** ships an MIT `LICENSE` but its 10,000 problems are collected from Codeforces, Kattis, AtCoder and others.\n**CodeContests** is Apache 2.0 for code and CC BY 4.0 for non-code, but aggregates problems from Aizu, AtCoder, CodeChef, Codeforces and HackerEarth, and explicitly disclaims that third-party material may carry separate terms.\n**Rule: trust a permissive licence only when the licensor authored the statements.** A licensor can only license what they own.\n\n### Writing fresh statements (the fallback, and later polish)\n\nConfirmed clean: because the algorithm is unprotectable, describing a known problem in original words with your own examples and your own generated test data produces a statement you own outright and can publish.\n\nNamed pitfalls that turn a clean rewrite dirty:\n\n1. **Paraphrase that is too close** - copyright reaches substantially similar expression. Write from the idea, ideally without the source open, then check the phrasing does not track the original.\n2. **Reproducing distinctive examples verbatim** - the specific worked example is part of their expression. Invent your own values.\n3. **Copying curated test data** - generate cases from your own reference solution and input generator, which the design already calls for. Self-generated I/O pairs are yours.\n4. **Constraint tables and formatting tics** - low risk individually, cumulative in aggregate. Use your own layout.\n\nThis is good later work for portfolio polish. It loses as a *gate* purely on time.\n\n### Terms of service, separate from copyright\n\n**LeetCode's ToS forbids crawling, scraping and spidering outright**, independent of the copyright analysis and regardless of whether content lands in a public or private repo.\nSo \"just scrape Blind 75 into the app\" is off the table permanently.\nIt does not bar reading a problem manually and writing your own statement, which uses the service as intended.\n\n*Confidence note from the report: the live terms page was Cloudflare-blocked during research, so this clause is quoted from indexed text rather than re-pulled from origin. Flagged rather than papered over.*\n\n### Residual caveats, honestly stated\n\nPrivate is not the same as licensed.\nCopying a statement into a private file is still technically a reproduction; with no distribution and purely personal single-user use, the practical exposure is negligible. That is **unenforced-and-unexposed in practice, not licensed** - reading practice, not law.\n\n**The one thing that would change the analysis is distribution.**\nIf problem content ever reaches another person - the shared-instance idea already out of scope on the map - reopen this and lean on fresh original statements or the clean datasets for anything that leaves the machine.\n",
+          "created_at": "2026-08-04T18:04:21Z",
+          "updated_at": "2026-08-04T18:04:21Z",
+          "author": "KyleNaluan",
+          "bytes": 5721
+        }
+      ]
+    },
+    {
+      "number": 5,
+      "title": "How a submission is judged",
+      "body": "Part of #1\n\n## Question\n\nHow is a submission judged?\n\nSettle what the app checks when the captain hits run, and what verdicts exist.\n\nAt minimum: is it pure pass/fail against test cases, or is there partial credit?\nAre there time or memory limits, and are they graded or merely reported?\nDoes the app say anything about *approach* - complexity, idiomatic style - or only about correctness?\nWhat feedback appears on failure: which case failed, expected versus actual, the input, or something less generous so the captain has to think?\n\nThe last one matters more than it looks.\nA judge that hands over the failing input immediately trains debugging; one that only says \"wrong answer\" trains the interview skill of reasoning about your own code without an oracle. That is a deliberate design choice, not an implementation detail.\n\nAlso settle whether a submission's result is durable, since the scheduling ticket will need a history of how each attempt went.\n",
+      "state": "closed",
+      "created_at": "2026-08-04T14:47:31Z",
+      "updated_at": "2026-08-04T15:12:30Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "wayfinder:grilling"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5180987178,
+          "body": "## Resolution: correctness is pass/fail, help is opt-in and recorded, and claimed complexity is verified by measurement\n\n**Correctness verdict.** A submission passes or it does not. No partial credit - it would invent a number that means nothing and soften the only honest signal available. The count of tests passed is shown; it is not a score.\n\n**Failure feedback: withhold by default, reveal on request, record the reveal.**\n\nOn failure the app reports only how many tests failed.\nRe-reading your own code and reasoning about it without an oracle is the skill a real interview tests, and an app that always hands over the failing case trains the opposite reflex - which is why people grind hundreds of problems and still freeze.\nAn explicit \"show me the failing case\" is always available and returns input, expected, and actual.\nUsing it is **recorded visibly but never penalised**: penalties on a self-imposed system only teach the user to game themselves.\n\nThis is deliberately the same shape as the hint ladder for being stuck, so the app has one consistent idea about help: always available, always chosen, always recorded.\n\n**Approach: authored target complexity, self-report first, then empirical verification.**\n\nCorrectness is the floor, not the bar - a working brute force gets rejected in a real interview.\nEach problem carries an authored target complexity.\nAfter tests pass, the app asks the user to state their solution's time and space complexity **before** revealing the target, because articulating complexity out loud is itself the interview skill.\n\nA self-report alone is unverified and would congratulate an O(n^2) solution claiming to be O(n) - the single case most worth catching.\nSo the claim is checked by **measuring scaling empirically**: run the submission at growing input sizes and fit the runtime curve.\n\n- This reliably catches polynomial blow-up, which is the error that actually costs interviews.\n- It cannot cleanly separate O(n) from O(n log n); constant factors swamp a log at practical sizes. The app must therefore only make coarse claims, and where measurement is inconclusive it must say \"measured scaling is consistent with your claim\" rather than \"correct\".\n- It makes the self-report a **prediction scored against measurement** rather than an honour-system checkbox, which is a stronger training loop.\n\nCosts accepted, and they are real:\n\n- Every problem needs a **large-input generator** in addition to correctness cases. This lands on the content-authoring pile, which is already the most likely place this project stalls.\n- Timing on a normal machine is noisy - usable for order-of-magnitude differences, useless for anything finer.\n- The runner needs a **second execution mode** that runs a submission at multiple input sizes and captures timings. This is a requirement on the exercise/runner abstraction.\n\n**Style feedback: none.** Automated style nagging is noise and is not what interviews reject people over.\n\n**Resource limits: reported, not graded.** A generous timeout catches infinite loops; runtime is shown for interest. Grading on wall-clock would punish JVM warm-up and teach nothing.\n\n**Durable results: every attempt is persisted, not just the final verdict.** Each records pass/fail, submissions taken, hint-ladder rungs climbed, whether the failing case was revealed, the complexity self-assessment and what measurement said about it, and whether the exercise was abandoned. This history is the scheduler's input, and thin records here would quietly cripple that ticket.\n\n**Deliberately left open for later:** supplementing measurement with LLM code analysis. See the map's \"Not yet specified\".\n",
+          "created_at": "2026-08-04T15:12:28Z",
+          "updated_at": "2026-08-04T15:12:28Z",
+          "author": "KyleNaluan",
+          "bytes": 3660
+        }
+      ]
+    },
+    {
+      "number": 6,
+      "title": "The exercise and runner abstraction",
+      "body": "Part of #1\n\n## Question\n\nDesign the exercise and runner abstraction.\n\nThis is the seam that decides whether the captain's two stated requirements - interchangeable languages, and practice across SWE domains beyond algorithms - are cheap or impossible later.\n\nDefine the model: what an exercise *is*, independent of language and domain; what a test specification looks like; what contract a runner adapter satisfies; and how a submission flows from editor to verdict.\n\nIt must hold, without redesign:\n\n- **Java** (the v1 default) and at least one other language, proving the language seam is real rather than aspirational.\n- **SQL**, where the \"runner\" is an embedded engine, the fixture is a schema plus seed data, and the verdict is a result-set comparison. This ships close behind v1, so it is a design requirement now.\n- **Front end** at least conceptually, where grading means DOM and interaction assertions in a headless browser. Not being built, but the abstraction should not make it impossible.\n- **Concepts and flashcards**, a later phase with no execution at all. Make sure \"exercise\" does not secretly mean \"thing that runs code\".\n- **Warm-up reps** (settled by [the daily-session ticket](https://github.com/KyleNaluan/swe-prep/issues/3)): very short, non-execution, answerable in seconds - pattern identification, complexity of a snippet, fill-in-a-missing-line, predict-the-output. These are a first-class exercise kind, not a special case bolted on, and they exist in every domain. Roughly eight of them are the required daily core, so they are the most-used thing in the app.\n\nThe session that consumes this model is domain-agnostic: nothing may assume an exercise is an algorithm problem.\nA hint ladder (pattern name, approach, key insight, solution) and a record of which rung was reached are part of the model, since the scheduler distinguishes \"solved cold\" from \"solved after three hints\", and an abandoned attempt is recorded rather than discarded.\n\n**A second execution mode is required** (settled by [the judging ticket](https://github.com/KyleNaluan/swe-prep/issues/5)): besides running a submission against correctness cases, the runner must run it at multiple growing input sizes and capture timings, so a claimed complexity can be checked against measured scaling. Design the runner contract to carry this from the start rather than bolting it on.\n\n**The runner must sit behind a swappable interface** (settled by [the platform ticket](https://github.com/KyleNaluan/swe-prep/issues/2)): a local-process runner today, a sandboxed container runner if the app is ever hosted. That swap must not require touching the exercise model. Hosting is a protected future goal, so this costs nothing now and is expensive to retrofit.\n\n**Every row belonging to a person carries a user id**, with exactly one user seeded and no authentication built. Ownership threaded through the model from the start is what makes adding auth later a day's work instead of a refactor.\n\nBeware the two failure modes: hardcoding Java assumptions into the schema, and over-abstracting into something so generic it expresses nothing.\nUse `/domain-modeling` to pin the vocabulary, since these terms will be load-bearing across the whole build.\n",
+      "state": "closed",
+      "created_at": "2026-08-04T14:47:33Z",
+      "updated_at": "2026-08-04T15:48:56Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "wayfinder:grilling"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5181413478,
+          "body": "## Resolution: split Grader from Runner, and make test cases language-neutral data\n\n### The trap this avoids\n\nThe obvious design makes `Exercise` mean \"thing that runs code\", after which concepts and warm-up reps become special cases bolted on the side.\nThe fix is separating two things that are usually conflated: **what the user produces** and **how it is judged**.\n\n### The core split\n\n**A `Grader` decides pass or fail. A `Runner` only executes.** Everything else follows from keeping those apart.\n\n- A concept question has a Grader and **no Runner at all**.\n- A Java problem and a SQL query both need a Runner, but entirely different Graders.\n- A front-end exercise, if ever built, is a different Grader over a browser Runner.\n\nThis is what stops \"exercise\" from secretly meaning \"code\".\n\n### The model\n\n- **`Exercise`** - the authored unit of practice. Prompt, domain, topic tags, difficulty, an ordered hint ladder, a response spec, a grading spec.\n- **`Form`** - `Rep` (seconds; the required daily core) or `Challenge` (~30 minutes). **An attribute, not a separate type.** It decides where an exercise appears in a session and nothing else. This is what lets warm-up reps exist in every domain instead of being an algorithms-only gimmick.\n- **`Response`** - what the user produces: `Choice`, `ShortAnswer`, `Program`, `Query`, and later `Component`.\n- **`Runner`** - the swappable execution boundary. Takes sources, an entrypoint, an input and limits; returns output, timings and exit status. A local-process runner today, a container runner if the app is ever hosted. **Graders never know which.**\n- **`Attempt`** - the durable record: user id, exercise, hint-ladder rungs climbed, whether the failing case was revealed, the complexity claim, measured scaling, and the outcome including abandonment.\n- **`Submission`** - one press of run, within an attempt.\n\n### The decision that makes languages cheap\n\n**Test cases are data, not code.**\n\n```\ninput:    [[2,7,11,15], 9]\nexpected: [0,1]\n```\n\nLanguage-neutral JSON.\nThe **language adapter** supplies the harness that deserialises that into the target language's types, calls the user's function, and serialises the result back.\nA test case is authored **once** and runs in every language ever added.\n\nThe failure this avoids: writing test cases as JUnit means every new language requires re-authoring the entire problem set. That is the difference between pluggable languages being real and being aspirational.\n\nThe same move applies to the function signature - the exercise declares it in language-neutral types, and each adapter generates the stub and harness. This is how LeetCode supports twenty languages.\n\n**Accepted constraint:** this restricts exercises to problems with JSON-representable inputs and outputs. Most of Blind 75 qualifies. Trees and linked lists need a serialisation convention, and **LeetCode's existing convention is adopted rather than inventing one** (`[1,2,3,null,4]`), since the captain will be reading their problem statements anyway.\n\n### How each domain lands\n\n| Domain | Response | Runner | Grader |\n| --- | --- | --- | --- |\n| Algorithms | `Program` | language adapter | run against cases, compare output |\n| SQL | `Query` | embedded engine | apply fixture, run, compare result set |\n| Concepts / reps | `Choice` or `ShortAnswer` | **none** | compare to key |\n| Front end (later) | `Component` | headless browser | DOM and interaction assertions |\n\nFront end is the one place the JSON-test-case model does **not** extend, and this is stated plainly rather than papered over.\nIt does not need to: `Component` carries its own spec shape, because `Grader` and `Runner` are both polymorphic.\nThe abstraction's obligation is to not foreclose front end, and it does not.\n\n### Complexity measurement\n\nDeliberately a separate concern.\nAn exercise **may** carry an `InputGenerator` and a target complexity.\nWhen present, a `ScalingProbe` invokes the same Runner repeatedly at growing input sizes and returns a timing curve, per the judging decision.\nExercises without a generator are simply never checked - it is optional metadata rather than a required field, so it never pollutes the concepts layer.\n\n### Ownership\n\nEvery row belonging to a person carries a user id, with exactly one user seeded and no authentication built, per the platform decision.\n",
+          "created_at": "2026-08-04T15:48:54Z",
+          "updated_at": "2026-08-04T15:48:54Z",
+          "author": "KyleNaluan",
+          "bytes": 4337
+        }
+      ]
+    },
+    {
+      "number": 7,
+      "title": "What makes a single-player streak actually stick",
+      "body": "Part of #1\n\n## Question\n\nWhat makes a single-player streak actually stick?\n\nThis is the hardest design question on the map, and the one the project most likely fails on.\n\nDuolingo's product is the streak, not the teaching, but its mechanics lean heavily on things swe-prep does not have: other people, leagues, loss aversion against a public record, and push notifications from a party that is not you.\nHere the captain is the only user *and* the author.\nHe knows the XP is invented, he can edit the database, and he can turn off any nag he writes.\nSelf-imposed points do not create obligation.\n\nSettle what actually generates the pull to open it tomorrow.\nCandidates worth weighing rather than assuming: a genuinely public streak, since the repo is public and the commit graph is real external evidence; stakes with a real cost to missing; progress measured against something true (readiness against real interview criteria) rather than invented currency; making the *session* intrinsically satisfying enough that it needs no external hook; and scheduled surfacing so the decision to practise is not made fresh each day.\n\nBe blunt about which of these are known-weak. A mechanic that only works because the captain agrees to pretend it works is not a mechanic.\n",
+      "state": "closed",
+      "created_at": "2026-08-04T14:47:34Z",
+      "updated_at": "2026-08-04T17:23:55Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "wayfinder:grilling"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5182411379,
+          "body": "## Resolution: no invented currency - a true external record, an honest readiness picture, and a streak that survives a bad evening\n\n### Start with the uncomfortable part\n\nDuolingo's streak runs on other people's leagues, loss aversion against a public record, and notifications from a party that is not you.\nswe-prep has none of that: the captain is the only user *and* the author, he knows the points are invented, and he can edit the database.\n\n**Invented currency is therefore cut entirely. No XP, no hearts, no lives, no leagues.**\nAny number the captain can print himself is a number he stops believing in around week two, and a fake number that goes up is actively misleading about whether he is getting hired.\n\nWhat the design *can* do is narrower and more honest: **remove every excuse, make the record true rather than invented, and make breaking it cost something real.**\n\n### 1. Commit real solutions - to a PRIVATE repo\n\nEvery solved problem is committed, so the GitHub contribution graph becomes a real, external, permanent record that the app did not invent and the captain cannot fake. A skipped week is a visible hole.\n\n**Solutions go to a private repo, with \"include private contributions on my profile\" enabled.**\nThe green squares still appear publicly; nobody can see what is behind them.\n\nThe captain declined publishing solutions, and that instinct is right for a second reason: a public dump of Blind 75 solutions reads as interview grinding rather than building, and it would collide with [the licensing question](https://github.com/KyleNaluan/swe-prep/issues/4) if statements ride along.\n\nNothing that mattered is lost - the record is still external, permanent, and publicly visible as activity. The witness function was never about anyone reading the solutions.\n\nThe two purposes separate cleanly: **swe-prep itself is the portfolio piece** - a real Spring Boot application with a defensible design, far better evidence than 75 solved puzzles - while the contribution graph is purely the habit mechanic.\n\n**Hard rule: commit real artifacts only, never synthetic \"practice happened\" markers.** Auto-inflating a contribution graph is gaming, and the captain would know.\n\n### 2. A true readiness picture instead of XP\n\nThis also resolves the map's open question about what \"ready for interviews\" means; the two were the same question about what the captain sees when he opens the app.\n\nInstead of a score, the honest state of things:\n\n```\nPatterns covered: 8 of 12 - Shaky: graphs, intervals\nNot touched in 3 weeks: dynamic programming\nSolved cold on first attempt: 19 of 41\n```\n\nEvery figure derives from the attempt records [judging](https://github.com/KyleNaluan/swe-prep/issues/5) and [scheduling](https://github.com/KyleNaluan/swe-prep/issues/8) already keep, so it costs nothing to compute and all of it is **true**.\nIt creates pull because it is specific and honest about something the captain actually wants, not because it is a game.\n\n### 3. A scheduled cue\n\nThe decision to practise must not be made fresh each day.\nA notification at a chosen time, which is nearly free on this machine (scheduled nudges already run here).\nHabit research is consistent that the cue matters more than the motivation.\n\n### 4. The streak as a record, not a currency\n\nDays practised, shown next to readiness. It is true, so it is fine to display. It is not spendable, and nothing is denominated in it.\n\n### 5. A capped repair mechanic\n\nDuolingo's streak freeze exists for a real reason: an all-or-nothing streak that breaks makes people quit outright rather than resume.\nA missed day may be repaired by a double session the next day, **capped at roughly two per month** so it stays meaningful.\nThis preserves the asset across one bad evening, which is exactly when habits die.\n\n### Ruled out\n\n**Financial stakes** (Beeminder-style). They genuinely work, but wiring up money is real friction, and adding a punishment to an activity already being avoided is more likely to increase the avoidance. Available later if nothing else lands.\n\n### The lever that beats everything in this ticket\n\n**Tell one person.**\nAccountability to an actual human is the strongest effect in the habit literature and nothing in-app comes close.\nThe record already exists; one friend who occasionally asks would outperform every mechanic above combined.\nThis cannot be built, which is exactly why it is written down.\n\n### Closing note for whoever picks this up later\n\n**If this design does not get the captain practising, the answer is not more gamification.**\nIt would mean something outside the app is wrong, and building more mechanics in response would be the expensive mistake.\n",
+          "created_at": "2026-08-04T17:23:54Z",
+          "updated_at": "2026-08-04T17:23:54Z",
+          "author": "KyleNaluan",
+          "bytes": 4672
+        }
+      ]
+    },
+    {
+      "number": 8,
+      "title": "How the app chooses what you practise next",
+      "body": "Part of #1\n\n## Question\n\nHow does the app choose what the captain practises next?\n\nThe map's whole premise is that re-solving the right problems on a schedule beats grinding new ones, so the scheduler is where the learning value actually lives.\n\nSettle the selection model: spaced repetition on a known algorithm (SM-2, FSRS, or a simpler interval ladder), a weakness-targeting model driven by past results, coverage of topic categories, or some combination.\nDecide what signal feeds it - pass/fail, attempts taken, time spent, self-rated difficulty - and reconcile that with what the judging ticket decided is actually recorded.\n\nTwo specifics to resolve rather than leave implicit:\n\n1. Spaced-repetition algorithms were built for flashcards, where a review takes seconds. A hard algorithm problem takes 40 minutes. Whether the standard intervals survive that difference is a real question, not a detail.\n2. What happens with a problem the captain has never seen, versus one he has failed twice, versus one he has passed cleanly three times. The cold-start and the graduation behaviour both need an answer.\n",
+      "state": "closed",
+      "created_at": "2026-08-04T14:47:36Z",
+      "updated_at": "2026-08-04T17:07:09Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "wayfinder:grilling"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5182242970,
+          "body": "## Resolution: two schedulers over one shared record - a due-date queue for reps, a priority score for challenges\n\n### Why one scheduler cannot serve both\n\nSpaced repetition assumes reviews are cheap.\nAnki works because twenty due cards cost four minutes.\nThat arithmetic breaks completely for a 30-40 minute `Challenge`: twenty due challenges is a fortnight of work, and a scheduler that generates impossible debt is one that gets ignored within a week.\n\nThe scarcity is also structural.\nRoughly 90 challenge slots exist in three months of daily practice, against ~75 problems.\nThere is barely room for one pass, let alone spaced review, and the scheduler must respect that rather than pretend otherwise.\n\n### Reps: a due-date queue\n\nReps cost seconds, so standard spaced repetition applies exactly as designed - eight due today is four minutes.\n\nSM-2 is about fifty lines and entirely adequate for one user and ~400 reps.\nFSRS is better on paper, but the difference is marginal at this scale.\n**Keep the algorithm swappable** and do not agonise over the choice.\n\n### Challenges: a priority score, not a due date\n\nEach day the scheduler answers one question: *what is the single best use of forty minutes today?*\n\nScore every problem on:\n\n- time since last attempt (raises priority)\n- how badly the last attempt went (raises priority)\n- whether its pattern is under-covered (raises priority)\n- a **hard floor on minimum interval** - re-solving something from two days ago is memorisation, not learning\n\nTake the highest scorer.\n\nDue dates ask what is *owed*; a priority score asks what is *worth it*. Only the second survives scarcity.\n\n### The signal\n\n[Judging](https://github.com/KyleNaluan/swe-prep/issues/5) leaves a rich per-attempt record.\n**Collapse it into a single 0-5 quality score** rather than feeding raw fields into either algorithm:\n\n- Passed on the first submission, no hints, no failing-case reveal, complexity claim correct → **5**\n- Passed, but climbed the hint ladder or revealed the failing case → **3**\n- Failed or abandoned → **1**\n\nThis maps directly onto SM-2 and keeps the scheduler from ossifying around today's exact set of recorded fields.\nFor reps, correct-or-not plus the \"asked why\" confidence signal from [the warm-up rep decision](https://github.com/KyleNaluan/swe-prep/issues/9) feeds the same scale.\n\n**Time taken is deliberately excluded.**\nIt is tempting and it is noise: interruptions, thinking before typing, and typing fast on a misunderstood problem all corrupt it. It would add variance without carrying information.\n\n### New versus review\n\nThe classic failure is Anki's - unbounded new material, review debt piles up, the user quits.\n\n**Review debt first, new problems second, with a weekly cap on introductions.**\nIf something genuinely weak is due, the challenge slot goes to it; otherwise a new problem is introduced.\nThe cap matters because ~75 problems can be burned through in two months, arriving at breadth with no depth and everything half-remembered.\n\n**Nothing is ever deleted.**\nA problem passed cleanly three times earns an interval of months. That is retirement, not removal.\n\n### \"Interview soon\" mode\n\nIn the final fortnight before interviews the objective genuinely changes: broad recency beats optimal long-term spacing, especially across weak patterns.\n\nThis is a different scoring function, not a different app.\nIt re-weights the challenge priority score toward broad recency and drops the minimum-interval floor.\nCheap to build, and the difference between a tool that trains the captain and one that also prepares him for a specific date.\n\n### Note for the domain layer\n\nOnce SQL exercises exist, the daily rep set should mix domains rather than running as separate per-domain queues.\nThe scheduler operates over exercises, and `domain` is one more coverage dimension alongside topic - not a reason for a second queue.\n",
+          "created_at": "2026-08-04T17:07:07Z",
+          "updated_at": "2026-08-04T17:07:07Z",
+          "author": "KyleNaluan",
+          "bytes": 3891
+        }
+      ]
+    },
+    {
+      "number": 9,
+      "title": "What a warm-up rep is, across domains",
+      "body": "Part of #1\n\n## Question\n\nWhat is a warm-up rep, concretely, in each domain - and how are they authored?\n\nThe daily-session ticket settled that ~8 warm-up reps of about four minutes are the required daily core.\nThat makes them the most-used surface in the entire app, and the thing that has to carry the habit.\nIt also makes them a content-authoring problem roughly the size of the main problem set, which is currently unaccounted for.\n\nSettle:\n\n1. **The rep types.** Pattern identification, complexity of a snippet, fill in a missing line, predict the output were the sketch. Confirm, cut, or extend that list, and define what each actually presents and accepts as an answer.\n2. **Per domain.** What a rep looks like for algorithms, for SQL, and for the later concepts layer. They should feel like one system rather than three bolted together.\n3. **Answer format and grading.** Multiple choice grades trivially but trains recognition only; free text trains recall but is harder to grade. Decide per rep type rather than globally, and be explicit about which are which.\n4. **Authoring.** Where reps come from. Derived automatically from the problem set, hand-written, LLM-drafted and verified, or some mix. Roughly how many are needed before the app stops repeating itself uncomfortably, and whether that count is reachable.\n5. **The relationship to main exercises.** Whether a rep is generated from a problem the captain has already attempted, or authored independently of the problem set.\n\nResist the pull to make reps a thin quiz layer.\nTheir value claim is that recognition is the highest-value-per-minute interview training there is, and they only earn the daily slot if they actually deliver that.\n",
+      "state": "closed",
+      "created_at": "2026-08-04T14:58:18Z",
+      "updated_at": "2026-08-04T16:29:13Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "wayfinder:grilling"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5181855182,
+          "body": "## Resolution: five rep types, mostly multiple choice, nearly all derived from the problem set\n\n### The rep types\n\n1. **Pattern identification** - a problem statement, pick the pattern. The highest-value type, because recognising the shape is the actual entry-level interview skill.\n2. **Complexity of a snippet** - given code, give its time/space complexity.\n3. **Fill in the missing line** - an algorithm core with a blank.\n4. **Predict the output** - what does this fragment return for this input.\n5. **Spot the bug** - subtly wrong code, identify the defect.\n\nSpot-the-bug is added to the original sketch deliberately.\nIt is code review, which is genuinely the job, and it coheres with [the judging decision](https://github.com/KyleNaluan/swe-prep/issues/5) to make the captain reason about code without an oracle. This trains exactly that, in about twenty seconds.\n\n### Answer format and grading\n\n**Multiple choice by default; predict-the-output is free text.**\n\n- **Complexity** - multiple choice from a fixed ladder. The answer set is finite, so this grades exactly; free text would only mean normalising `O(n^2)` against `O(n squared)` for no benefit.\n- **Pattern identification** - multiple choice; roughly a dozen possible answers.\n- **Spot the bug** - multiple choice, or selecting the offending line.\n- **Fill in the missing line** - multiple choice among plausible lines, including realistic wrong ones (an off-by-one, a flipped comparison). Executing a typed line was considered and rejected: a Java compile takes a second or two and eight of those destroys the four-minute session. Discrimination is the target anyway.\n- **Predict the output** - free text, exact match after normalisation. The answer is a concrete value, so it grades exactly as typed.\n\n**Stated plainly: reps train recognition and discrimination. Production is what the `Challenge` exercises are for.**\nThat is a division of labour rather than a compromise, and it is the honest answer to whether reps are busywork - they are not attempting to replace writing code.\n\n**Authoring standard that follows: the distractors are the entire value.**\nA rep with three obviously-wrong options teaches nothing and wastes a slot in a four-minute daily budget. Plausible wrong answers are the product.\n\n### Explanations\n\nEvery rep carries a short explanation of the correct answer.\n\n- **Shown immediately on a wrong answer.** That is the teaching moment; the right answer without the reason teaches almost nothing.\n- **Not shown by default on a correct answer.** Re-reading something already known is low-value compared to retrieval, and eight explanations would roughly double the session, attacking the property the whole design protects.\n- **Always one keystroke away.** Some correct answers are lucky guesses and the captain knows it at the time.\n- **Asking is recorded.** \"Correct, and asked why\" is a different data point from \"correct, moved on\", and is a free behavioural read on confidence. Flashcard systems normally buy this signal by interrupting with \"how hard was that?\", which users learn to click through. Here the same signal comes from behaviour that would happen anyway, and the scheduler can resurface the rep sooner without ever asking a question.\n\nExplanations are generated in the same pass as the rep, so marginal cost is near zero.\n**They are verified alongside the rep rather than trusted** - a confidently wrong explanation is worse than none.\n\n### Authoring: reps derive from the problem set\n\nThe naive read is that reps are a second content pile the size of the first, and that pile is where this project most plausibly dies.\nThat mostly dissolves: **nearly every rep is derived from a problem already being authored.**\n\nPer problem, roughly:\n\n- one **pattern-ID** rep, from the statement\n- one or two **complexity** reps, from the reference solution and a brute-force variant\n- one or two **fill-in-the-blank** reps, from the reference solution\n- one **spot-the-bug** rep, by mutating the reference solution - near-mechanical, since the mutation *is* the answer\n- one **predict-output** rep, by running the reference on a small input\n\nThat is five to six reps per problem, so ~75 problems yields roughly **400 reps**, LLM-drafted and human-verified.\nEight reps a day is about 240 slots a month, so that pool is comfortably sufficient - and note that repetition is the *point* under spaced repetition, so \"how soon does it repeat\" is the wrong question.\n\n**Consequence for the content model: the reference solution is the seed for everything.**\nThe real authoring unit is statement + test cases + reference solution + input generator, and the reps fall out of it.\nThere is one content pile, not two.\n\n### Gating and cold start\n\nSome rep types only make sense once the captain has met the problem.\nPattern identification works cold - that is the point of it.\nFill-in-the-blank on a solution never seen is guessing, not practice.\n\nSo derived reps unlock as problems are attempted.\nThis looks like a cold-start problem and is not: **on day one, ~75 pattern-ID reps are available**, the highest-value type, which is weeks of daily cores by itself.\nThe pool deepens as problems are solved, and the reps that appear concern problems actually wrestled with - which is what spaced repetition should be doing.\n\nThe app gets richer the more it is used.\n",
+          "created_at": "2026-08-04T16:29:11Z",
+          "updated_at": "2026-08-04T16:29:11Z",
+          "author": "KyleNaluan",
+          "bytes": 5342
+        }
+      ]
+    },
+    {
+      "number": 10,
+      "title": "What a SQL exercise actually looks like",
+      "body": "Part of #1\n\n## Question\n\nWhat does a SQL exercise actually look like?\n\nThe [exercise abstraction](https://github.com/KyleNaluan/swe-prep/issues/6) settled the shape - a `Query` response, an embedded engine as the Runner, and a Grader that applies a fixture, runs the query, and compares result sets.\nThis ticket fills that in, because SQL ships close behind the Java algorithms in v1 and is the first real proof that the domain seam works.\n\nSettle:\n\n1. **The engine.** The app's own state is Postgres. Exercise fixtures need to be disposable and reset per attempt, which is a different requirement. Decide whether exercises run against the same Postgres (schema-per-attempt, or a transaction rolled back), a separate throwaway database, or an embedded engine. Note that dialect matters: practising SQLite dialect while interviewing on Postgres would train the wrong thing.\n2. **The fixture format.** Schema plus seed data, authored per exercise or shared across a set. Sharing one realistic schema across many exercises is cheaper to author and closer to real work; per-exercise fixtures are more isolated. Pick one and say why.\n3. **Result comparison.** Whether row order matters (it does not, unless the exercise asked for `ORDER BY`), how column naming and ordering are treated, and how a near-miss is reported given the judging decision to withhold detail by default.\n4. **What is actually tested.** Entry-level SQL interviews lean on joins, aggregation, grouping, and window functions rather than exotica. Decide the topic list and roughly how many exercises make it worth having.\n5. **Warm-up reps for SQL.** Per the daily-session decision, reps exist in every domain. Decide what a seconds-long SQL rep is - reading a query and predicting its output, spotting why a join drops rows, identifying which clause is wrong. Coordinate with the [warm-up rep ticket](https://github.com/KyleNaluan/swe-prep/issues/9).\n6. **Whether SQL exercises carry a complexity target.** Almost certainly not in the algorithmic sense, but query plans are a real interview topic. Decide whether that is in scope or explicitly not.\n",
+      "state": "closed",
+      "created_at": "2026-08-04T15:49:15Z",
+      "updated_at": "2026-08-04T17:40:23Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "wayfinder:grilling"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5182571856,
+          "body": "## Resolution: a Postgres fixture database, a few shared schemas, and multiset result comparison\n\n### Engine: the same Postgres, a separate fixture database, per-attempt transaction rollback\n\n**Dialect parity is the deciding factor.**\nSQLite or H2 would be easier to embed and would train the captain on a dialect he will not interview in - window function syntax, `FULL OUTER JOIN`, and type handling all differ in ways that bite in a real interview.\nPostgres is already running for app state, so there is no infrastructure to add.\n\nEach attempt runs inside a transaction that is rolled back, which gives perfect isolation at zero cost and handles exercises that write as well as those that only read.\n\n**The submission connects as a read-only role** on the fixture database, so a query containing `DROP TABLE` is refused outright rather than merely rolled back.\n\nThe app's own state database and the exercise fixture database are separate concerns and stay separate.\n\n### Fixtures: two or three shared schemas, many exercises each\n\nRealistic shapes - an e-commerce schema (users, orders, products, order_items) and perhaps an events/analytics schema - with seed data, and many exercises authored against each.\n\nPer-exercise fixtures sound cleaner and are worse in practice: most of a 30-minute budget would go on re-reading an unfamiliar schema instead of writing SQL.\nA shared schema is learned once and then answers twenty questions, which is how real SQL interviews run and how the job actually works.\n\nIt is also what makes SQL warm-up reps viable at all - a twenty-second rep is only possible against tables already known.\n\n### Result comparison\n\n**Compare result sets as a multiset of rows, matching columns by position and ignoring column names.**\nRow order is ignored unless the exercise explicitly asked for ordering, which is a per-exercise flag.\n\n- Ignoring names avoids failing the captain over a cosmetic alias.\n- Matching by position still holds him to \"return name, then total\" as asked.\n- **A normalisation pass is required** for numeric types (`int` vs `numeric`), float rounding, and NULL handling, or false failures will be constant and maddening.\n\n**Minimal failure signal, under the withhold-by-default rule from [judging](https://github.com/KyleNaluan/swe-prep/issues/5):**\n\n```\nYour result: 12 rows. Expected: 8.\n```\n\nThis is the exact analogue of \"3 of 12 tests failed\" and is unusually diagnostic for SQL without giving anything away - a row count above expected almost always means join fan-out, and that is a pattern worth learning to see instantly.\nReveal-on-request shows the actual diff.\n\n### What is tested\n\nJoins, including why a `LEFT JOIN` silently drops rows; aggregation with `GROUP BY` and `HAVING`; subqueries and CTEs; window functions (`row_number`, `rank`, `lag`); NULL semantics; finding duplicates; date bucketing; and top-N-per-group.\n\n**Roughly 25-40 exercises.** SQL is a much smaller surface than algorithms and does not need parity with the problem set.\n\n### SQL warm-up reps\n\nThe five rep types from [the warm-up rep decision](https://github.com/KyleNaluan/swe-prep/issues/9) map over with one substitution: complexity does not apply, so predict-the-output takes that slot.\n\n**Spot-the-bug is the standout type here, more so than in algorithms.**\nMost real SQL errors are silently wrong rather than syntax errors - a missing `GROUP BY` column, `HAVING` where `WHERE` belonged, a join fanning out and quietly doubling totals, a `= NULL` that matches nothing.\nThose are exactly the defects that reach production, and twenty seconds of pattern-matching against them is high value.\n\nReps derive from the reference query, exactly as they derive from the reference solution for algorithms. There is still one content pile.\n\n### Complexity and query plans\n\n**No complexity target for SQL exercises** - no input generator, no scaling probe. The [abstraction](https://github.com/KyleNaluan/swe-prep/issues/6) made that metadata optional precisely for this case.\n\n**Query plans are deferred, not built.**\nA real interview topic but shallow at entry level, and grading on `EXPLAIN` output is a research project rather than a feature.\nIf it ever happens it belongs as a rep type (\"which of these uses the index?\"), not a graded exercise. Logged as fog on the map.\n",
+          "created_at": "2026-08-04T17:40:21Z",
+          "updated_at": "2026-08-04T17:40:21Z",
+          "author": "KyleNaluan",
+          "bytes": 4303
+        }
+      ]
+    },
+    {
+      "number": 12,
+      "title": "Project scaffold and health check",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\nThe application boots and is reachable in a browser. Nothing is implemented yet beyond proving the pieces fit together and the test loop works.\n\nSpring Boot 3.4.x on Java 21, connected to Postgres; a React + Vite front end that loads in a browser; and a test command that runs and passes. Reached locally, with the intent that it is later autostarted as a user service and reached over a tailnet.\n\nDo not implement exercises, runners, or grading here. This ticket exists so the tracer bullet has somewhere to live.\n\n## Acceptance criteria\n\n- [ ] The backend starts and connects to Postgres, failing loudly if the database is unreachable\n- [ ] The front end loads in a browser and can call a backend health endpoint\n- [ ] Database schema is managed by a migration tool from the first table onward, not auto-generated from entities\n- [ ] A single documented command runs the test suite, and it passes\n- [ ] README records how to run the app and the tests locally\n\n## Blocked by\n\n- None - can start immediately\n",
+      "state": "closed",
+      "created_at": "2026-08-04T20:11:30Z",
+      "updated_at": "2026-08-04T23:19:16Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 0,
+      "comments": []
+    },
+    {
+      "number": 13,
+      "title": "Solve one hardcoded Java problem end to end",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\n**This is the tracer bullet, and it is deliberately not split.** It proves the riskiest design decision on the map: that a test case authored once as language-neutral JSON can be executed in any language via a generated harness.\n\nFrom the user's point of view: open the app, see one problem statement and a Monaco editor with a Java method stub, write a solution, press run, and get back a verdict of the form `N of M tests passed`.\n\nBehind that, the test cases are **language-neutral JSON data** (`input` and `expected`), and a Java language adapter generates the harness that deserialises the JSON into Java types, calls the submission, and serialises the result back for comparison. The exercise, its statement, its stub and its cases may be hardcoded in this ticket - loading real content is the next one.\n\nResist splitting this into \"set up Monaco\", \"add the runner\", \"wire the endpoint\". Those are horizontal slices that each look complete while proving nothing. The design is only tested end to end.\n\n## Acceptance criteria\n\n- [ ] A Java submission written in the browser is compiled and executed on the backend, with no container or sandbox (there is no untrusted code - single user by design)\n- [ ] Test cases are stored as language-neutral JSON with `input` and `expected`, containing no Java-specific syntax\n- [ ] The Java harness and method stub are generated from a language-neutral signature declaration, not hand-written for this problem\n- [ ] The verdict returned is a count of passing tests; a compile error is reported as such and distinguished from a test failure\n- [ ] Execution has a generous timeout that catches an infinite loop without failing a slow-but-correct solution\n- [ ] A report in the PR describes how well the language-neutral test-case design actually held, including anything that had to be worked around\n\n## Blocked by\n\n- #12\n",
+      "state": "closed",
+      "created_at": "2026-08-04T20:11:31Z",
+      "updated_at": "2026-08-05T02:09:33Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5186719705,
+          "body": "Delivered by https://github.com/KyleNaluan/swe-prep/pull/30 (merged). The language-neutral test-case design held: comparison is type-agnostic, only argument binding is per-language. Three grading findings from this work are tracked in #31.",
+          "created_at": "2026-08-05T02:09:32Z",
+          "updated_at": "2026-08-05T02:09:32Z",
+          "author": "KyleNaluan",
+          "bytes": 239
+        }
+      ]
+    },
+    {
+      "number": 14,
+      "title": "Load exercises from the private content repo",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\nHardcoding disappears. The app reads real exercises from the separate private content repository, and more than one problem is available.\n\nThis is where the domain model from the abstraction decision becomes real: `Exercise` carries a prompt, domain, topic tags, difficulty, a `Form` of `Rep` or `Challenge`, a response spec and a grading spec. A `Grader` decides pass/fail and a `Runner` only executes, so an exercise that runs no code needs no Runner at all.\n\nContent is loaded from a gitignored local path rather than a submodule. **No problem statements, test data, reference solutions or generators may ever be committed to this public repository.**\n\nEvery row belonging to a person carries a `user_id`, with exactly one user seeded. No authentication, no login screen.\n\n## Acceptance criteria\n\n- [ ] Exercises load from a configurable local content path that is gitignored, and the app reports a clear error when it is missing or malformed\n- [ ] At least three real problems are selectable and solvable through the flow built in the tracer bullet\n- [ ] The `Grader` and `Runner` are separate polymorphic pieces, demonstrated by a grader that needs no runner at all\n- [ ] `Form` is an attribute of an exercise, not a separate type\n- [ ] Every person-owned table carries a `user_id` and exactly one user is seeded\n- [ ] No problem content of any kind is committed to this repository, and CI or a test asserts this\n\n## Blocked by\n\n- #13\n",
+      "state": "closed",
+      "created_at": "2026-08-04T20:11:32Z",
+      "updated_at": "2026-08-08T00:40:35Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5223602595,
+          "body": "Delivered in #33 (merged).",
+          "created_at": "2026-08-08T00:40:34Z",
+          "updated_at": "2026-08-08T00:40:34Z",
+          "author": "KyleNaluan",
+          "bytes": 26
+        }
+      ]
+    },
+    {
+      "number": 15,
+      "title": "Persist attempts and submissions",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\nYour practice history survives a restart, and it is rich enough for the schedulers to use later.\n\nAn `Attempt` covers one sitting with an exercise and records the user, the exercise, hint-ladder rungs climbed, whether the failing case was revealed, the complexity claim and what measurement said, and the outcome - including abandonment as a real outcome rather than an absence.\n\nA `Submission` is one press of run within an attempt, holding the response and its verdict.\n\nThin records here would quietly cripple the scheduler tickets, so err toward capturing more than seems necessary.\n\n## Acceptance criteria\n\n- [ ] Attempts and submissions persist across a restart and are queryable per user\n- [ ] An abandoned attempt is recorded as abandoned rather than left indistinguishable from one never started\n- [ ] The record captures submission count, hints taken, whether the failing case was revealed, and the outcome\n- [ ] Attempt history is visible somewhere in the UI, even if only as a plain list\n\n## Blocked by\n\n- #14\n",
+      "state": "closed",
+      "created_at": "2026-08-04T20:11:33Z",
+      "updated_at": "2026-08-08T00:40:37Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5223602832,
+          "body": "Delivered in #35 (merged).",
+          "created_at": "2026-08-08T00:40:36Z",
+          "updated_at": "2026-08-08T00:40:36Z",
+          "author": "KyleNaluan",
+          "bytes": 26
+        }
+      ]
+    },
+    {
+      "number": 16,
+      "title": "Judging: withhold by default, hint ladder, reveal on request",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\nThe real judging behaviour, which is a deliberate training decision rather than a UI detail.\n\nOn failure the app reports **only how many tests failed**. Reasoning about your own code without an oracle is the skill a real interview tests, and always handing over the failing case trains the opposite reflex.\n\nHelp is always available, always chosen, and always recorded: an explicit request reveals the failing case with input, expected and actual, and a hint ladder offers pattern name, then approach, then key insight, then solution. Using either is **recorded visibly but never penalised**.\n\nCorrectness is pass or fail. There is no partial credit. Resource limits are reported, not graded.\n\n## Acceptance criteria\n\n- [ ] A failing submission reports only the count of failing tests, with no input, expected or actual values\n- [ ] An explicit request reveals the failing case, and that reveal is recorded on the attempt\n- [ ] The hint ladder has ordered rungs and the number reached is recorded on the attempt\n- [ ] Neither hints nor reveals reduce any score, block completion, or affect the streak\n- [ ] Runtime is displayed for interest and is never part of the verdict\n\n## Blocked by\n\n- #15\n",
+      "state": "closed",
+      "created_at": "2026-08-04T20:11:34Z",
+      "updated_at": "2026-08-08T00:40:39Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5223603013,
+          "body": "Delivered in #36 (merged).",
+          "created_at": "2026-08-08T00:40:38Z",
+          "updated_at": "2026-08-08T00:40:38Z",
+          "author": "KyleNaluan",
+          "bytes": 26
+        }
+      ]
+    },
+    {
+      "number": 17,
+      "title": "Complexity: self-report, target reveal, and scaling measurement",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\nAfter tests pass, the app asks you to state your solution's time and space complexity **before** revealing the authored target, because articulating complexity is itself the interview skill.\n\nA self-report alone is unverified and would congratulate an O(n^2) solution claiming to be O(n) - the single case most worth catching. So the claim is checked by **measuring scaling empirically**: the runner executes the submission at growing input sizes and the curve is fitted.\n\nThis reliably catches polynomial blow-up, which is the error that costs interviews. It cannot separate O(n) from O(n log n), because constant factors swamp a log at practical sizes. **The app must therefore only make coarse claims**, and say \"measured scaling is consistent with your claim\" rather than \"correct\" where measurement is inconclusive.\n\nExercises without an input generator simply are not checked; the metadata is optional by design.\n\n## Acceptance criteria\n\n- [ ] The user states a complexity before the target is revealed, and cannot see the target first\n- [ ] The runner supports a second execution mode that runs a submission at multiple growing input sizes and captures timings\n- [ ] A quadratic solution claiming linear complexity is reliably caught and reported\n- [ ] Where measurement is inconclusive the app says so explicitly and never asserts correctness\n- [ ] An exercise with no input generator skips the check entirely without error\n- [ ] The claim and the measurement result are both recorded on the attempt\n\n## Blocked by\n\n- #16\n",
+      "state": "closed",
+      "created_at": "2026-08-04T20:11:35Z",
+      "updated_at": "2026-08-10T15:27:27Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5242352723,
+          "body": "Closing: all 6 acceptance criteria are already implemented and verified on `main` via #66 (feat(complexity): self-report, target reveal, and scaling measurement, merged 2026-08-09).\n\n- User states complexity before target reveal, and cannot see it first: `ExerciseView` carries only `hasComplexityCheck`, never the target; `AttemptService.claimComplexity` (`POST /api/attempts/{id}/complexity`) records the claim before reading the target back, in the same call.\n- Runner supports a second execution mode for growing input sizes: `LanguageAdapter.generateTimingHarness` + `ScalingMeasurer`, run through the existing unchanged `Runner.execute()` once per size.\n- Quadratic solution claiming linear is reliably caught: `ComplexityClassifier` fits a log-log regression into `ComplexityBucket`s; verified in the PR with a real O(n^2) submission claiming LINEAR -> CONTRADICTED, measured QUADRATIC:1.99.\n- Inconclusive measurement never asserts correctness: `MeasurementOutcome` is sealed `Skipped | Inconclusive | Conclusive`; web/UI wording is 'consistent'/'contradicted'/'inconclusive', never 'correct' - verified with a linear solution claiming LINEAR -> INCONCLUSIVE, `complexityClaimCorrect: null`.\n- No input generator skips the check without error: `ComplexityCheck.generator` is separately nullable from the check itself.\n- Claim and measurement are both recorded on the attempt: `attempt.complexity_claim` / `attempt.measured_complexity` / `attempt.complexity_claim_correct` (columns already existed unused from `V3__attempts.sql`, no migration needed).\n\nNo further code change needed; this issue was left open only because #66's PR body didn't use a closing keyword.",
+          "created_at": "2026-08-10T15:27:27Z",
+          "updated_at": "2026-08-10T15:27:27Z",
+          "author": "KyleNaluan",
+          "bytes": 1672
+        }
+      ]
+    },
+    {
+      "number": 18,
+      "title": "Warm-up reps end to end",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\nThe daily core. A user can work through a set of short reps and get immediate feedback.\n\nFive rep types: **pattern identification** (a statement, pick the pattern), **complexity of a snippet**, **fill in the missing line**, **predict the output**, and **spot the bug**.\n\nGrading is multiple choice by default; predict-the-output is free text matched exactly after normalisation. Reps train recognition and discrimination - production is what full exercises are for.\n\n**The distractors are the entire value.** A rep with three obviously wrong options teaches nothing and wastes a slot in a four-minute budget.\n\nEvery rep carries a short explanation, shown immediately on a wrong answer, not shown by default on a correct one, and always one keystroke away. **Asking is recorded** as a confidence signal the scheduler can use.\n\n## Acceptance criteria\n\n- [ ] All five rep types render and grade correctly\n- [ ] A wrong answer shows the explanation immediately and re-queues that rep later in the same set\n- [ ] A correct answer does not show the explanation, but it is reachable in one keystroke and the request is recorded\n- [ ] Reps that require having attempted the underlying problem are gated on that, while pattern-identification reps are available cold\n- [ ] Reps are exercises with `Form = Rep`, sharing the model rather than living in a parallel system\n\n## Blocked by\n\n- #14, #15\n",
+      "state": "closed",
+      "created_at": "2026-08-04T20:11:37Z",
+      "updated_at": "2026-08-08T00:40:49Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5223603948,
+          "body": "Delivered in #53 (merged).",
+          "created_at": "2026-08-08T00:40:49Z",
+          "updated_at": "2026-08-08T00:40:49Z",
+          "author": "KyleNaluan",
+          "bytes": 26
+        }
+      ]
+    },
+    {
+      "number": 19,
+      "title": "The daily session loop",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\n**This is the product.** Everything before it is machinery.\n\nThree tiers, only the first required:\n\n1. **Warm-up: about 8 reps, roughly 4 minutes. This alone completes the day.**\n2. **Main exercise: one full problem, around 30 minutes. Optional** - declining still completes the day.\n3. **Open continuation:** after the main exercise, keep going with whatever you like, with no cap.\n\nThe small required core exists because bad days are the only days that matter; good days were never the problem. A 40-minute minimum is a session you skip when tired, and one skip usually ends the habit.\n\nThe session is **domain-agnostic**. Nothing in it may assume the content is an algorithm problem.\n\n## Acceptance criteria\n\n- [ ] Completing the warm-up marks the day complete, with no further action required\n- [ ] Declining the main exercise still marks the day complete\n- [ ] After the main exercise the user can continue with further exercises without limit\n- [ ] Partial completion of the main exercise still counts for the day, and the abandonment is recorded\n- [ ] No part of the session flow assumes an algorithm exercise\n- [ ] Opening the app and starting the warm-up takes seconds, with no loading screen between the user and the first rep\n\n## Blocked by\n\n- #16, #18\n",
+      "state": "closed",
+      "created_at": "2026-08-04T20:11:38Z",
+      "updated_at": "2026-08-08T00:40:51Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5223604095,
+          "body": "Delivered in #54 (merged).",
+          "created_at": "2026-08-08T00:40:51Z",
+          "updated_at": "2026-08-08T00:40:51Z",
+          "author": "KyleNaluan",
+          "bytes": 26
+        }
+      ]
+    },
+    {
+      "number": 20,
+      "title": "Rep scheduler: a due-date queue",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\nReps come back on a spaced-repetition schedule instead of being picked at random.\n\nReps cost seconds, so classic spaced repetition applies exactly as designed - eight due today is four minutes. SM-2 is about fifty lines and entirely adequate for one user and a few hundred reps.\n\n**Keep the algorithm swappable** so a better one can replace it later without disturbing anything else.\n\nThe signal is a 0-5 quality score derived from correctness plus the \"asked why\" confidence signal. **Time taken is deliberately excluded** - interruptions and thinking-before-typing make it noise rather than information.\n\n## Acceptance criteria\n\n- [ ] Reps have due dates that advance on correct answers and shorten on wrong ones\n- [ ] A correct answer where the explanation was requested is treated as weaker than one where it was not\n- [ ] The scheduling algorithm sits behind an interface and can be replaced without touching the session flow\n- [ ] Time taken is not an input to scheduling\n- [ ] A day's warm-up is drawn from what is actually due\n\n## Blocked by\n\n- #18\n",
+      "state": "closed",
+      "created_at": "2026-08-04T20:11:39Z",
+      "updated_at": "2026-08-10T15:27:25Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5242351962,
+          "body": "Closing - this issue's full scope is already implemented and merged via PR #63 (\"feat(reps): SM-2 due-date scheduler for warm-up reps\", commit 15e13d7, merged 2026-08-09).\n\nAll 5 acceptance criteria verified on main:\n- Reps have due dates that advance on correct answers and shorten on wrong ones - `Sm2Scheduler` (scheduler/Sm2Scheduler.java): quality >= 3 grows the interval and advances repetitions; quality < 3 resets to the first rung.\n- A correct answer where the explanation was requested is treated as weaker than one where it was not - `ReviewQuality` derives PERFECT(5) vs CORRECT_BUT_UNSURE(3), both advance but the unsure case gets a smaller easiness delta so its interval grows slower from the next review on.\n- The scheduling algorithm sits behind an interface and can be replaced without touching the session flow - `RepScheduler` interface with `Sm2Scheduler` as its sole, swappable implementation; nothing outside the scheduler package knows which algorithm is in use.\n- Time taken is not an input to scheduling - no duration/time field exists anywhere in `Review`/`RepSchedule`.\n- A day's warm-up is drawn from what is actually due - `RepDueService.dueToday` feeds a due-aware `WarmupSelector.select(...)` overload that `WarmupService.warmup()` always uses; an empty due queue yields an empty warm-up set.\n\nNo new PR needed - closing as already delivered.",
+          "created_at": "2026-08-10T15:27:23Z",
+          "updated_at": "2026-08-10T15:27:23Z",
+          "author": "KyleNaluan",
+          "bytes": 1373
+        }
+      ]
+    },
+    {
+      "number": 21,
+      "title": "Challenge scheduler: a priority score",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\nThe app decides what is worth 40 minutes today, rather than what is owed.\n\nSpaced repetition assumes reviews are cheap, and that breaks completely for a 30-40 minute exercise: twenty due challenges is a fortnight of work, and a scheduler that generates impossible debt gets ignored. Roughly 90 challenge slots exist in three months against ~75 problems, so scarcity is structural.\n\nSo challenges are scored, not queued: time since last attempt, how badly it went, whether the pattern is under-covered, and a **hard floor on minimum interval** because re-solving something from two days ago is memorisation rather than learning.\n\n**Review debt first, new problems second, with a weekly cap on introductions.** Nothing is ever deleted; a problem passed cleanly three times earns an interval of months, which is retirement rather than removal.\n\n## Acceptance criteria\n\n- [ ] The daily main exercise is selected by score rather than by a due date\n- [ ] A problem attempted within the minimum interval is never selected\n- [ ] A genuinely weak due problem takes precedence over introducing a new one\n- [ ] New-problem introductions are capped per week\n- [ ] A repeatedly-passed problem stops appearing without being deleted\n- [ ] Attempt records collapse into a 0-5 quality score rather than being consumed field by field\n\n## Blocked by\n\n- #15, #19\n",
+      "state": "closed",
+      "created_at": "2026-08-04T20:11:40Z",
+      "updated_at": "2026-08-10T16:16:55Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 0,
+      "comments": []
+    },
+    {
+      "number": 22,
+      "title": "Streak, readiness picture, and solution auto-commit",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\nThe habit layer, built on the principle that **no invented currency appears anywhere**. No XP, no hearts, no lives, no leagues. A number the user can print himself is one he stops believing in, and a fake number that goes up is actively misleading about whether he is getting hired.\n\nInstead:\n\n- **Solved problems commit to the separate private content repo**, so the GitHub contribution graph is a real external record. Commit real artifacts only - **never synthetic \"practice happened\" markers**.\n- **A true readiness picture** replaces any score: patterns covered, which are shaky, what has not been touched in weeks, how many were solved cold. Every figure derives from records already kept, so all of it is true.\n- **The streak is a record, not a currency.** Days practised, displayed, not spendable.\n- **A capped repair mechanic**: a missed day can be repaired by a double session the next day, roughly twice a month, so one bad evening does not end the habit.\n\n## Acceptance criteria\n\n- [ ] A solved problem is committed to the private content repo automatically, containing the real solution\n- [ ] No commit is ever made that does not correspond to real work\n- [ ] The readiness view shows pattern coverage, shaky topics, staleness and solved-cold counts, all derived from stored records\n- [ ] No invented score, currency or point total appears anywhere in the UI\n- [ ] A missed day can be repaired by a double session, capped, and the cap is enforced\n\n## Blocked by\n\n- #19, #21\n",
+      "state": "closed",
+      "created_at": "2026-08-04T20:11:41Z",
+      "updated_at": "2026-08-10T17:28:12Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 0,
+      "comments": []
+    },
+    {
+      "number": 23,
+      "title": "Scheduled daily cue",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\nA notification at a time the user picks, so the decision to practise is not made fresh each day. Habit research is consistent that the cue matters more than the motivation.\n\nSmall ticket. The machine already runs scheduled user services, so this should reuse that rather than inventing a mechanism.\n\n## Acceptance criteria\n\n- [ ] A notification fires at a configurable time on days the session is not yet complete\n- [ ] No notification fires on a day already completed\n- [ ] The schedule survives a reboot\n\n## Blocked by\n\n- #19\n",
+      "state": "closed",
+      "created_at": "2026-08-04T20:11:42Z",
+      "updated_at": "2026-08-10T15:49:59Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 0,
+      "comments": []
+    },
+    {
+      "number": 24,
+      "title": "Content-entry tooling",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\n**The practical gate on this app being usable daily**, and the most likely place the project stalls now that licensing is settled.\n\nThe authoring unit is **statement + test cases + reference solution + input generator**, and roughly five or six warm-up reps derive from each problem: one pattern-ID rep from the statement, one or two complexity reps from the reference solution, one or two fill-in-the-blank reps, one spot-the-bug rep by mutating the reference solution, and one predict-output rep by running the reference on a small input.\n\nSo there is **one content pile, not two**. Tooling should make authoring a problem produce its reps, with the author verifying rather than writing them from scratch.\n\nAll output lands in the private content repo. Nothing is committed here.\n\n## Acceptance criteria\n\n- [ ] A single command or flow takes a problem and produces a complete content entry in the private repo\n- [ ] Warm-up reps are derived from the reference solution rather than hand-written\n- [ ] Derived reps and their explanations are presented for human verification before being accepted\n- [ ] Spot-the-bug reps are generated by mutating the reference solution, with the mutation recorded as the answer\n- [ ] The tooling refuses to write anything into this public repository\n\n## Blocked by\n\n- #18\n",
+      "state": "closed",
+      "created_at": "2026-08-04T20:11:43Z",
+      "updated_at": "2026-08-10T16:28:14Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 0,
+      "comments": []
+    },
+    {
+      "number": 25,
+      "title": "SQL domain end to end",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\nThe first proof that the domain seam is real rather than aspirational: a second domain lands without redesigning the exercise model.\n\nA `Query` response, an embedded-equivalent Runner, and a Grader that applies a fixture, runs the query and compares result sets. **The same Postgres instance, a separate fixture database, each attempt inside a transaction that is rolled back, and a read-only role** so a submission containing `DROP TABLE` is refused rather than merely undone. Dialect parity is why this is not SQLite.\n\n**Two or three shared realistic schemas**, many exercises each - a schema is learned once and then answers twenty questions, which is how real SQL interviews work and what makes a 20-second SQL rep possible at all.\n\nResults compare as a multiset of rows, columns matched by position, names and row order ignored unless ordering was requested. Numeric type and NULL normalisation is required or false failures will be constant.\n\n## Acceptance criteria\n\n- [ ] SQL exercises are solvable through the same session flow as Java exercises, with no parallel code path\n- [ ] Each attempt runs in a rolled-back transaction against a fixture database, as a read-only role\n- [ ] A submission attempting to modify or drop fixture data is refused\n- [ ] Row order is ignored unless the exercise requested ordering, and column names are ignored\n- [ ] The minimal failure signal is a row count, consistent with withhold-by-default judging\n- [ ] SQL exercises carry no complexity target, and this requires no special-casing in the model\n\n## Blocked by\n\n- #14, #16\n",
+      "state": "closed",
+      "created_at": "2026-08-04T20:11:45Z",
+      "updated_at": "2026-08-10T17:03:39Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 0,
+      "comments": []
+    },
+    {
+      "number": 26,
+      "title": "Second language adapter",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\nProves the claim the map flagged as unproven: that a test case authored once as language-neutral JSON runs in **any** language via its adapter.\n\nUntil a second adapter exists this is a design intention rather than a demonstrated property. Adding one should require **no changes to any existing test case**.\n\nSmall ticket, and deliberately separate so the claim is tested rather than assumed. If existing content has to be edited to make it work, that is a finding worth reporting, not a detail to quietly fix.\n\n## Acceptance criteria\n\n- [ ] An existing exercise is solvable in a second language with no change to its stored test cases\n- [ ] The second adapter generates its own stub and harness from the same language-neutral signature declaration\n- [ ] The user can choose which language to solve in, with Java remaining the default\n- [ ] The PR reports honestly whether any existing content or model change was required\n\n## Blocked by\n\n- #13\n",
+      "state": "closed",
+      "created_at": "2026-08-04T20:11:46Z",
+      "updated_at": "2026-08-11T16:04:24Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5255650803,
+          "body": "Closed by PR #80 (merged 2026-08-10). All four acceptance criteria are met: the stored two-sum test cases were graded through Python byte-for-byte unchanged (test aSecondLanguageSolvesTheExactSameStoredExerciseWithNoContentChange + live E2E), the Python adapter generates stub/correctness/timing harnesses from the same Signature declaration, the Practice tab has a language picker with Java as default, and the PR reports the honest finding: the language-neutral content model needed zero changes, while the single-adapter-era engine was implicitly Java-only and was widened (submissionFileName/languageId/registry seams).",
+          "created_at": "2026-08-11T16:04:23Z",
+          "updated_at": "2026-08-11T16:04:23Z",
+          "author": "KyleNaluan",
+          "bytes": 623
+        }
+      ]
+    },
+    {
+      "number": 28,
+      "title": "Harden the scaffold: restrict health detail, and verify the repo off this machine",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\nClose the two live gaps left open by the scaffold (#12). Both are hardening the foundation rather than building on it, which is why they share a ticket - they are unrelated in substance but identical in nature, and splitting a config line from a workflow file into two pull requests is ceremony.\n\n**1. Stop reporting internal health detail to unauthorised callers.**\n\nThe health response currently returns full component-by-component detail to anyone who can reach it. Browser origins are restricted; direct access is not. Today the only component is the database and the app is reachable only on a private network, so the exposure is small - but it grows silently as real components are added, and the planning map explicitly keeps hosting open as a future possibility.\n\nRestrict detail to authorised callers. **The page must keep working**: it only ever consumed the top-level up-or-down status, never the breakdown, so this should be invisible to it. Confirm that rather than assuming it.\n\n**2. Verify this repository somewhere other than the machine that wrote it.**\n\nThere are currently no automated checks configured, and the head commit of the scaffold carried zero. \"Green\" so far means a validation pipeline that ran once, locally. Nothing re-runs it, so the suite could rot silently, and any change made elsewhere gets no verification at all.\n\nAdd continuous integration that runs the single documented test command on push and on pull requests. The hosted runners provide the container runtime the backend tests need, plus the required Java and Node versions.\n\n**There is a specific finding to watch for here, and it is the real prize.** The scaffold needed a workaround because this machine's container runtime rejects the test harness's hardcoded legacy protocol probe. That workaround is currently unverified anywhere except this one box. CI is the first chance to learn whether it is a genuinely portable fix or something shaped to this environment. **If the backend tests behave differently on the runner, say so explicitly in the pull request rather than quietly adjusting until it passes.** A difference here is information, not an obstacle.\n\n## Acceptance criteria\n\n- [ ] Health detail is no longer returned to an unauthorised caller, while the top-level status still is\n- [ ] The page still correctly shows the backend as up and as unreachable, verified rather than assumed\n- [ ] Continuous integration runs the documented test command on push and on pull request, and passes on this branch\n- [ ] The backend tests, including the disposable-database tests, genuinely run in CI rather than being skipped or stubbed\n- [ ] The pull request states plainly whether the container-runtime workaround was needed, unnecessary, or insufficient on the hosted runner\n- [ ] Nothing beyond these two changes is built; this is not an opportunity to start the exercise model\n\n## Blocked by\n\n- None - can start immediately\n",
+      "state": "closed",
+      "created_at": "2026-08-05T00:07:19Z",
+      "updated_at": "2026-08-05T02:09:35Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5186719930,
+          "body": "Delivered by https://github.com/KyleNaluan/swe-prep/pull/29 (merged). Health detail restricted; CI now runs on every push and PR. Finding: the container-runtime workaround is unnecessary on hosted runners and specific to this dev machine's newer engine - pin kept, reason now recorded in AGENTS.md.",
+          "created_at": "2026-08-05T02:09:35Z",
+          "updated_at": "2026-08-05T02:09:35Z",
+          "author": "KyleNaluan",
+          "bytes": 298
+        }
+      ]
+    },
+    {
+      "number": 31,
+      "title": "Teach the grader what \"equal\" means: comparison rules, numeric equality, and an untruncatable result",
+      "body": "## Parent\n\nPart of the planning map: #1\n\n## What to build\n\nTeach the grader what \"equal\" means. Three findings from the tracer bullet (#13) share one root cause: grading is exact JSON equality, and exact equality cannot express the ways two answers can both be correct.\n\n**1. There is no way to say \"any valid answer\".**\n\nTwo Sum accepts `[0,1]` and `[1,0]`. The case format can only name one, so the tracer bullet had to pin an ordering convention into the problem statement to make grading work. That is a workaround written into content to compensate for a gap in the model, and it will recur constantly - \"any valid pair\", \"any order\", \"any of these shortest paths\" describe a large share of interview problems.\n\nAn exercise must be able to declare how its answers should be compared. At minimum: exact, order-insensitive for a sequence, and set equality. Design the declaration so a genuinely problem-specific rule is possible later without another redesign.\n\n**Once this exists, remove the ordering convention from the Two Sum statement** and let the exercise declare order-insensitivity instead. That reversal is the proof this ticket worked.\n\n**2. Comparison is numeric-type-sensitive.**\n\nA whole number written one way is not equal to the same number written another. Two Sum is unaffected because everything in it is an integer, but a correct solution returning a wider numeric type where the expected value parses narrower would be graded wrong. Whoever hits it will be told their correct answer is incorrect and have no way to see why, which is the worst possible failure for a study tool.\n\n**3. A correct solution that prints a lot is graded as an error.**\n\nCaptured output is capped at 1MB to stop a runaway print loop exhausting memory - a real fix for a real risk. But the cap truncates from the end and the harness reports its result last, so a solution that prints more than the cap and then returns correctly loses its result line and grades as an error rather than showing its pass count.\n\nThe cap must stay. Move the result off the same channel as the submission's own output - a separate stream or a result file - so it can never be truncated away by the thing it is measuring.\n\n## Acceptance criteria\n\n- [ ] An exercise can declare how its answers are compared, covering at least exact, order-insensitive sequence, and set equality\n- [ ] Two Sum accepts both valid orderings, and the ordering convention is removed from its statement\n- [ ] Numerically equal answers grade as equal regardless of how the number is written, with a test that would fail under the old behaviour\n- [ ] A solution printing more than the output cap and returning correctly is graded on its results, not as an error\n- [ ] The output cap remains, and a runaway print loop still cannot exhaust backend memory\n- [ ] Nothing beyond grading comparison is changed; this is not an opening to start content loading or persistence\n\n## Blocked by\n\n- None - can start immediately\n",
+      "state": "closed",
+      "created_at": "2026-08-05T02:09:07Z",
+      "updated_at": "2026-08-08T00:40:41Z",
+      "author": "KyleNaluan",
+      "labels": [
+        "ready-for-agent",
+        "build"
+      ],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5223603166,
+          "body": "Delivered in #32 (merged).",
+          "created_at": "2026-08-08T00:40:41Z",
+          "updated_at": "2026-08-08T00:40:41Z",
+          "author": "KyleNaluan",
+          "bytes": 26
+        }
+      ]
+    },
+    {
+      "number": 34,
+      "title": "The app silently breaks when Vite does not get port 5173: single hardcoded CORS origin",
+      "body": "## Parent\n\nPart of the planning map: #1. Found in real use immediately after #14 landed.\n\n## What's wrong\n\nThe app breaks completely if the Vite dev server does not get port 5173, and the failure does not explain itself.\n\nVite falls back to 5174 whenever 5173 is taken - by another project, a previous run, or an orphaned process. The page then loads normally and every API call is refused by the browser, because the backend allows exactly one origin:\n\n- `WebConfig` defaults `sweprep.web.allowed-origin` to `http://localhost:5173`\n- `application.yml` hardcodes the actuator's `management.endpoints.web.cors.allowed-origins` to the same literal\n\nThe result is an app that looks like it started fine and then does nothing, with no message naming the real cause. Vite prints its port change as ordinary startup noise, so there is nothing connecting the two. This actually happened on first real use.\n\nThe same single-origin assumption also blocks the tailnet access the map calls for: reaching the app from another device means a different origin, which is refused for exactly this reason. So this is not only a dev-machine annoyance - it stands between the app and being usable from anywhere but this one machine.\n\nNote the property is already overridable. The problem is the default plus the silence, not the absence of a knob.\n\n## What to build\n\nMake the port and origin story robust, and make the failure legible when it still happens.\n\nWorth considering rather than prescribing: pinning Vite to a port with `strictPort` so it fails loudly instead of silently moving; having the frontend talk to the backend through a Vite proxy so browser-side calls are same-origin and CORS stops being load-bearing in development; and allowing the tailnet origin so the app is reachable off this machine.\n\nWhatever the approach, a rejected origin must produce a message a person can act on, rather than an app that silently does nothing.\n\n## Acceptance criteria\n\n- [ ] Starting the frontend when 5173 is occupied either fails immediately with a clear message, or works correctly on the port it does get - never starts and silently cannot reach the backend\n- [ ] The backend's allowed origin is not a hardcoded single localhost literal in two separate places\n- [ ] The app is reachable from another device over the tailnet, per the map's local + tailnet goal\n- [ ] A blocked or failed API call surfaces a message naming the cause, instead of an empty or unexplained screen\n- [ ] `./test.sh` stays green\n\n## Blocked by\n\n- None\n",
+      "state": "closed",
+      "created_at": "2026-08-07T03:53:29Z",
+      "updated_at": "2026-08-07T11:42:57Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 0,
+      "comments": []
+    },
+    {
+      "number": 37,
+      "title": "Model additions: free-text response, self-check grading, and family/stability tags",
+      "body": "## Parent\n\nPart of the planning map: #1. Specified by the consolidated design revision (firstmate `data/swe-design-rev-t3/report.md`, section 6 T1).\n\n## What to build\n\nThe model groundwork that unblocks all concept authoring. Cheap, and no migration.\n\n- `Response.FreeText` - a new permitted record on the sealed `Response` hierarchy, whose javadoc already anticipates a free-text short answer.\n- `Grading.SelfCheck` plus a `SelfCheckGrader` that needs no `Runner` - the learner produces an answer, then reveals a model answer and self-rates.\n- `family` (a list, since a concept can serve more than one role) and `stability` / `reviewed` on `Content`.\n- Parser support for all of it, so every malformed file still fails naming the file and field.\n\nTwo properties are the point of the ticket, not incidental:\n\n**A self-check never emits a machine verdict and never feeds the competence number.** The design narrows the earlier \"no free text\" ruling to **no *machine-graded* free text** - producing an answer and checking it against a model answer is allowed precisely because nothing grades it. That boundary belongs in the types, not in caller discipline.\n\n**Extend the sealed hierarchies rather than forking them.** A new permitted record plus a matching grader is the intended shape; `Response` and `Grading` were built for exactly this.\n\n## Acceptance criteria\n\n- [ ] `Response.FreeText` and `Grading.SelfCheck` exist as permitted records on their sealed interfaces\n- [ ] `SelfCheckGrader` has no `Runner` dependency and produces no pass/fail verdict\n- [ ] A self-check result cannot contribute to the objective competence signal, structurally rather than by convention\n- [ ] `Content` carries `family` (list), `stability`, and `reviewed`\n- [ ] The parser round-trips all of it and still names file and field on every failure\n- [ ] No database migration is required\n- [ ] `./test.sh` green\n\n## Blocked by\n\n- None (#14 is merged). **In progress now.**\n",
+      "state": "closed",
+      "created_at": "2026-08-07T11:28:42Z",
+      "updated_at": "2026-08-08T00:40:43Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5223603326,
+          "body": "Delivered in #49 (merged).",
+          "created_at": "2026-08-08T00:40:43Z",
+          "updated_at": "2026-08-08T00:40:43Z",
+          "author": "KyleNaluan",
+          "bytes": 26
+        }
+      ]
+    },
+    {
+      "number": 38,
+      "title": "Define \"learned\": successive relearning with an explicit criterion",
+      "body": "## Parent\n\nPart of the planning map: #1. Implements the scheduling decision #8 with the criterion it never defined. Specified by the design revision (firstmate `data/swe-design-rev-t3/report.md`, section 4.1).\n\n## What to build\n\nDefine what \"learned\" actually means, before the scheduler is built around a number that does not carry the meaning.\n\n#8 collapses attempts to a 0-5 score and gestures at \"passed cleanly three times\", but never defines mastery or a relearning cadence. A learning-science audit (firstmate `data/swe-pedagogy-v9/report.md`) rates this the highest-value change available, and it is far cheaper specified now than retrofitted once the scheduler exists.\n\n**The ruling: successive relearning, not an SM-2 ease threshold.**\n\n- \"Learned\" = a correct retrieval to criterion in **each of N spaced sessions** (recommend N = 3, across expanding inter-session gaps). Graduation and relearning cadence follow from that, not from an ease number.\n- Favour more spaced sessions at a modest criterion over grinding one item to death in a single sitting.\n- **Read and self-check items never feed this criterion.** Only machine-verdict Checks and code Challenges do. Self-check contributes a separate, clearly-labelled generation signal that must never inflate the competence number.\n\nNo migration: `V3` already timestamps attempts and stores per-submission pass/fail, so \"correct in each of N spaced sessions\" is computable from existing rows. The learned state is derived scheduler-side, not stored.\n\n## Acceptance criteria\n\n- [ ] \"Learned\" is defined as retrieval to criterion across N spaced sessions, with N and the gap ladder configurable\n- [ ] Graduation and relearning cadence derive from that criterion rather than an ease number\n- [ ] Read and self-check outcomes provably cannot affect the objective competence signal\n- [ ] The criterion is computed from existing records with no new migration\n- [ ] `./test.sh` green\n\n## Blocked by\n\n- None\n",
+      "state": "closed",
+      "created_at": "2026-08-07T11:28:43Z",
+      "updated_at": "2026-08-08T00:40:55Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5223604553,
+          "body": "Delivered in #56 (merged).",
+          "created_at": "2026-08-08T00:40:55Z",
+          "updated_at": "2026-08-08T00:40:55Z",
+          "author": "KyleNaluan",
+          "bytes": 26
+        }
+      ]
+    },
+    {
+      "number": 39,
+      "title": "Engineer interleaving into the rep selector instead of assuming it",
+      "body": "## Parent\n\nPart of the planning map: #1. Specified by the design revision (firstmate `data/swe-design-rev-t3/report.md`, section 4.2).\n\n## What to build\n\nEngineer interleaving into the rep selector instead of assuming it.\n\nToday it is assumed - \"draws from whatever domains are active\" - and a due-date queue silently degrades into blocked practice the moment several reps on one topic come due together. The audit is also specific that the benefit comes from mixing *confusable* material, not merely varied material.\n\n1. **Cap consecutive same-pattern / same-domain reps at ~2** within an 8-rep set. A naive \"pull everything due\" that fills the set with one topic is forbidden.\n2. **Prefer juxtaposing confusable within-domain patterns** - two-pointer against sliding window, `INNER` against `LEFT JOIN` fan-out. That is where discrimination is actually trained. The confusion pairs are derivable from which distractor was chosen on wrong answers, which the schema already stores.\n3. **Treat cross-domain mixing as spacing, not interleaving.** Alternating a Java rep with an unrelated SQL rep is variety; do not expect a discrimination benefit from it.\n4. **Respect active families** - the required set draws only from active families plus the always-on core and professional buckets.\n\n## Acceptance criteria\n\n- [ ] No more than ~2 consecutive reps share a pattern or domain in a generated set\n- [ ] The selector prefers confusable within-domain juxtaposition where the material allows it\n- [ ] Confusion pairs are derived from recorded wrong-answer choices, with no new migration\n- [ ] The required set never includes an inactive family\n- [ ] The rules are tested against a due-queue deliberately stacked with one topic\n- [ ] `./test.sh` green\n\n## Blocked by\n\n- None structurally; lands with the rep loop\n",
+      "state": "closed",
+      "created_at": "2026-08-07T11:28:44Z",
+      "updated_at": "2026-08-08T00:40:53Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5223604364,
+          "body": "Delivered in #55 (merged).",
+          "created_at": "2026-08-08T00:40:53Z",
+          "updated_at": "2026-08-08T00:40:53Z",
+          "author": "KyleNaluan",
+          "bytes": 26
+        }
+      ]
+    },
+    {
+      "number": 40,
+      "title": "Role families as a filter you control",
+      "body": "## Parent\n\nPart of the planning map: #1. Specified by the design revision (firstmate `data/swe-design-rev-t3/report.md`, section 2).\n\n## What to build\n\nLet the user choose which roles they are preparing for, and have practice follow that choice without losing access to anything.\n\nContent carries a `family` tag. `CORE` and `PROFESSIONAL` are always on. `BACKEND`, `FRONTEND`, `DATA`, `DEVOPS`, `MOBILE`, `SYSTEMS` and `AIML` are selectable. **Full-stack is not a family** - it is the union of backend and frontend, so the app offers named role presets that expand to family sets rather than making the user tick a checklist.\n\n**What an inactive family means is decided by the tier, not by a global on/off:**\n\n- **The required warm-up and automatic scheduling draw only from active families** plus core and professional. This is what makes the filter real - the daily habit trains the chosen roles.\n- **Everything stays reachable** in the optional main, open continuation, and browse. Any lesson, any check, any family, any time.\n- **Reading a lesson from an inactive family opts that one concept's checks in**, through the existing read-seeds-checks mechanism. The user pulls inactive material in deliberately, one concept at a time, without flipping a whole family on.\n- **Deactivating a family stops new seeding but does not rip already-due reviews out of the queue.** That would waste prior learning and violate review-debt-first.\n\nOptionally snapshot `family` on the attempt record for per-family readiness without needing a content clone - the one small migration in the whole revision, and genuinely optional.\n\n## Acceptance criteria\n\n- [ ] Role presets expand to family sets; the user picks a role, not a checklist\n- [ ] The required warm-up and auto-seeding never include an inactive family\n- [ ] Every family remains reachable through browse and the optional tiers\n- [ ] Reading an inactive-family lesson opts that concept's checks into review\n- [ ] Deactivating a family leaves already-due reviews intact\n- [ ] `./test.sh` green\n\n## Blocked by\n\n- The session tiers (#18, #19)\n",
+      "state": "closed",
+      "created_at": "2026-08-07T11:28:46Z",
+      "updated_at": "2026-08-08T01:46:43Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5223915367,
+          "body": "Delivered in #61 (merged).",
+          "created_at": "2026-08-08T01:46:43Z",
+          "updated_at": "2026-08-08T01:46:43Z",
+          "author": "KyleNaluan",
+          "bytes": 26
+        }
+      ]
+    },
+    {
+      "number": 41,
+      "title": "Explain it in your own words: self-graded production practice",
+      "body": "## Parent\n\nPart of the planning map: #1. Specified by the design revision (firstmate `data/swe-design-rev-t3/report.md`, sections 1 and 4.3).\n\n## What to build\n\nExplaining something in your own words, end to end - the production practice the concepts track otherwise lacks entirely.\n\nThe audit's top finding is that the only *required* daily practice trains recognition, while the skill being trained is production. Recognising a right answer among four is much easier than producing one cold, and producing one cold is what an interview demands. The earlier ruling against free text conflated *grading* it with *eliciting* it; **narrowed, the ruling is no *machine-graded* free text**, which leaves produce-then-reveal fully available at no grading cost.\n\nBuild:\n\n- Rendering for a free-text response, and the produce-then-reveal-model-answer flow.\n- A self-rating recorded against the submission, kept structurally separate from the objective competence signal.\n- An explain item offered as an optional main.\n- The in-lesson self-explanation prompts, inside the lesson renderer - one or two ungraded \"explain why\" or \"predict\" beats that turn reading from the lowest-utility study activity into a generative one.\n\n**The required daily core must not grow.** All of this lives in the optional tiers and in the lesson. Declining an explain item still completes the day.\n\n## Acceptance criteria\n\n- [ ] A free-text item can be answered, then reveals a model answer for self-comparison\n- [ ] Nothing machine-grades the free text, and the self-rating cannot inflate the objective competence number\n- [ ] An explain item is offerable as an optional main, and declining it still completes the day\n- [ ] Lessons carry ungraded self-explanation prompts\n- [ ] The required warm-up is unchanged in length\n- [ ] `./test.sh` green\n\n## Blocked by\n\n- #37 (model additions), #46 (lesson content type), #19 (session loop)\n",
+      "state": "closed",
+      "created_at": "2026-08-07T11:28:47Z",
+      "updated_at": "2026-08-08T00:40:57Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5223604705,
+          "body": "Delivered in #57 (merged).",
+          "created_at": "2026-08-08T00:40:57Z",
+          "updated_at": "2026-08-08T00:40:57Z",
+          "author": "KyleNaluan",
+          "bytes": 26
+        }
+      ]
+    },
+    {
+      "number": 42,
+      "title": "Make competitive distractors a reviewable acceptance bar",
+      "body": "## Parent\n\nPart of the planning map: #1. Specified by the design revision and the authoring protocol (firstmate `data/swe-topics-r8/report.md`, `data/swe-pedagogy-v9/report.md` rec 3).\n\n## What to build\n\nTurn \"distractors are the entire value\" from a slogan into a reviewable acceptance bar.\n\nA competitive multiple-choice question - one whose wrong options are genuinely tempting - is the only kind the evidence rescues from the recognition penalty. A lazily written wrong option turns a question into a giveaway, and the learner feels fluent while learning nothing. Since the concepts track is largely multiple choice, this is what decides whether it teaches at all.\n\nThe bar: **every distractor must encode a specific, nameable misconception**, and that misconception is written down and reviewed alongside the question. A distractor nobody would pick fails the gate and is regenerated against a named target misconception.\n\nWire it into the authoring and verification checklist so it is enforced per question rather than left to taste.\n\n## Acceptance criteria\n\n- [ ] Every authored distractor carries the specific misconception it targets\n- [ ] A distractor that encodes no plausible misconception fails review and is regenerated\n- [ ] The gate is part of the authoring checklist, applied per question\n- [ ] The bar is documented where an author will actually meet it\n\n## Blocked by\n\n- None structurally; pairs with authoring\n",
+      "state": "closed",
+      "created_at": "2026-08-07T11:28:48Z",
+      "updated_at": "2026-08-08T00:40:59Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5223604862,
+          "body": "Delivered in #58 (merged).",
+          "created_at": "2026-08-08T00:40:59Z",
+          "updated_at": "2026-08-08T00:40:59Z",
+          "author": "KyleNaluan",
+          "bytes": 26
+        }
+      ]
+    },
+    {
+      "number": 43,
+      "title": "Author the AI/ML family, split by shelf life",
+      "body": "## Parent\n\nPart of the planning map: #1. Specified by the design revision (firstmate `data/swe-design-rev-t3/report.md`, section 3).\n\n## What to build\n\nAuthor the AI/ML family, at real depth, and use it to prove the explain-in-your-own-words format.\n\nAn earlier topic study excluded advanced ML and model training as \"too specialised\". That was wrong here: this is a declared specialisation at Master's level, so the expectation is fluent explanation, not passing recognition. That makes this family both the deepest content in the catalog and the natural flagship for production practice.\n\n**Split the material by shelf life rather than treating AI as one volatile blob:**\n\n- **Stable** - bias-variance, overfitting and regularisation, gradient descent conceptually, evaluation metrics, train/validation/test discipline, embeddings. Decades old and settled. Ideal spaced-repetition material, treated like any other durable concept, with no special refresh handling.\n- **Volatile** - agentic engineering, tool use, retrieval-augmented patterns, frameworks, model capabilities and vendor features. Rots fast. Carries the refresh policy, and no answer key may depend on a fact that expires.\n\nEach concept ships as a lesson plus its checks plus a self-graded explain item, through the full authoring and verification protocol.\n\n## Acceptance criteria\n\n- [ ] Every concept is tagged stable or volatile, and only volatile material carries the refresh policy\n- [ ] No answer key depends on a fact that expires within a quarter\n- [ ] Each concept has a lesson, checks with explanations, and a self-graded explain item\n- [ ] Content passes the full verification protocol including cross-model reconstruction and primary-source citation\n- [ ] Nothing lands in the app repo; content lives only in the private content repo\n\n## Blocked by\n\n- #37 (model additions), #41 (explain flow), #42 (distractor gate)\n",
+      "state": "open",
+      "created_at": "2026-08-07T11:28:49Z",
+      "updated_at": "2026-08-07T11:29:17Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 0,
+      "comments": []
+    },
+    {
+      "number": 44,
+      "title": "Author the core and professional tranche, then the selected role families",
+      "body": "## Parent\n\nPart of the planning map: #1. Specified by the topic research and verification protocol (firstmate `data/swe-topics-r8/report.md`).\n\n## What to build\n\nAuthor the universal content: the core tranche and the professional bucket first, then the selected role families.\n\nCore comes first because it is the union every role needs and is family-agnostic, so it never waits on which roles are being targeted. Backend and frontend follow, as the current targets.\n\nEach concept is a lesson plus three to five checks, and **every check carries its own explanation** - shown on a wrong answer, one keystroke away on a correct one. The explanation is first-class content held to the same verification bar as the lesson, because a confidently wrong explanation is read at the exact moment of doubt and does at least as much damage as a wrong lesson.\n\nAuthoring runs the verification protocol: a drafter, two reconstructors who never see the draft and answer the checks blind, an adversarial red-team pass, and adjudication against primary sources. **At least one reconstructor and the red-teamer run on a different model from the drafter** - same-model agents share blind spots and can be confidently wrong together, so agent count alone is not independence. Full rigour on core and on anything where being confidently wrong is costly; a lighter path for stable definitional material, applied openly rather than silently.\n\nThis is the likeliest place the whole track stalls. It is ongoing and parallelisable rather than a single push.\n\n## Acceptance criteria\n\n- [ ] Core and professional concepts authored and verified before role families\n- [ ] Every check carries a verified explanation\n- [ ] Cross-model verification is used, not same-model agent count alone\n- [ ] Every kept claim traces to a primary source\n- [ ] Nothing ships with an unresolved flag\n- [ ] No problem or concept content is ever committed to the app repo\n\n## Blocked by\n\n- #37 (model additions), #42 (distractor gate)\n",
+      "state": "open",
+      "created_at": "2026-08-07T11:28:50Z",
+      "updated_at": "2026-08-07T11:29:18Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 0,
+      "comments": []
+    },
+    {
+      "number": 45,
+      "title": "Readiness as the primary progress surface",
+      "body": "## Parent\n\nPart of the planning map: #1. Extends the motivation decision #7. Specified by the design revision (firstmate `data/swe-design-rev-t3/report.md`, section 4.4).\n\n## What to build\n\nMake the honest readiness picture the primary progress surface, and keep the streak descriptive.\n\nThe decision to refuse invented currency - no points, badges, or leagues - is well founded, and the evidence says adding them would actively lower motivation for someone already driven. This ticket protects that strength from quietly regressing, and completes the picture that replaces it.\n\n- Add a concepts-covered axis, so reading and verifying understanding shows up as earned progress.\n- Add a per-family breakdown, so preparation for a chosen role is legible rather than averaged away.\n- Objective competence axes come from machine verdicts only. Self-checks contribute a separate \"explained N concepts\" count that must never inflate the objective number.\n- The streak is a record, never a punishment. The interface must not frame a broken streak as a loss.\n\n## Acceptance criteria\n\n- [ ] Readiness is the primary progress surface, not a secondary screen\n- [ ] A concepts-covered axis and a per-family breakdown are present\n- [ ] Self-check counts are visibly separate from objective competence\n- [ ] No invented currency appears anywhere\n- [ ] A broken streak is never framed as a loss or penalty\n- [ ] `./test.sh` green\n\n## Blocked by\n\n- #7 (motivation) and #40 (family filter)\n",
+      "state": "closed",
+      "created_at": "2026-08-07T11:28:51Z",
+      "updated_at": "2026-08-10T07:02:35Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 0,
+      "comments": []
+    },
+    {
+      "number": 46,
+      "title": "Lessons as a real content type, not a degenerate exercise",
+      "body": "## Parent\n\nPart of the planning map: #1. Specified by the concepts-track spec (firstmate `data/swe-concepts-spec/report.md`, section 1) and carried forward by the design revision.\n\n## What to build\n\nThe taught half of the second content track: a lesson as a real content type.\n\nToday an exercise is the only content unit, and it is built to be *attempted* - it always carries a way to respond and a way to be judged. A lesson is **read**, not attempted. It has no response and nothing to grade, and forcing it into the exercise type means inventing a null response and a grader that grades nothing, which corrupts a model that is currently clean.\n\nThe shape the spec settles on:\n\n- A sealed `Content` supertype carrying the metadata both kinds share - id, title, statement, domain, topics, difficulty, and (from #37) family and stability. `Exercise` implements it additively, since it already has every one of those accessors.\n- A `Lesson` record that references its checks by id. The checks stay ordinary reps, so they flow through the existing rep pipeline untouched.\n- A top-level `kind` discriminator in the on-disk format, defaulting to `exercise` so existing content keeps loading unchanged, plus a lesson parser alongside the exercise one so every malformed file still fails naming the file and field.\n\nA sealed supertype rather than two unrelated types, because the catalog, the scheduler and the browse surface all want to treat \"a loaded content item\" uniformly - and sealing keeps every future exhaustive branch honest when a third kind appears.\n\n**Note on #37:** that ticket places the family and stability tags on `Exercise`, because `Content` did not exist when it was built. Hoist them to `Content` here so they live in one place.\n\n## Acceptance criteria\n\n- [ ] A sealed `Content` supertype exists, implemented additively by `Exercise`\n- [ ] A `Lesson` type exists that carries no response and no grading, and references its checks by id\n- [ ] The loader reads a `kind` discriminator defaulting to `exercise`, so all existing content loads unchanged\n- [ ] A malformed lesson fails naming the file and field, exactly as a malformed exercise does\n- [ ] The family and stability tags from #37 live on `Content`\n- [ ] No lesson can be graded or produce a verdict\n- [ ] `./test.sh` green\n\n## Blocked by\n\n- #37 (model additions)\n",
+      "state": "closed",
+      "created_at": "2026-08-07T11:31:50Z",
+      "updated_at": "2026-08-08T00:40:45Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5223603586,
+          "body": "Delivered in #50 (merged).",
+          "created_at": "2026-08-08T00:40:45Z",
+          "updated_at": "2026-08-08T00:40:45Z",
+          "author": "KyleNaluan",
+          "bytes": 26
+        }
+      ]
+    },
+    {
+      "number": 48,
+      "title": "Bring the private content repo's format doc up to date before authoring starts",
+      "body": "## Parent\n\nPart of the planning map: #1.\n\n## What to build\n\nDocument the on-disk content format in the private content repo, so the people and agents authoring content have a current, authoritative reference.\n\n`AGENTS.md` points at `swe-prep-content/README.md` as the canonical description of the content file format. Several tickets have since extended that format without it being updated, because the file lives in the separate private repo and no in-app ticket can reach it:\n\n- the `freeText` response kind and the `selfCheck` grading kind with its model answer (#37)\n- the `family`, `stability` and `reviewed` tags (#37)\n- the `kind` discriminator and the lesson shape, once #46 lands\n- the requirement that every check carries its own explanation\n\nThis is small but it genuinely gates authoring: #43 and #44 produce dozens of files against this format, and an author working from a stale spec produces content the loader rejects, or worse, content it silently accepts in the wrong shape.\n\nBring the README up to date with every construct the loader currently accepts, with a worked example per kind, and note explicitly that a check without an explanation is incomplete.\n\n## Acceptance criteria\n\n- [ ] Every construct the loader accepts is documented, with a worked example for each kind\n- [ ] The explanation requirement on checks is stated, not implied\n- [ ] The doc matches the parser as actually built, verified against it rather than against the design notes\n- [ ] Nothing in the private repo leaks into the app repo\n\n## Blocked by\n\n- #37 (model additions), and updated again after #46 (lesson content type)\n",
+      "state": "closed",
+      "created_at": "2026-08-07T11:41:07Z",
+      "updated_at": "2026-08-10T08:22:39Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5237702072,
+          "body": "Confirmed in practice: the content repo README documented every construct the loader accepts (commits 83f9d3d9-era; see swe-prep-content history), and four authoring waves (Core batch 1-2, the 35-item parity rework, and two cross-model red-team passes - content PRs #6-#13) authored against it with zero format-mismatch loader failures (46/46 real-loader tests, Skipped: 0, every wave). Doc matched reality; nothing left to refresh.",
+          "created_at": "2026-08-10T08:22:39Z",
+          "updated_at": "2026-08-10T08:22:39Z",
+          "author": "KyleNaluan",
+          "bytes": 432
+        }
+      ]
+    },
+    {
+      "number": 51,
+      "title": "Checks have no explanation field, and the hint ladder is the wrong home for one",
+      "body": "## Parent\n\nPart of the planning map: #1.\n\n## What's wrong\n\nAn explanation is a first-class requirement of the content design, and there is nowhere to put one.\n\nEvery check is meant to carry an explanation of why the correct answer is correct: **shown automatically on a wrong answer, one keystroke away on a correct one, with asking recorded as a confidence signal.** The loader has no such field. Documenting the format (#48) surfaced this honestly, and the only place currently available is the hint ladder.\n\n**The hint ladder is the wrong home for it, on two counts.**\n\nA hint is disclosed *only* on explicit request, never automatically - that is deliberate, and it is what makes taking one a recorded choice. An explanation must appear on its own when you get something wrong. The two behaviours contradict each other on the same field.\n\nWorse, it corrupts a signal that already means something. #16 records hint-taking because it says something about confidence. If explanations live in the ladder, \"took a hint\" stops distinguishing *I needed help solving this* from *I read why I was wrong*, and every downstream reading of that signal - the scheduler, the readiness picture - inherits the confusion.\n\n**Fix this before authoring starts.** Content written against a stopgap convention would all need migrating, and #43/#44 produce dozens of files.\n\n## What to build\n\nA dedicated explanation on a check, independent of the hint ladder, with the behaviour the design calls for: automatic on a wrong answer, one keystroke away on a correct one, and asking-when-correct recorded as its own signal rather than as a hint.\n\nSelf-check items already have this in their model answer and need nothing new; the gap is checks judged by an answer key or by test cases.\n\nUpdate the content repo's format doc to match, replacing the interim \"put it in `hints`\" guidance.\n\n## Acceptance criteria\n\n- [ ] A check carries an explanation independent of its hint ladder\n- [ ] The explanation appears automatically on a wrong answer\n- [ ] It is available on request when correct, and that request is recorded distinctly from taking a hint\n- [ ] Requesting an explanation never penalises anything\n- [ ] The content format doc reflects the real field, with the interim guidance removed\n- [ ] `./test.sh` green\n\n## Blocked by\n\n- None. Should land before #43 and #44 begin authoring.\n",
+      "state": "closed",
+      "created_at": "2026-08-07T12:15:29Z",
+      "updated_at": "2026-08-08T00:40:47Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5223603768,
+          "body": "Delivered in #52 (merged).",
+          "created_at": "2026-08-08T00:40:47Z",
+          "updated_at": "2026-08-08T00:40:47Z",
+          "author": "KyleNaluan",
+          "bytes": 26
+        }
+      ]
+    },
+    {
+      "number": 59,
+      "title": "Choice options are served in file order, so answer position is exploitable",
+      "body": "## The problem\n\nChoice options are served and rendered in the order they appear in the content file, and nothing shuffles them. So a learner can exploit answer position instead of knowing the material.\n\nThis is not hypothetical. In the first authored AI/ML batch (swe-prep-content PR #4), **all 12 machine-graded multiple-choice questions had the correct answer as option 1**. A blind reviewer who had never seen the answer key noticed the pattern independently - which is exactly how a real learner would notice it, and then pass every question in the batch without understanding any of them.\n\nThe authoring gate landed under #42 makes each *distractor* competitive, but says nothing about where the correct answer sits. A set of individually excellent distractors is still worthless if the key is always in the same slot.\n\n## Why fix it in the engine rather than the authoring checklist\n\nThe same argument #42 settled: \"declared\" is a machine question, \"plausible\" is a human one. Position is entirely mechanical, so it should not depend on an author remembering to vary it, or on a reviewer counting. An author drafting a batch in one sitting will naturally write the correct answer first and then invent wrong ones - the bias is a by-product of how authoring actually happens, so it will recur.\n\nShuffling at serve or render time makes position bias structurally impossible for all existing and future content, including content authored before this lands.\n\n## Why this is safe to do\n\nGrading already matches the answer key by **text**, not by index (`AnswerKeyGrader`, and `ExerciseParser.matchesKey` uses the same rule when classifying distractors at load time). Display order therefore has no bearing on correctness.\n\nAuthored explanations reference options by their content, not by position (\"the product and the max do not have that property\"), so shuffling does not break them. Confirm this holds rather than assuming it, and if any content or copy does depend on position, that is a content bug to report.\n\n## What to decide\n\n- **Where to shuffle** - serving the exercise, or rendering it. Consider what happens across a page refresh or a resumed session: an order that changes under the learner mid-question is its own usability problem, so a per-attempt stable order is likely wanted rather than a fresh shuffle on every render.\n- **Determinism for tests.** Tests that assert on option order will need a seam. Prefer an injectable/seedable source of randomness over disabling the shuffle in test config, so the shipped path is the tested path.\n\n## Acceptance criteria\n\n- [ ] Choice options are not presented in file order; a learner cannot exploit answer position\n- [ ] The order a learner sees is stable for the duration of an attempt, not re-shuffled under them\n- [ ] Grading is unaffected, since the key matches by text\n- [ ] The shuffle is deterministic under test via an explicit seam, not switched off\n- [ ] A test proves a question whose key is authored first is not always presented first\n- [ ] `./test.sh` green\n",
+      "state": "closed",
+      "created_at": "2026-08-08T01:15:00Z",
+      "updated_at": "2026-08-08T03:04:54Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5224210497,
+          "body": "Delivered in #62 (merged). Order is seeded on (check id, user, calendar day): rotates between sittings so a repeated check never sits in a fixed slot, stable within a day so it cannot flip mid-question, nothing persisted.",
+          "created_at": "2026-08-08T03:04:54Z",
+          "updated_at": "2026-08-08T03:04:54Z",
+          "author": "KyleNaluan",
+          "bytes": 221
+        }
+      ]
+    },
+    {
+      "number": 60,
+      "title": "The correct answer is the longest option in every authored check, which is a second exploitable tell",
+      "body": "## The problem\n\nIn the first authored AI/ML batch (swe-prep-content PR #4), the correct answer was the **longest option in all 12** multiple-choice checks, often by a wide margin - 175 characters against a next-longest of 79 on one, 100 against 46 on another. Measured, not eyeballed:\n\n```\naiml-metrics-auc          correct_len=175  lens=[175, 59, 79, 54]\naiml-metrics-f1           correct_len=100  lens=[100, 44, 32, 46]\naiml-tvt-preprocess-leak  correct_len=152  lens=[152, 108, 88, 93]\n...12 of 12, correct answer strictly longest or tied\n```\n\nA learner who reads none of the questions can score close to full marks by picking the longest, most fully-qualified-sounding option every time.\n\nThis is a **sibling of #59 but not fixed by it.** Shuffling positions defeats \"always pick the first\"; it does nothing about \"always pick the longest,\" because length travels with the option text.\n\n## Why it recurs, and why a checklist won't hold\n\nIt is a by-product of how authoring actually happens. A correct answer gets written carefully and fully qualified - \"O(1) average, because a good hash spreads keys across buckets so each lookup touches only about one entry\" - while wrong answers get written quickly and stay terse. Every author will drift this way, on every batch, without noticing. The #42 precedent applies: if the property is mechanical, check it mechanically rather than trusting a reviewer to count characters.\n\nNote the authoring gate landed under #42 does not catch this at all, and correctly so - it grades each distractor in isolation for whether it encodes a real misconception. All 12 of these checks passed that bar. The defect is a property of the option **set**, which nothing currently inspects.\n\n## What to build\n\nA content-quality check that fails when a check's correct option is conspicuously longer than its distractors.\n\nDesign judgement to make and justify in the PR:\n\n- **The threshold.** \"Correct answer must never be longest\" is too strict - sometimes it legitimately is, and a rule that cries wolf gets suppressed. Something proportional (correct option longer than roughly 1.3x the mean of the others, say) targets the systematic case while tolerating honest variation. Pick a number, state the reasoning, and make it easy to tune.\n- **Where it runs.** `RealContentSmokeTest` already loads the real content directory and is skipped rather than failed when no content path is configured, so it is a natural home and it sits in a repo that has CI. Consider whether this belongs beside it or as its own test. It must **not** go in the loader: unlike #42's declared-misconception rule, a length imbalance is a quality smell rather than a corruption, and hard-failing content load over it would be wrong.\n- **The message.** A failure must name the file, the correct option's length, the others' lengths, and what to do about it - the fix is to pad the distractors up to parity, not to truncate the correct answer into something inaccurate.\n\nAlso consider flagging the related tells while you are here, if they are cheap: the only grammatically-agreeing option, and the one option that is qualified (\"often\", \"typically\") among absolutes.\n\n## Acceptance criteria\n\n- [ ] A check whose correct option is conspicuously longer than its distractors is flagged, naming the file and the measured lengths\n- [ ] The threshold is proportional, documented, and tunable in one place\n- [ ] Honest variation does not trip it - a check with roughly balanced options passes\n- [ ] It is a quality check, not a load failure; malformed content still fails at load, this does not\n- [ ] The content repo's `README.md` authoring section is updated so authors know the bar before they write, and knows this is enforced mechanically (separate PR in that repo - do not land cross-repo changes in one branch)\n- [ ] `./test.sh` green\n",
+      "state": "closed",
+      "created_at": "2026-08-08T01:19:57Z",
+      "updated_at": "2026-08-09T15:14:07Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 2,
+      "comments": [
+        {
+          "id": 5224210621,
+          "body": "Engine half delivered in #62 (merged): `AnswerTellChecker` flags a correct option conspicuously longer than its distractors, plus the qualifier tell. It is a quality check, not a load failure, and runs over real content in `RealContentSmokeTest` - which is skipped when no content clone is present, so the expected finding on the current AI/ML batch never becomes a permanently red CI build that someone later disables. Both directions are demonstrated on fixtures independent of real content.\n\nLeft open for the remaining acceptance criterion: the `swe-prep-content` README authoring bar, which is a separate PR in that repo and is folded into the pending adjudication of its first AI/ML batch.",
+          "created_at": "2026-08-08T03:04:56Z",
+          "updated_at": "2026-08-08T03:04:56Z",
+          "author": "KyleNaluan",
+          "bytes": 695
+        },
+        {
+          "id": 5232221249,
+          "body": "Both acceptance criteria are now met.\n\n1. **Engine check** - the set-level answer-tell check landed in PR #62 alongside the serve-time option shuffling for #59.\n2. **Authoring bar** - the option-parity section is in swe-prep-content's README.md (\"Options must be at parity: no answer tells\"), landed with the AI/ML pilot in swe-prep-content PR #4.\n\nThe pilot itself is the evidence this was worth doing: the correct answer was the longest option in 9 of 13 checks at one point, which is 69% exploitable by \"pick the longest\" with no knowledge of the material. Two things learned while fixing it, both recorded in the README:\n\n- **A per-item threshold does not catch a set-level tell.** The per-item ratio check passed every item while the key was still the longest option in most of the set. The property that matters is the key's length *rank* across the whole batch.\n- **Fixing a tell by inverting it just flips the signal.** Padding distractors made the key the *shortest* option. This recurred three times across different axes (length, hedging, specificity), so the authoring bar now calls for an explicit both-directions check.",
+          "created_at": "2026-08-09T15:14:07Z",
+          "updated_at": "2026-08-09T15:14:07Z",
+          "author": "KyleNaluan",
+          "bytes": 1133
+        }
+      ]
+    },
+    {
+      "number": 64,
+      "title": "C14 - Working with AI coding agents (the practice, not the tooling)",
+      "body": "## Parent\n\nPart of the planning map: #1. Extends the topic catalog in firstmate `data/swe-topics-r8/report.md` section 1.4, Bucket C.\n\n## What to build\n\nAuthor **C14 - Working with AI coding agents** as a Bucket C practice concept.\n\nThe catalog already carries **B11 (LLM/AI tooling literacy)**, but B11 is deliberately pinned to *primitives*: what a token is, what a context window is, why models hallucinate, what an eval is. That is the API-level mental model.\n\nThis concept is the other half, and it is a **practice**, not a technology: how a working engineer actually collaborates with an AI coding agent on a real codebase. Companies are restructuring their engineering workflow around this right now, and it is increasingly asked about directly - \"how do you use AI in your workflow\" is becoming a standard question, and the weak answer (\"I use it for boilerplate\") is distinguishable from a strong one in the first sentence.\n\nIt belongs in Bucket C alongside code review etiquette (C3), PR workflow (C4), and version-control hygiene (C8), because it is the same category of thing: how work actually gets done on a team.\n\n## Scope - the durable half\n\nFollow B11's own discipline (see section 1.5 of the topics report): teach what will still be true in a year, not what is true this quarter.\n\n**In scope (durable):**\n- **Delegate vs write yourself.** What agents are reliably good at, what they are reliably bad at, and how to tell before you spend the time rather than after.\n- **Review discipline for generated code.** Reviewing code you did not write, at volume, is a distinct skill from reviewing a colleague's PR - the failure mode is plausible-looking wrongness, not obvious wrongness. This is the single most load-bearing item in the concept.\n- **Specification as the real input.** Why an under-specified request produces confidently wrong output, and why the skill transfers directly from writing a good ticket.\n- **Verification over trust.** Tests, types, and executable checks as the thing that actually makes agent output safe - the arguments generalize past any tool.\n- **Context management.** Why what the agent can see determines what it can do, and the practical consequences.\n- **Where accountability sits.** You own the merged code. Interviewers probe this, and \"the AI wrote it\" is a disqualifying answer.\n- **Honest limits.** Where this genuinely does not help, and why claiming otherwise reads as inexperience.\n\n**Explicitly out of scope (volatile - it rots within a quarter and a stale confident claim is exactly the failure this pipeline exists to prevent):**\n- Specific tool names, vendor feature lists, model names, pricing, capability comparisons.\n- Prompt-phrasing tricks tied to a particular model's quirks.\n- Benchmark numbers.\n\nTag `stability: VOLATILE` per issue #43's shelf-life split, and carry the refresh policy. **No answer key may depend on a fact that expires** - if a check can only be answered by knowing a current product's behaviour, it is the wrong check.\n\n## Why this needs care\n\nThis is the hardest concept in the catalog to author honestly. The material is (a) genuinely new, so primary sources are thin and much of what is written about it is marketing or hype, and (b) contested, with credible engineers holding opposite positions on how much it helps. Both are conditions the protocol says to treat carefully.\n\nTwo consequences:\n- **Source discipline is harder here, not easier.** Vendor blog posts are marketing, not primary sources. Prefer empirical studies, primary tool documentation for mechanism claims only, and practitioner accounts flagged as tier 3.\n- **Where the honest answer is \"the evidence is mixed\", teach that.** A learner who can say \"the research here is genuinely contested, and here is the shape of the disagreement\" is *more* credible in an interview than one repeating a confident claim in either direction. Cut anything that cannot be defended; a thinner correct lesson beats a fuller one with a landmine.\n\nConsider promoting this concept to **full rigor tier** despite being neither security nor concurrency: the operating rule says full tier applies to any concept \"where the drafter or firstmate judges the fact surface contested\", and this one plainly is.\n\n## Acceptance criteria\n\n- [ ] One lesson, 3-5 checks each carrying its own explanation, and a self-graded explain-in-your-own-words item\n- [ ] Tagged `stability: VOLATILE` and carrying the refresh policy\n- [ ] No check key depends on a current model, tool, vendor feature, price, or benchmark\n- [ ] Contested claims are either taught as contested, with the disagreement named, or cut - never asserted as settled\n- [ ] Rigor tier declared in the Claims Ledger, with the reasoning if it is promoted to full\n- [ ] Nothing lands in the app repo; content lives only in the private content repo\n",
+      "state": "open",
+      "created_at": "2026-08-09T18:00:48Z",
+      "updated_at": "2026-08-09T18:00:48Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 0,
+      "comments": []
+    },
+    {
+      "number": 65,
+      "title": "AnswerTellChecker misses the set-level connective-style tell (found 4/4 exploitable in production content)",
+      "body": "## Parent\n\nPart of the planning map: #1. Follows #59 and #60, which closed the position tell and the length tell.\n\n## What to build\n\nExtend `AnswerTellChecker` with a **set-level connective-style axis**: flag a check whose correct answer is the only option containing a causal connective (`since`, `because`, `as`, `so that`, and near neighbours), and equally flag the mirror case where the key is the only option *without* one.\n\n## Why\n\nThis was found in production content by the red-team on swe-prep-content PR #5, and it is a clean, cheap, mechanical catch.\n\nIn all four newly authored checks of that batch, **every distractor carried a `since` clause and the key carried none**. \"Pick the option that does not justify itself\" scored 4 out of 4 with zero domain knowledge - a 100% exploit on that batch. For contrast, the previously merged 13 items hit the same pattern only once, so it is a regression an author can introduce without noticing rather than a standing property of the corpus.\n\nThree properties make it worth automating rather than leaving to review:\n\n1. **It survives option shuffling.** #59 randomised option order, which defeats position tells. This one is a property of the option *text*, so shuffling does nothing.\n2. **The existing per-item length check cannot see it.** Same structural reason #60 existed: `AnswerTellChecker`'s 1.3x key-vs-distractor-mean ratio is a per-item length measure, and this tell is categorical and set-level.\n3. **A careful human author following the documented bar still shipped it.** The drafter ran its own answer-tell self-check, cleared every axis the content repo's README names, and shipped this anyway. That is the signature of a check that belongs in code.\n\n## The mirror-image trap - please build the check to catch both directions\n\nThis repo's dominant recurring failure is that **fixing a tell inverts it rather than removing it**: pad the distractors and the key becomes the shortest; soften the hedged distractors and the key becomes the only unhedged one. That pattern cost the AI/ML pilot four fix rounds.\n\nSo the check must fail **both** \"key is the only option with a connective\" and \"key is the only option without one\". The passing condition is that the key shares the property with at least one distractor - not that the property points a particular way.\n\n## Acceptance criteria\n\n- [ ] A check whose key is the only option carrying a causal connective is flagged\n- [ ] A check whose key is the only option lacking one is flagged, with equal severity\n- [ ] A check whose key shares the property with at least one distractor passes\n- [ ] The connective vocabulary is defined in one place and is easy to extend as new tells are found\n- [ ] The existing four-item batch from swe-prep-content PR #5, in its pre-fix state, is caught by this check - use it as the regression fixture rather than a synthetic example\n- [ ] The flag names the offending item and states which direction it failed, so an author can act without re-deriving\n\n## Note for whoever picks this up\n\nThe corresponding authoring-side gap is being fixed separately in the content repo: its `README.md` option-parity section documents the length and lone-qualifier tells but never named connective style, while `CLAUDE.md` did. That doc fix and this engine check are complementary - the doc tells an author what to avoid, this check catches it when they miss.\n",
+      "state": "closed",
+      "created_at": "2026-08-09T18:04:59Z",
+      "updated_at": "2026-08-10T08:22:34Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5237701414,
+          "body": "Fixed by PR #68: connectives are now checked one lexeme at a time at set level (bare 'as' removed per #69/PR #71). Verified in production content: the set-level assertion realChoiceChecksHaveNoSetLevelAnswerTells runs green corpus-wide (swe-prep-content PRs #9-#13, 46/46 loader tests, Skipped: 0).",
+          "created_at": "2026-08-10T08:22:34Z",
+          "updated_at": "2026-08-10T08:22:34Z",
+          "author": "KyleNaluan",
+          "bytes": 298
+        }
+      ]
+    },
+    {
+      "number": 67,
+      "title": "AnswerTellChecker's length axis is character-only and one-sided - word-count tell scored 41.2% in production content",
+      "body": "## Parent\n\nPart of the planning map: #1. Sibling of #65 (connective-style axis); follows #59 and #60.\n\n## What to build\n\nExtend `AnswerTellChecker`'s length axis to measure **word count as well as characters**, and to check **rank as well as ratio**, in both directions.\n\nFour things, all of which the current check misses:\n\n1. **Word count, not just characters.** The existing check is character-only.\n2. **Rank, not just ratio.** A key can sit comfortably inside the 1.3x mean-ratio bar and still be the uniquely shortest or uniquely longest option. Flag the key being a unique extreme at either end.\n3. **Two-sided ratio.** The current 1.3x bar only catches a key that is too *long*. A ratio of 0.57 is exactly as exploitable as 1.75 and is currently invisible.\n4. **Do not reward a uniform-length template.** Collapsing every option to the same length is its own tell. If the check is ever used to drive automated repair, the guidance must be \"key must not be a unique extreme\", never \"all options equal\".\n\n## Why - measured, not hypothetical\n\nA corpus-wide audit on 2026-08-09 scored guessing strategies against the 25% four-option baseline:\n\n- **\"Pick the shortest answer by word count\" scored 41.2%** on the AI/ML metrics corpus, and **36.0%** on the Core batch 1 corpus. Both were the single strongest exploit in their batch.\n- On the same content, **character rank was already balanced** and the character ratio was inside the bar. The word tell hid entirely behind a passing character check.\n\nTwo production items showed how extreme this gets:\n\n| item | key | distractors | word ratio |\n|---|---|---|---|\n| `http-status-classes` | 13 words | 23, 24, 21 | 0.57 |\n| `cache-no-cache-vs-no-store` | 16 words | 29, 24, 27 | 0.60 |\n\nA learner who knows nothing picks the short option and is right both times.\n\nBoth shipped through a red-team, an adjudication pass, a re-gate, and an author's own self-check. The second of them shipped through a repair round that was *explicitly briefed on word-count parity* - the worker measured the ratio and never checked the rank. That is the signature of a check that belongs in code rather than in review.\n\n## The mirror-image trap\n\nSame warning as #65. This repo's dominant recurring failure is that fixing a tell inverts it rather than removing it. The passing condition is that the key is **not a unique extreme** - not that it points a particular way.\n\n## Acceptance criteria\n\n- [ ] Word-count parity is measured alongside character parity\n- [ ] A key that is the uniquely shortest option is flagged\n- [ ] A key that is the uniquely longest option is flagged, with equal severity\n- [ ] The ratio bar is two-sided: 1/1.3 is as much a failure as 1.3\n- [ ] A key sitting mid-pack on both metrics passes, and items are not pushed toward uniform option length\n- [ ] The pre-fix `http-status-classes` and `cache-no-cache-vs-no-store` items are the regression fixture, rather than synthetic examples - both are in swe-prep-content history\n- [ ] The flag names the item, the metric, and the direction, so an author can act without re-deriving\n\n## Note for whoever picks this up\n\n#65 covers the connective-style axis and is being implemented separately. These are complementary and should not be merged into one change.\n",
+      "state": "closed",
+      "created_at": "2026-08-09T20:58:19Z",
+      "updated_at": "2026-08-10T08:22:37Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 1,
+      "comments": [
+        {
+          "id": 5237701738,
+          "body": "Fixed by PR #70: length axis is now two-sided (0.77x-1.30x) on characters AND words, with unique-extreme rejection on words. Verified corpus-wide against production content: AnswerTellChecker findings = 0 across all 55 choice items (swe-prep-content PRs #11-#13 measurement runs).",
+          "created_at": "2026-08-10T08:22:36Z",
+          "updated_at": "2026-08-10T08:22:36Z",
+          "author": "KyleNaluan",
+          "bytes": 280
+        }
+      ]
+    },
+    {
+      "number": 69,
+      "title": "Connective axis: 'as' produces mostly false alarms (3 of 4 flags on real content, at least 2 non-causal)",
+      "body": "## Parent\n\nFollow-up to #65, which shipped the connective-style axis in PR #68. Not a defect in that change - `as` is named explicitly in #65's own spec, so shipping it was correct. This issue is about the measured cost of keeping it.\n\n## What was measured\n\nRunning #65's rule over the 29 four-option items on `swe-prep-content` `main` after PR #5 and PR #6 landed, one lexeme at a time, exactly as `connectiveStyle` does:\n\n| lexeme | items it would flag |\n|---|---|\n| `since` | 0 |\n| `because` | 1 |\n| `as` | **3** |\n| `so that` | 0 |\n\nSo `as` accounts for three of the four flags, and hand-inspection says **at least two of those three are false alarms** - the `as` is not causal:\n\n- `aiml-metrics-specificity` - flagged ONLY-WITHOUT. All three distractors match on `as`, but the uses are `\"another name for\"` and `\"wrongly flags **as** positive\"`. Neither is a connective.\n- `aiml-bv-high-bias` - flagged ONLY-WITH on a non-causal `as` in the key.\n\nThe one genuine catch in the set is `because`, on `aiml-bv-tradeoff`: all three distractors literally begin with \"Because\" and the key does not, which is a real \"pick the one that doesn't justify itself\" tell and exactly what #65 was built for.\n\n## Why it matters\n\n`AnswerTellChecker`'s own javadoc already states the principle - the grammatical-agreement axis was deliberately left out because \"a shaky heuristic there would cry wolf\". `as` is the most polysemous word in the list (`the same as`, `such as`, `flags as positive`, `as a result`), and a checker whose majority of flags are false trains an author to skim past all of them, including the true ones.\n\n## Options\n\n1. **Drop `as` from `CONNECTIVES`.** Cheapest. Costs the ability to catch a genuine lone-`as` causal tell, which was never observed in the corpus.\n2. **Require a causal context for `as`** - e.g. only count sentence-initial `As ` or `, as ` - keeping the catch while dropping `flags as positive` and `another name for`. More code, needs its own fixture.\n3. **Keep it and accept the noise**, but rank or tag findings so a low-confidence lexeme reads differently from a high-confidence one.\n\nRecommendation: option 2 if it stays cheap, option 1 otherwise. Either way, keep the measurement above as the regression fixture, since it is real corpus data rather than synthetic.\n\n## Note\n\nFindings are advisory and do not gate anything, so this is a signal-quality issue, not a correctness one. It does not need to be urgent.\n",
+      "state": "closed",
+      "created_at": "2026-08-09T21:28:20Z",
+      "updated_at": "2026-08-10T04:51:23Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 0,
+      "comments": []
+    },
+    {
+      "number": 72,
+      "title": "C14 teaches an uncited human-vs-generated review signal as a settled difference",
+      "body": "## Finding\n\n`agentic-coding-practice.json` and check `agents-review-discipline` teach that human mistakes usually leave surface traces while generated mistakes usually do not, and make that comparison the key to a scored item. The C14 claims ledger itself concedes that this is a framing, not a measured finding.\n\n## Evidence\n\nThe cited Perry et al. study measures security outcomes and participants' confidence, not code reviewers or comparative surface traces: https://arxiv.org/abs/2211.03622\n\nThe cited package-hallucination study establishes that nonexistent imports occur and can recur; it does not compare how visible human and generated defects are to reviewers: https://arxiv.org/abs/2406.10279\n\nNo cited source supports the universal comparative words “human mistakes usually” and “generated mistakes usually”. Because `agents-review-discipline` turns that unsupported comparison into the correct answer, this is more than optional lesson color.\n\n## Decision needed\n\nChoose one: (1) source a reviewer study that supports the comparative claim; (2) relabel it in learner-facing prose and the check as a practitioner heuristic with explicit uncertainty; or (3) replace the scored item with the independently supportable rule to review against requirements, contracts, and error paths regardless of authorship. This pass did not make that product/framing decision.",
+      "state": "open",
+      "created_at": "2026-08-10T05:01:00Z",
+      "updated_at": "2026-08-10T05:01:00Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 0,
+      "comments": []
+    },
+    {
+      "number": 73,
+      "title": "C14 delegation-by-verification-cost rule is useful framing, not an evidenced finding",
+      "body": "## Finding\n\n`agentic-coding-practice.json` and `agentic-coding-explain.json` teach “decide what to delegate by the cost of checking, not by the size of the job.” The ledger correctly labels this as framing, but the learner-facing lesson presents it as the durable decision rule.\n\n## Evidence tension\n\nThe cited controlled GitHub Copilot experiment used a self-contained HTTP-server task with a relatively cheap oracle: https://arxiv.org/abs/2302.06590\n\nThe much larger field experiments report uplift on ordinary enterprise work, where correctness is not shown to be cheap to verify: https://pubsonline.informs.org/doi/10.1287/mnsc.2025.00535\n\nThose studies do not establish verification cost as the moderator that explains delegation value. The current lesson now admits that evidence does not line up behind the framing, but still elevates it as the primary rule.\n\n## Decision needed\n\nEither keep it explicitly as an interview/practice heuristic, commission evidence for it, or narrow it to the noncontroversial claim that tasks with independent, fast failure signals are easier to verify. This pass left the choice out of the content PR because it is a curriculum-framing decision, not an unambiguous factual correction.",
+      "state": "open",
+      "created_at": "2026-08-10T05:01:02Z",
+      "updated_at": "2026-08-10T05:01:02Z",
+      "author": "KyleNaluan",
+      "labels": [],
+      "comment_count": 0,
+      "comments": []
+    }
+  ],
+  "scale": {
+    "files": 199,
+    "lines": 16488,
+    "commits": 47,
+    "first_commit": "2026-08-04",
+    "last_commit": "2026-08-10",
+    "days": 7
+  },
+  "density": {
+    "closed_issues_with_resolution_comment": {
+      "value": 9,
+      "of": 42
+    },
+    "comment_to_body_ratio": {
+      "value": 1.05,
+      "note": "mean over 33 closed issues with both a body and comments"
+    },
+    "source_files_citing_issues": {
+      "value": 168,
+      "of": 199
+    },
+    "adr_directory": {
+      "value": false,
+      "note": "no ADR or decision-record directory in the tree"
+    }
+  },
+  "sources": [
+    {
+      "source": "GitHub issue resolution comments",
+      "what_existed": "9 of 48 issues carry a resolution-shaped comment",
+      "fetched": "in full via gh api .../issues/{n}/comments, count-verified against the issue's own comment count",
+      "admissible_as": "attested"
+    },
+    {
+      "source": "Issue bodies",
+      "what_existed": "48 non-PR issues",
+      "fetched": "in full via gh api, never a convenience view",
+      "admissible_as": "attested (the question, not the answer)"
+    },
+    {
+      "source": "Code at the pinned SHA",
+      "what_existed": "the subject tree",
+      "fetched": "read locally with git cat-file at the pinned commit",
+      "admissible_as": "verified"
+    },
+    {
+      "source": "AGENTS.md, CLAUDE.md",
+      "what_existed": "project memory, 85.8 KB",
+      "fetched": "indexed for navigation only",
+      "admissible_as": "not admissible - navigation, never evidence"
+    }
+  ],
+  "private_split": {
+    "declared": true,
+    "repo": "KyleNaluan/swe-prep-content",
+    "readable_at_harvest": false,
+    "note": "declared in the subject's README as a separate private repository; harvest does not read the private side, so no content from it can reach the artifact"
+  },
+  "memory_files": [
+    {
+      "path": "AGENTS.md",
+      "bytes": 87866
+    },
+    {
+      "path": "CLAUDE.md",
+      "bytes": 9
+    }
+  ]
+}

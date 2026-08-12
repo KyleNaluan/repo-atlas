@@ -23,7 +23,7 @@
  * G2 audits the record that stage leaves. A scorer that could delete would be a
  * second authority over what ships.
  */
-import { askModel } from "../model/ask.js";
+import { askModel, firstJsonObject } from "../model/ask.js";
 import type { AtlasNode } from "../schema/types.js";
 import type { ScoredNode } from "./rank.js";
 import type { ScoreRequest } from "./scorer.js";
@@ -104,14 +104,13 @@ interface RawScore {
 
 /** Pull the JSON object out of a reply, tolerating a stray fence or preamble. */
 export const parseScores = (text: string): RawScore[] => {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end <= start) {
+  const json = firstJsonObject(text);
+  if (json === null) {
     throw new ScorerError(`the scorer returned no JSON object: ${text.slice(0, 200)}`);
   }
   let parsed: { scores?: RawScore[] };
   try {
-    parsed = JSON.parse(text.slice(start, end + 1)) as { scores?: RawScore[] };
+    parsed = JSON.parse(json) as { scores?: RawScore[] };
   } catch (cause) {
     throw new ScorerError(`the scorer returned unparseable JSON: ${String(cause)}`);
   }
@@ -131,6 +130,8 @@ export interface ScorerReply {
 export interface ModelScorerOptions {
   /** Overridable so a test can drive the scorer without the SDK. */
   ask?: (prompt: string) => Promise<string>;
+  /** Reported when a reply came back short and the graph is offered again. */
+  onRetry?: (attempt: number, missing: string[]) => void;
 }
 
 /**
@@ -145,22 +146,41 @@ export interface ModelScorerOptions {
  */
 export const askViaSdk = (prompt: string): Promise<ScorerReply> => askModel(prompt, "scorer");
 
+/**
+ * How many times the whole graph is offered before giving up.
+ *
+ * A model asked for 32 scores in one reply sometimes returns 31, and the refusal
+ * below is correct - an unscored node is not a zero. But refusing on the first
+ * omission makes a whole pipeline run fail on a transient slip, so the same
+ * question is asked again. It is asked WHOLE rather than as a follow-up for the
+ * stragglers: #9 makes scoring comparative, and a second call scoring three
+ * leftovers in isolation would not be ranking them against the set.
+ */
+const ATTEMPTS = 3;
+
 export const modelScorer =
   (options: ModelScorerOptions = {}) =>
   async (request: ScoreRequest): Promise<ScoredNode[]> => {
     if (request.nodes.length === 0) return [];
     const ask = options.ask ?? (async (prompt: string) => (await askViaSdk(prompt)).text);
-    const raw = parseScores(await ask(PROMPT(request.rubric, request.nodes.map(summarise))));
+    const prompt = PROMPT(request.rubric, request.nodes.map(summarise));
 
-    const byId = new Map(raw.map((r) => [r.id, r]));
-    const missing = request.nodes.filter((n) => !byId.has(n.id)).map((n) => n.id);
+    let byId = new Map<string, RawScore>();
+    let missing: string[] = [];
+    for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
+      byId = new Map(parseScores(await ask(prompt)).map((r) => [r.id, r]));
+      missing = request.nodes.filter((n) => !byId.has(n.id)).map((n) => n.id);
+      if (missing.length === 0) break;
+      options.onRetry?.(attempt, missing);
+    }
+
     if (missing.length > 0) {
       // Not defaulted to zero: an unscored node is one nobody judged, and
       // treating it as a zero would delete it while the record said it was
       // weighed. The same rule the score-file loader enforces.
       throw new ScorerError(
-        `the scorer returned no score for ${missing.length} node${missing.length === 1 ? "" : "s"}: ` +
-          `${missing.slice(0, 5).join(", ")}${missing.length > 5 ? ", ..." : ""}`,
+        `the scorer returned no score for ${missing.length} node${missing.length === 1 ? "" : "s"} ` +
+          `after ${ATTEMPTS} attempts: ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? ", ..." : ""}`,
       );
     }
 

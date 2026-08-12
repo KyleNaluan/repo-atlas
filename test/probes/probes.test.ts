@@ -101,17 +101,30 @@ const candidatesFrom = async (id: string, ctx: ProbeContext): Promise<Candidate[
 /* ------------------------------------------------------- the manifest */
 
 describe("the probe manifest", () => {
-  it("ships all eight discovery probes", () => {
-    expect(PROBES).toHaveLength(8);
+  it("ships all eight discovery probes, plus the two node types nothing else mints", () => {
+    // #5's resolution names EIGHT discovery probes and all eight are here. The
+    // ninth is not a discovery probe from that list: `unresolved-references` is
+    // #6 point 3, which requires a source citation the record never explains to
+    // become a coverage_gap edge rather than being silently dropped. It is built
+    // as a probe because it fits the contract exactly - a pure deterministic
+    // function over harvest artifacts - and #5 says adding one is a module, a
+    // manifest entry and a fixture test with no core changes.
+    // The ninth and tenth are not discovery probes from #5's list.
+    // `unresolved-references` is #6 point 3. `measured-scale` restates figures the
+    // harvest already measured as Fact nodes - the stat tiles the reference
+    // overview opens with, which no stage produced at all.
+    expect(PROBES).toHaveLength(10);
     expect(PROBES.map((p) => p.id).sort()).toEqual([
       "ci-policy-guards",
       "decided-but-unbuilt",
       "dependency-asymmetry",
       "dependency-divergence",
+      "measured-scale",
       "repeated-sql-predicates",
       "sealed-hierarchies",
       "throw-where-siblings-return",
       "tuned-config-properties",
+      "unresolved-references",
     ]);
   });
 
@@ -1167,6 +1180,158 @@ describe("the existence gate overturns the record in BOTH directions", () => {
   }, 60_000);
 });
 
+describe("unresolved-references", () => {
+  // #6 point 3 and #10's sharpest reason for the degradation subject: source
+  // citing a bare issue number the record never explains must be reported as
+  // referenced-but-unresolved, never given a synthesised rationale.
+  const CITING = {
+    "src/Ssl.java": "class Ssl {\n  // look at variable declaration why this line exists and #190\n  int x;\n}\n",
+  };
+
+  it("mints a coverage_gap edge for a citation the record does not resolve", async () => {
+    const ctx = contextFor(CITING);
+    const found = await candidatesFrom("unresolved-references", ctx);
+    expect(found).toHaveLength(1);
+    const node = found[0]!.node;
+    expect(node.type).toBe("edge");
+    expect(node.type === "edge" && node.kind).toBe("coverage_gap");
+    expect(node.id).toBe("e-unresolved-190");
+    expect(node.type === "edge" && node.statement).toContain("does not resolve it");
+  });
+
+  it("cites where the reference is, with the line, pinned at the SHA", async () => {
+    const ctx = contextFor(CITING);
+    const [candidate] = await candidatesFrom("unresolved-references", ctx);
+    const file = candidate!.node.evidence.find((e) => e.kind === "file");
+    expect(file!.kind === "file" && file!.path).toBe("src/Ssl.java");
+    expect(file!.kind === "file" && file!.line_start).toBe(2);
+    expect(file!.kind === "file" && file!.sha).toBe(ctx.sha);
+  });
+
+  it("says nothing about an issue the harvest does not hold", async () => {
+    // A citation to an issue nobody fetched would not resolve, and #8's L3 would
+    // be right to fail it, so only the source location is cited.
+    const ctx = contextFor(CITING);
+    const [candidate] = await candidatesFrom("unresolved-references", ctx);
+    expect(candidate!.node.evidence.some((e) => e.kind === "issue")).toBe(false);
+    expect(candidate!.node.type === "edge" && candidate!.node.statement).toContain("no issue with that number was harvested");
+  });
+
+  it("cites the issue, and says it carries no resolution, when the harvest holds it", async () => {
+    const ctx = contextFor(CITING, [issue({ number: 190, state: "closed" })]);
+    const [candidate] = await candidatesFrom("unresolved-references", ctx);
+    expect(candidate!.node.evidence.some((e) => e.kind === "issue")).toBe(true);
+    expect(candidate!.node.type === "edge" && candidate!.node.statement).toContain("no resolution-shaped comment");
+  });
+
+  it("stays silent about a citation the record DOES resolve", async () => {
+    // A decision node already carries that trail; reporting it here too would
+    // double-count the same record.
+    const resolved = issue({
+      number: 190,
+      state: "closed",
+      comments: [
+        { id: 1, body: "## Resolution: because of X", created_at: "x", updated_at: "x", author: "u", bytes: 24 },
+      ],
+    });
+    expect(await candidatesFrom("unresolved-references", contextFor(CITING, [resolved]))).toEqual([]);
+  });
+
+  it("emits nothing when no source cites an issue at all", async () => {
+    expect(await candidatesFrom("unresolved-references", contextFor({ "src/A.java": "class A {}\n" }))).toEqual([]);
+  });
+
+  it("does not read a bare number outside a comment as a citation", async () => {
+    // The same rule the density signal uses, read from one definition so the
+    // measured signal and this finding cannot disagree about the same file.
+    const ctx = contextFor({ "src/A.java": 'class A { String s = "#190"; }\n' });
+    expect(await candidatesFrom("unresolved-references", ctx)).toEqual([]);
+  });
+});
+
+describe("an overturned present-claim cites the search that came back empty", () => {
+  // Audit check E2 refuses a node that states current behaviour while citing only
+  // a record of intent, and a divergence edge from an overturned present-claim
+  // has no file to point at - not finding the thing IS the finding. What
+  // established it is a negative search result, which #8's M2 recognises as
+  // witnessing absence, so the gate cites the search it actually performed.
+  const candidate = (claim: ExistenceClaim): Candidate => ({
+    probe_id: "write",
+    node: {
+      type: "decision",
+      id: "d-1",
+      title: "t",
+      question: "q",
+      decision: "d",
+      why: "w",
+      rejected: [],
+      status: "decided",
+      implemented_by: [],
+      soundbite: "s",
+      evidence: [{ kind: "issue", number: 10, comment_id: 1 }],
+      confidence: "attested",
+      interview_value: 0,
+    },
+    claims: [claim],
+  });
+
+  it("cites a runnable grep at the pinned SHA when a pattern found nothing", async () => {
+    const ctx = contextFor({ "README.md": "nothing relevant here" });
+    const result = gateCandidate(ctx, candidate({
+      description: "an order_items table",
+      expect: "present",
+      pattern: { regex: "order_items" },
+    }));
+    expect(result.verdict).toBe("overturned");
+    const command = result.node.evidence.find((e) => e.kind === "command");
+    expect(command).toBeDefined();
+    // Faithful and reproducible: the same search, at the same commit, in a form a
+    // reader can actually run. A cited command that was never run would be a
+    // fabricated citation, which is the defect one level down from the one this
+    // evidence exists to fix.
+    expect(command!.kind === "command" && command!.cmd).toContain(ctx.sha);
+    expect(command!.kind === "command" && command!.cmd).toContain("order_items");
+    expect(command!.kind === "command" && command!.output_excerpt).toMatch(/no file .* matches/);
+  });
+
+  it("cites the path check when a path claim found nothing", async () => {
+    const ctx = contextFor({ "README.md": "x" });
+    const result = gateCandidate(ctx, candidate({
+      description: "a session controller",
+      expect: "present",
+      paths: ["src/main/java/Session.java"],
+    }));
+    const command = result.node.evidence.find((e) => e.kind === "command");
+    expect(command!.kind === "command" && command!.cmd).toContain("git ls-tree");
+    expect(command!.kind === "command" && command!.cmd).toContain("Session.java");
+  });
+
+  it("records the path filter rather than implying the whole tree was searched", async () => {
+    const ctx = contextFor({ "README.md": "x" });
+    const result = gateCandidate(ctx, candidate({
+      description: "a thing",
+      expect: "present",
+      pattern: { regex: "Grader", include: "\\.java$" },
+    }));
+    const command = result.node.evidence.find((e) => e.kind === "command");
+    expect(command!.kind === "command" && command!.note).toContain("\\.java$");
+  });
+
+  it("keeps citing the files when an ABSENT claim was overturned by finding them", async () => {
+    // The mirror case still has something to point at, so it points at it.
+    const ctx = contextFor({ "src/Security.java": "class Security {}" });
+    const result = gateCandidate(ctx, candidate({
+      description: "no security layer",
+      expect: "absent",
+      paths: ["src/Security.java"],
+    }));
+    expect(result.verdict).toBe("overturned");
+    const file = result.node.evidence.find((e) => e.kind === "file");
+    expect(file!.kind === "file" && file!.path).toBe("src/Security.java");
+    expect(result.node.evidence.some((e) => e.kind === "command")).toBe(false);
+  });
+});
+
 describe("a decision the gate found is a decision the artifact may call built", () => {
   const decision = (claims?: ExistenceClaim[]): Candidate => ({
     probe_id: "write",
@@ -1290,5 +1455,56 @@ describe("a decision the gate found is a decision the artifact may call built", 
     const result = gateCandidate(ctx, candidate);
     expect(result.verdict).toBe("confirmed");
     expect(result.node).toEqual(candidate.node);
+  });
+});
+
+describe("measured-scale", () => {
+  // The stat tiles the reference overview opens with, which no stage produced.
+  // Every figure was already measured by harvest; this restates them and cites
+  // the command that produces each, because a stat tile is the easiest place in
+  // an artifact to put a number nobody checked.
+  const withScale = (over: Record<string, unknown>): ProbeContext => {
+    const ctx = contextFor({
+      "src/main/java/A.java": "class A {}\n",
+      "src/test/java/ATest.java": "class ATest {}\n",
+    });
+    return { ...ctx, harvest: { ...ctx.harvest, scale: { ...ctx.harvest.scale, ...over } } };
+  };
+
+  it("emits a tile per figure the harvest established", async () => {
+    const found = await candidatesFrom("measured-scale", withScale({ lines: 13574, commits: 47, days: 7 }));
+    const ids = found.map((c) => c.node.id);
+    expect(ids).toContain("f-scale-lines");
+    expect(ids).toContain("f-scale-files");
+    expect(ids).toContain("f-scale-history");
+    expect(ids).toContain("f-scale-tests");
+  });
+
+  it("cites the command that produces each figure, at the pinned SHA", async () => {
+    const ctx = withScale({ lines: 100, commits: 3, days: 1 });
+    for (const c of await candidatesFrom("measured-scale", ctx)) {
+      const ev = c.node.evidence[0]!;
+      expect(ev.kind).toBe("command");
+      expect(ev.kind === "command" && ev.cmd).toContain(ctx.sha);
+      expect(c.node.type === "fact" && c.node.source).toBe("command");
+    }
+  });
+
+  it("emits nothing rather than a zero for a figure that was never established", async () => {
+    // "0 commits" is a claim, and an unmeasured value rendered as 0 is a false
+    // one. #5's emit-nothing rule applies per figure, not only per probe.
+    const found = await candidatesFrom("measured-scale", withScale({ lines: 0, commits: 0, days: null }));
+    const ids = found.map((c) => c.node.id);
+    expect(ids).not.toContain("f-scale-lines");
+    expect(ids).not.toContain("f-scale-history");
+  });
+
+  it("reports the commit count with the window it happened in", async () => {
+    // A commit count alone says nothing without the calendar span; 47 commits
+    // over 7 days and over 7 years are different findings.
+    const [history] = (await candidatesFrom("measured-scale", withScale({ commits: 47, days: 7 })))
+      .filter((c) => c.node.id === "f-scale-history");
+    expect(history!.node.type === "fact" && history!.node.label).toContain("7 calendar days");
+    expect(history!.node.type === "fact" && history!.node.value).toBe("47");
   });
 });

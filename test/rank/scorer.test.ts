@@ -111,7 +111,7 @@ describe("the rubric reproduces the human ranking", () => {
     }
   });
 
-  it("agrees with the human on 13 of 33 nodes overall, and that number is the finding", () => {
+  it("agrees with the human on 14 of 33 nodes overall, and that number is the finding", () => {
     // Recorded rather than asserted-away. #9's ground truth is the ORDERED DEEP
     // DIVES, and those match exactly; across the whole graph the model and the
     // hand-authored scores agree on well under half. That is expected - the
@@ -119,10 +119,18 @@ describe("the rubric reproduces the human ranking", () => {
     // internally consistent about their own floor (see rank.test.ts) - but it is
     // the kind of number that should move visibly rather than drift unnoticed,
     // so it is pinned here.
+    //
+    // It moved from 13 to 14 when the rubric gained two bands: one saying value
+    // is comparative against THIS subject's record, and one distinguishing an
+    // orientation figure from inventory. Every stat tile scored higher than
+    // before - still below what the human gave them, so none of them is what
+    // moved the count - and the ordered deep dives, which are #9's actual ground
+    // truth, did not move at all. A rubric edit that changed the ground truth
+    // would be a different matter and would fail the test above.
     const agree = atlas.nodes.filter(
       (n) => pinned.scores.find((s) => s.id === n.id)!.score === n.interview_value,
     ).length;
-    expect(agree).toBe(13);
+    expect(agree).toBe(14);
   });
 });
 
@@ -147,14 +155,41 @@ describe("the model scorer", () => {
     expect(scored[0]!.because).toContain("interviewer probes");
   });
 
-  it("refuses when a node came back unscored", async () => {
+  it("offers the whole graph again when a reply comes back short", async () => {
+    // A model asked for 32 scores in one reply sometimes returns 31, and this
+    // happened on a real pipeline run. The refusal below is right - an unscored
+    // node is not a zero - but failing a whole run on a transient slip is not.
+    // The retry offers the graph WHOLE rather than asking for the stragglers:
+    // #9 makes scoring comparative, and three leftovers scored in isolation
+    // would not be ranked against the set.
+    const partial = JSON.stringify({ scores: [{ id: "a", score: 5 }] });
+    let calls = 0;
+    const retries: string[][] = [];
+    const scored = await modelScorer({
+      ask: async () => (++calls === 1 ? partial : good),
+      onRetry: (_attempt, missing) => retries.push(missing),
+    })({ nodes, profile: INTERVIEW, rubric: "r" });
+    expect(calls).toBe(2);
+    expect(retries).toEqual([["b"]]);
+    expect(scored.map((s) => s.score)).toEqual([5, 2]);
+  });
+
+  it("refuses when a node is still unscored after every attempt", async () => {
     // An unscored node is not a zero. Defaulting it would delete the node while
     // the deletion record claimed it had been weighed - the same rule the score
-    // file loader enforces, applied at the other end of the seam.
+    // file loader enforces, applied at the other end of the seam. The retry above
+    // makes a slip survivable; it does not make a persistent omission acceptable.
     const partial = JSON.stringify({ scores: [{ id: "a", score: 5 }] });
+    let calls = 0;
     await expect(
-      modelScorer({ ask: askReturning(partial) })({ nodes, profile: INTERVIEW, rubric: "r" }),
+      modelScorer({
+        ask: async () => {
+          calls += 1;
+          return partial;
+        },
+      })({ nodes, profile: INTERVIEW, rubric: "r" }),
     ).rejects.toThrow(ScorerError);
+    expect(calls).toBe(3);
   });
 
   it("refuses when a node came back with a non-numeric score", async () => {

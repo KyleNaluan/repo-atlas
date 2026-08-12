@@ -120,8 +120,22 @@ const commentStart = (line: string, path: string): number => {
   return marks.length === 0 ? -1 : Math.min(...marks);
 };
 
-const citesIssue = (text: string, path: string): boolean => {
-  for (const line of text.split("\n")) {
+/**
+ * Every issue number a source file cites from a comment, with its line.
+ *
+ * #6's density signal 3 counts the FILES that do this; its point 3 needs the
+ * citations themselves, to turn a reference the record never explains into a
+ * `coverage_gap` edge. Both read the same rule from here rather than from two
+ * copies - a second definition of "cites an issue" would let the signal and the
+ * finding disagree about the same file.
+ */
+export const sourceIssueCitations = (
+  text: string,
+  path: string,
+): { number: number; line: number }[] => {
+  const out: { number: number; line: number }[] = [];
+  const lines = text.split("\n");
+  for (const [i, line] of lines.entries()) {
     const start = commentStart(line, path);
     if (start === -1) continue;
     CITATION_TOKEN.lastIndex = 0;
@@ -134,11 +148,14 @@ const citesIssue = (text: string, path: string): boolean => {
       if (!/^\d+$/.test(rest)) continue;
       const before = m.index > 0 ? line[m.index - 1] : "";
       if (before === '"' || before === "'" || before === "=") continue;
-      return true;
+      out.push({ number: Number(rest), line: i + 1 });
     }
   }
-  return false;
+  return out;
 };
+
+const citesIssue = (text: string, path: string): boolean =>
+  sourceIssueCitations(text, path).length > 0;
 
 /**
  * One pass over the source tree.

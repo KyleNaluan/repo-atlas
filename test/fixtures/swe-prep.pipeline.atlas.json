@@ -1,0 +1,1308 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-08-12T06:14:31.339Z",
+  "profile": "interview",
+  "rubric_version": "v1",
+  "subject": {
+    "owner": "KyleNaluan",
+    "repo": "swe-prep",
+    "url": "https://github.com/KyleNaluan/swe-prep",
+    "branch": "HEAD",
+    "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+    "read_on": "2026-08-12",
+    "visibility": "public"
+  },
+  "synopsis": {
+    "statement": "A single-user, habit-forming interview-prep app that runs your code: a public engine (Spring Boot 3.4.x on Java 21, Postgres, React + Vite, Monaco) run locally and reached over a tailnet, built around a daily loop of a ~4-minute required warm-up that alone completes the day, an optional ~30-minute main exercise, and open-ended continuation - with all problem content kept in a separate private repo and loaded from a local clone, never committed here.",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": "README.md",
+        "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+      }
+    ]
+  },
+  "shape": {
+    "tree": ".github/workflows/ci.yml                CI runs the same ./test.sh on every push and pull request\n.gitignore\nAGENTS.md                                the repo layout decision and other project-intrinsic notes\nCLAUDE.md\nREADME.md\ndocker-compose.yml                       Postgres at the repo root, started with docker compose up -d\ntest.sh                                  content guard first, then shell suites, backend suite, frontend suite\nbackend/                                 Spring Boot 3.4.x on Java 21, Maven; runs on :8080, applies Flyway migrations on boot\n├── pom.xml                              Maven build\n├── mvnw                                 Maven wrapper\n├── mvnw.cmd\n├── .mvn/wrapper/                        Maven wrapper jar and properties\n├── src/main/resources/\n│   ├── application.yml                  config, including the sweprep.web.allowed-origins CORS list for direct clients\n│   └── db/migration/                    Flyway migrations V1-V8, applied on boot\n├── src/main/java/com/sweprep/backend/\n│   ├── BackendApplication.java          application entry point\n│   ├── attempt/                         Attempt as the durable record, Submission one run within it; hints, reveals, complexity claims, self-check ratings\n│   ├── authoring/                       derives the CHALLENGE plus up to five warm-up reps from one problem spec; ProblemSpecParser.java documents the spec format\n│   ├── challenge/                       selection of the optional main exercise (the Challenge form)\n│   ├── commit/                          commits a solved challenge's real solution to the private content clone and pushes it\n│   ├── complexity/                      runs the submission at growing input sizes and fits the runtime curve against the stated claim\n│   ├── content/                         loads exercises, lessons and SQL fixtures from the local content clone at sweprep.content.path\n│   ├── exercise/                        Exercise as the authored unit; Form (Rep or Challenge) an attribute; language-neutral test cases and signatures\n│   ├── grader/                          Graders decide pass or fail: test cases, answer key, SQL query, self-check\n│   ├── language/                        language adapters supplying harness and stub from a language-neutral signature; Java default, Python\n│   ├── learned/                         the retrieved-to-criterion state behind the readiness counts\n│   ├── readiness/                       the honest progress picture: plain counts, lists and a per-family breakdown, never a score\n│   ├── reps/                            warm-up rep selection and due reps, drawing from the chosen role families plus the always-on core\n│   ├── role/                            the role picker: which families the required warm-up and auto-seeding draw from\n│   ├── runner/                          Runners only execute: local Java and Python process runners behind an interface\n│   ├── scheduler/                       two schedulers over one shared record: SM-2 for reps, a daily priority score for challenges\n│   ├── session/                         day completion and the streak, a true count of days with capped repair\n│   ├── sql/                             SQL execution on a separate fixture database, as a read-only role, in a transaction always rolled back\n│   └── web/                             HTTP controllers, views and error handlers; deterministic option shuffling\n└── src/test/java/com/sweprep/backend/   backend suite, run against a real disposable Postgres via Testcontainers\nfrontend/                                React + Vite dev server on :5173 only, pinned with strictPort\n├── index.html\n├── package.json\n├── package-lock.json\n├── vite.config.ts                       dev server binds every interface and proxies API calls to the backend on the same host\n├── tsconfig.json\n├── tsconfig.app.json\n├── tsconfig.node.json\n├── .env.example\n├── .gitignore\n├── .oxlintrc.json\n├── public/favicon.svg\n└── src/                                 each surface has a .test.tsx beside it (Vitest)\n    ├── main.tsx\n    ├── App.tsx                          Today/Readiness/Practice/Learn tabs and the header role picker\n    ├── Warmup.tsx                       the required warm-up: ~8 interleaved reps one at a time, wrong answers re-queued\n    ├── Session.tsx                      day-complete landing that celebrates first, then offers the optional main exercise\n    ├── Practice.tsx                     free-practice Monaco editor: Run, hint ladder, failing-case reveal, History panel\n    ├── Lesson.tsx                       the Learn tab: lessons read, never attempted, with self-explanation prompts\n    ├── Readiness.tsx                    the Readiness tab: X/Y counts and the per-family breakdown\n    ├── RolePicker.tsx                   picker for the roles being prepared for\n    ├── api.ts                           backend API calls\n    ├── App.css\n    ├── index.css\n    └── setupTests.ts\nscripts/\n├── author-content.sh                    content authoring entry point; refuses to write anywhere inside this public repo\n├── check-no-content.sh                  asserts no private problem content is committed, in CI and ./test.sh\n├── check-no-content.test.sh             the content guard's own tests\n├── daily-cue.sh                         the daily-cue check\n├── daily-cue.test.sh                    the daily-cue check's tests\n└── daily-cue/                           optional systemd user timer firing a notification on any day not yet complete\n    ├── install.sh                       installs the user-level unit; prints how to change the time, check the schedule, find logs\n    ├── swe-prep-daily-cue.service\n    └── swe-prep-daily-cue.timer",
+    "evidence": [
+      {
+        "kind": "command",
+        "cmd": "git ls-tree -r --name-only 086c99998ba6eec1353988cd88989cbe836fe6a0",
+        "output_excerpt": "(the listing this tree was annotated from)"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "type": "edge",
+      "kind": "divergence",
+      "id": "d-issue-10-c5182571856-divergence",
+      "title": "SQL exercise engine, fixtures, and grading",
+      "statement": "A SQL exercise domain backed by Postgres fixture schemas - shared realistic schemas such as the e-commerce one with users, orders, products, and order_items tables - plus a grader that compares result sets as multisets.. Checked against the tree: the record implies this exists, and the tree does not carry it.",
+      "why_it_matters": "The record and the build disagree. Going first on that is strictly better than being caught by it, and it is the one finding a summariser cannot produce.",
+      "how_to_say_it": "The tracker and the code disagree here - the record implies this exists, and the tree does not carry it.",
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 10,
+          "comment_id": 5182571856
+        },
+        {
+          "kind": "command",
+          "cmd": "git grep -I -i -E 'order_items' 086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "output_excerpt": "(no output: no file at this commit matches)"
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 5,
+      "probe_id": "write"
+    },
+    {
+      "type": "decision",
+      "id": "d-issue-4-c5182805341",
+      "title": "Public engine, private problem content",
+      "question": "Can Blind 75 problem statements ship in a public repository, and if not, what is the cheapest lawful source of problem text?",
+      "decision": "Ship the engine publicly and keep all problem content - statements, test data, reference solutions, generators - in the private repo the solutions already go to, loaded by the app via a private submodule or a gitignored local path. The public repo carries the engine, the list of problem titles, and optionally a few original demo statements.",
+      "why": "LeetCode's statement prose is copyrighted expression, while titles, the list, and the algorithmic ideas are free facts under 17 U.S.C. §102(b). The streak decision already sent solutions to a separate private repo, and since the authoring unit is statement + test cases + reference solution + input generator, three of the four were already going private - moving the statement across costs nothing and leaves the public repo with zero protected prose. This is also the fastest path to the first daily session, the map's binding constraint, because no 75-statement authoring project stands between now and drilling.",
+      "rejected": [
+        {
+          "alternative": "An openly-licensed source of Blind 75 / NeetCode 150 statements",
+          "why_it_lost": "None exists and none can: Blind 75 is a curated list of LeetCode's problems, and repos claiming to have it either license only their author's solution code or reproduce LeetCode text with no right to grant."
+        },
+        {
+          "alternative": "Clean permissive datasets (HumanEval, MBPP, Exercism problem-specifications)",
+          "why_it_lost": "They are general or entry-level programming katas rather than interview-algorithm curation, so adopting them would mean abandoning the curated set - useful as a format demo, not as the content pile."
+        },
+        {
+          "alternative": "Scraped-provenance datasets with permissive wrappers (APPS, CodeContests)",
+          "why_it_lost": "A permissive wrapper licence does not cure scraped provenance - a licensor can only license what they own, and these aggregate problems from Codeforces, AtCoder and others under separate terms."
+        },
+        {
+          "alternative": "Writing fresh original statements now, as a gate",
+          "why_it_lost": "Confirmed clean, since describing a known problem in original words with your own examples and generated test data produces a statement you own, but it loses as a gate purely on time - good later work for portfolio polish."
+        },
+        {
+          "alternative": "Scraping Blind 75 into the app",
+          "why_it_lost": "LeetCode's ToS forbids crawling, scraping and spidering outright, independent of the copyright analysis and regardless of whether content lands in a public or private repo - off the table permanently."
+        }
+      ],
+      "status": "decided_and_built",
+      "implemented_by": [
+        {
+          "kind": "file",
+          "path": ".gitignore",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "soundbite": "Problem statements go in the private content repo with the solutions, so the public repo ships the engine and the title list with zero protected prose.",
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 4,
+          "comment_id": 5182805341
+        }
+      ],
+      "confidence": "attested",
+      "interview_value": 5
+    },
+    {
+      "type": "decision",
+      "id": "d-issue-5-c5180987178",
+      "title": "Submission judging model",
+      "question": "What the app checks when a submission is run: pass/fail versus partial credit, what feedback appears on failure, whether time and memory limits are graded, whether approach and style are judged, and whether results are durable.",
+      "decision": "Correctness is strict pass/fail with no partial credit, showing the count of tests passed as information rather than a score. On failure the app reports only how many tests failed; revealing the failing case is an explicit request that is always available, recorded visibly, and never penalised, matching the hint ladder's shape. Each problem carries an authored target complexity; after tests pass the user states their solution's time and space complexity before the target is revealed, and the claim is verified by running the submission at growing input sizes and fitting the runtime curve, with only coarse conclusions and 'measured scaling is consistent with your claim' where measurement is inconclusive. There is no style feedback. Resource limits are reported, not graded, with a generous timeout to catch infinite loops. Every attempt is persisted, recording pass/fail, submissions taken, hint-ladder rungs climbed, reveals, the complexity self-assessment and what measurement said, and abandonment.",
+      "why": "Partial credit would invent a number that means nothing and soften the only honest signal available. Reasoning about your own code without an oracle is the skill a real interview tests, and always handing over the failing case trains the opposite reflex; penalising opt-in help only teaches the user to game themselves. Articulating complexity before seeing the target is itself the interview skill, and a self-report alone would congratulate an O(n^2) solution claiming to be O(n) - the single case most worth catching - while empirical scaling reliably catches polynomial blow-up, the error that actually costs interviews. Style nagging is noise and not what interviews reject people over. Grading on wall-clock would punish JVM warm-up and teach nothing. Thin attempt records would quietly cripple the scheduler, which takes this history as its input. The record also accepts real costs: every problem needs a large-input generator, timing on a normal machine is only usable for order-of-magnitude differences, and the runner needs a second execution mode.",
+      "rejected": [
+        {
+          "alternative": "Partial credit on correctness",
+          "why_it_lost": "It would invent a number that means nothing and soften the only honest signal available."
+        },
+        {
+          "alternative": "Always handing over the failing case on failure",
+          "why_it_lost": "It trains the opposite of reasoning about your own code without an oracle, which is why people grind hundreds of problems and still freeze."
+        },
+        {
+          "alternative": "Penalising use of the failing-case reveal",
+          "why_it_lost": "Penalties on a self-imposed system only teach the user to game themselves."
+        },
+        {
+          "alternative": "Accepting the complexity self-report on its own",
+          "why_it_lost": "Unverified, it would congratulate an O(n^2) solution claiming to be O(n), the single case most worth catching; measurement makes it a prediction scored against evidence rather than an honour-system checkbox."
+        },
+        {
+          "alternative": "Automated style feedback",
+          "why_it_lost": "It is noise and is not what interviews reject people over."
+        },
+        {
+          "alternative": "Grading time and memory limits",
+          "why_it_lost": "Grading on wall-clock would punish JVM warm-up and teach nothing."
+        }
+      ],
+      "status": "decided_and_built",
+      "implemented_by": [
+        {
+          "kind": "file",
+          "path": "frontend/src/Practice.test.tsx",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "frontend/src/Practice.tsx",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "soundbite": "A submission simply passes or fails, help like seeing the failing case is always available but always recorded, and after you pass the app makes you state your complexity and then checks it by measuring how your runtime actually scales.",
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 5,
+          "comment_id": 5180987178
+        }
+      ],
+      "confidence": "attested",
+      "interview_value": 5
+    },
+    {
+      "type": "decision",
+      "id": "d-issue-6-c5181413478",
+      "title": "Grader/Runner split with language-neutral test-case data",
+      "question": "What an exercise is independent of language and domain, what a test specification looks like, what contract a runner adapter satisfies, and how a submission flows from editor to verdict - without hardcoding Java assumptions or over-abstracting.",
+      "decision": "Split Grader from Runner: a Grader decides pass or fail, a Runner only executes, and both are polymorphic. Exercise is the authored unit with prompt, domain, tags, difficulty, hint ladder, response spec and grading spec; Form (Rep or Challenge) is an attribute, not a separate type; Response covers Choice, ShortAnswer, Program, Query and later Component; Attempt is the durable record and Submission one run within it. Test cases are language-neutral JSON data, with each language adapter supplying the harness and stub from a language-neutral signature; LeetCode's serialisation convention is adopted for trees and linked lists. Complexity measurement is optional metadata via an InputGenerator and ScalingProbe over the same Runner, and every row belonging to a person carries a user id.",
+      "why": "Keeping what the user produces apart from how it is judged stops 'exercise' from secretly meaning 'thing that runs code': a concept question has a Grader and no Runner, and warm-up reps exist in every domain because Form is an attribute. Test cases as data are authored once and run in every language ever added, which the record calls the difference between pluggable languages being real and being aspirational. The accepted constraint is that inputs and outputs must be JSON-representable, which most of Blind 75 satisfies; front end is the one place the JSON model does not extend, stated plainly, and the polymorphic Grader and Runner keep it from being foreclosed. Optional complexity metadata never pollutes the concepts layer because exercises without a generator are simply never checked.",
+      "rejected": [
+        {
+          "alternative": "The obvious design where Exercise means 'thing that runs code'",
+          "why_it_lost": "Concepts and warm-up reps become special cases bolted on the side."
+        },
+        {
+          "alternative": "Writing test cases as JUnit code",
+          "why_it_lost": "Every new language would require re-authoring the entire problem set, making pluggable languages aspirational rather than real."
+        },
+        {
+          "alternative": "Making Form (Rep vs Challenge) a separate type",
+          "why_it_lost": "As an attribute it decides only where an exercise appears in a session, which is what lets warm-up reps exist in every domain instead of being an algorithms-only gimmick."
+        },
+        {
+          "alternative": "Inventing a serialisation convention for trees and linked lists",
+          "why_it_lost": "LeetCode's existing convention is adopted since the captain will be reading their problem statements anyway."
+        }
+      ],
+      "status": "decided_and_built",
+      "implemented_by": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/grader/Grader.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/grader/GraderRegistry.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/runner/LocalJavaRunner.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/runner/Runner.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/runner/RunnerRegistry.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "soundbite": "A Grader decides pass or fail while a Runner only executes, and test cases are language-neutral data authored once, so non-code exercises and new languages both fit without redesign.",
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 6,
+          "comment_id": 5181413478
+        }
+      ],
+      "confidence": "attested",
+      "interview_value": 5
+    },
+    {
+      "type": "decision",
+      "id": "d-issue-8-c5182242970",
+      "title": "Practice scheduler: two schedulers over one shared record",
+      "question": "How the app chooses what the captain practises next: whether one spaced-repetition model can serve both reps and challenges, what signal feeds it, how cold-start and graduation behave, and how the standard intervals survive 40-minute problems.",
+      "decision": "Two schedulers over one shared record. Reps get a standard spaced-repetition due-date queue (SM-2, kept swappable). Challenges get a daily priority score - time since last attempt, how badly the last attempt went, pattern under-coverage - with a hard floor on minimum interval, and the highest scorer takes the slot. Both feed on a single 0-5 quality score collapsed from the per-attempt record (5 clean first-submission pass, 3 passed with hints or failing-case reveal, 1 failed or abandoned). Review debt comes first, new problems second, with a weekly cap on introductions. Nothing is ever deleted - a cleanly passed problem earns months-long intervals, which is retirement, not removal. An 'interview soon' mode re-weights the challenge priority score toward broad recency and drops the minimum-interval floor. Once SQL exercises exist, the daily rep set mixes domains in one queue, with domain as a coverage dimension.",
+      "why": "Spaced repetition assumes reviews are cheap, and that arithmetic breaks for a 30-40 minute challenge: twenty due challenges is a fortnight of work, and a scheduler that generates impossible debt gets ignored within a week. The scarcity is structural - roughly 90 challenge slots in three months against ~75 problems leaves barely room for one pass. Due dates ask what is owed; a priority score asks what is worth it, and only the second survives scarcity. Collapsing the rich per-attempt record into a 0-5 score maps directly onto SM-2 and keeps the scheduler from ossifying around today's exact recorded fields.",
+      "rejected": [
+        {
+          "alternative": "One spaced-repetition scheduler with due dates for both reps and challenges",
+          "why_it_lost": "Due dates on 30-40 minute challenges generate impossible review debt - twenty due challenges is a fortnight of work - and a scheduler that generates impossible debt gets ignored within a week."
+        },
+        {
+          "alternative": "FSRS for the rep queue",
+          "why_it_lost": "Better on paper, but the difference over SM-2 is marginal for one user and ~400 reps; the algorithm is kept swappable instead."
+        },
+        {
+          "alternative": "Feeding raw per-attempt fields into the algorithms",
+          "why_it_lost": "Collapsing to a single 0-5 quality score maps directly onto SM-2 and keeps the scheduler from ossifying around today's exact set of recorded fields."
+        },
+        {
+          "alternative": "Time taken as a scheduling signal",
+          "why_it_lost": "It is noise: interruptions, thinking before typing, and typing fast on a misunderstood problem all corrupt it, so it adds variance without carrying information."
+        },
+        {
+          "alternative": "Unbounded introduction of new problems",
+          "why_it_lost": "The classic Anki failure - review debt piles up and the user quits - and ~75 problems can be burned through in two months, arriving at breadth with no depth."
+        },
+        {
+          "alternative": "Deleting problems passed cleanly three times",
+          "why_it_lost": "A cleanly passed problem earns an interval of months; that is retirement, not removal."
+        },
+        {
+          "alternative": "A separate app or product for interview preparation",
+          "why_it_lost": "'Interview soon' is a different scoring function, not a different app - a re-weighting of the challenge priority score that is cheap to build."
+        },
+        {
+          "alternative": "Separate per-domain rep queues once SQL exercises exist",
+          "why_it_lost": "The scheduler operates over exercises, and domain is one more coverage dimension alongside topic, not a reason for a second queue."
+        }
+      ],
+      "status": "decided_and_built",
+      "implemented_by": [
+        {
+          "kind": "file",
+          "path": "AGENTS.md",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/attempt/AttemptRepository.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/challenge/ChallengeService.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/learned/LearnedCriterion.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/learned/LearnedProperties.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "soundbite": "Reps go through a normal spaced-repetition due-date queue, and each day the single challenge slot goes to whichever problem a priority score says is the best use of forty minutes.",
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 8,
+          "comment_id": 5182242970
+        }
+      ],
+      "confidence": "attested",
+      "interview_value": 5
+    },
+    {
+      "type": "decision",
+      "id": "d-issue-2-c5181222288",
+      "title": "Local Spring Boot web app on the existing banking-app stack",
+      "question": "Where does swe-prep run and what is it built with - the shape (local web app, desktop app, CLI/TUI), where state lives, and the stack - weighed primarily against time-to-first-keystroke and secondarily against being credible portfolio evidence.",
+      "decision": "A local web app on the stack of the captain's existing Team-7-Banking-Application repo: Spring Boot 3.4.3 on Java 21 with Spring Web, Data JPA, Actuator and Lombok; Postgres rather than SQLite; React + Vite for the front end; Monaco for the code editor. It runs locally and is reached over the existing tailnet, autostarted via a systemd user unit. Hosting is not built now but is protected by three decisions: Postgres from the start, the runner behind an interface, and a user id modeled from day one with exactly one seeded user and no authentication.",
+      "why": "The shape is decided by domain coverage, not friction: grading front-end practice means rendering and asserting in a browser, which a terminal app can never do and a desktop app could only fake by embedding a browser. The friction objection to a web app is answered by autostart on the machine's existing systemd user units, making time-to-first-keystroke one click with no cold start. Reusing the banking app's stack means no learning cost and no stack-selection risk, and a Spring Boot backend is itself portfolio evidence because entry-level Java postings overwhelmingly screen for it. Carrying a user id from the start makes adding auth later roughly a day's work, whereas omitting it makes it a refactor touching every table and query.",
+      "rejected": [
+        {
+          "alternative": "A CLI/TUI",
+          "why_it_lost": "It can never render and assert in a browser, so it cannot hold the front-end practice domain - even though it would genuinely have had the lowest friction for a heavy terminal user."
+        },
+        {
+          "alternative": "A desktop app",
+          "why_it_lost": "It would have to embed a browser to fake front-end grading, adding a second platform for no gain."
+        },
+        {
+          "alternative": "SQLite",
+          "why_it_lost": "Its only real advantage was needing no service, worth little against a Postgres already configured and in use behind JPA, and Postgres removes any database migration if the app is ever hosted."
+        },
+        {
+          "alternative": "Building authentication now",
+          "why_it_lost": "A login screen would sit between the captain and his daily drill, adding friction to the one thing whose purpose is removing it, and the expensive part of auth-later is schema ownership, which the seeded user id already solves."
+        },
+        {
+          "alternative": "Hosting now",
+          "why_it_lost": "The captain does not need hosted access today; Tailscale already reaches this machine from a phone, covering the real cases at zero cost, with the accepted limitation that the PC must be on."
+        }
+      ],
+      "status": "decided_and_built",
+      "implemented_by": [
+        {
+          "kind": "file",
+          "path": "backend/pom.xml",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "soundbite": "It runs as a local Spring Boot web app with a React front end, autostarted so opening it is one click, on the same stack as the banking app.",
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 2,
+          "comment_id": 5181222288
+        }
+      ],
+      "confidence": "attested",
+      "interview_value": 4
+    },
+    {
+      "type": "decision",
+      "id": "d-issue-3-c5180801286",
+      "title": "Two-tier daily session with a small required core",
+      "question": "What one daily session looks like: how long it takes, how many exercises it contains, what happens on a wrong answer or when stuck, what 'done for today' means, whether it is a fixed serving or open-ended, and whether partial completion counts - including how a 40-minute algorithm problem fits a short daily serving.",
+      "decision": "A session has three tiers and only the first is required: a warm-up of ~8 quick recall and recognition reps taking about 4 minutes, which alone completes the day; an optional main exercise of one full problem at roughly 30 minutes; and an open continuation with no cap. The warm-up alone earns the streak, and the session shape is domain-agnostic - nothing in it may assume the content is an algorithm problem.",
+      "why": "The minimum session has to be small enough that it is never skipped, because bad days are the only days that matter - good days were never the problem. The warm-up is not filler: pattern recognition is the highest-value-per-minute training for entry-level interviews, and the main exercises are how recognition converts into execution. Separating the streak (showing up) from the exercises (improving) keeps a single-player streak honest. Calibration with the captain confirmed the warm-up reads as genuinely valuable and four minutes is small enough for a bad day.",
+      "rejected": [
+        {
+          "alternative": "A session whose required minimum is a full ~40-minute problem",
+          "why_it_lost": "A 40-minute minimum is a session you skip when tired, and one skip usually ends the habit."
+        }
+      ],
+      "status": "decided_and_built",
+      "implemented_by": [
+        {
+          "kind": "file",
+          "path": "AGENTS.md",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "README.md",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/attempt/AttemptRepository.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/attempt/LessonReadService.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/authoring/AuthorContentCli.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "soundbite": "One day is done after a four-minute warm-up of about eight quick reps, and the full problem after it is optional.",
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 3,
+          "comment_id": 5180801286
+        }
+      ],
+      "confidence": "attested",
+      "interview_value": 4
+    },
+    {
+      "type": "decision",
+      "id": "d-issue-7-c5182411379",
+      "title": "Streak mechanics without invented currency",
+      "question": "What actually generates the pull to open the app tomorrow when the captain is the only user and the author, self-imposed points create no obligation, and Duolingo's social and loss-aversion levers are unavailable?",
+      "decision": "Invented currency is cut entirely - no XP, no hearts, no lives, no leagues. Instead: every solved problem is committed to a private repo with private contributions shown on the profile, so the contribution graph is a true external record; the app shows an honest readiness picture derived from existing attempt records instead of a score; a scheduled notification cue at a chosen time; the streak is displayed as a true count of days practised, not spendable and nothing denominated in it; and a missed day may be repaired by a double session the next day, capped at roughly two per month. Only real artifacts are ever committed, never synthetic practice markers.",
+      "why": "Any number the captain can print himself is a number he stops believing in around week two, and a fake number that goes up is actively misleading about whether he is getting hired. What the design can honestly do is remove every excuse, make the record true rather than invented, and make breaking it cost something real: the contribution graph is external, permanent, and cannot be faked; the readiness figures cost nothing to compute and are all true; habit research says the cue matters more than the motivation; and an all-or-nothing streak that breaks makes people quit outright rather than resume, so a capped repair preserves the asset across one bad evening.",
+      "rejected": [
+        {
+          "alternative": "Invented currency - XP, hearts, lives, leagues",
+          "why_it_lost": "The captain knows the points are invented and can edit the database; a self-printed number stops being believed and a rising fake number misleads about actual hiring readiness."
+        },
+        {
+          "alternative": "Publishing solutions to a public repo",
+          "why_it_lost": "The captain declined it; a public dump of Blind 75 solutions reads as interview grinding rather than building, and it would collide with the licensing question if statements ride along. Nothing that mattered is lost, since the witness function was never about anyone reading the solutions."
+        },
+        {
+          "alternative": "Financial stakes, Beeminder-style",
+          "why_it_lost": "They genuinely work, but wiring up money is real friction, and adding a punishment to an activity already being avoided is more likely to increase the avoidance. Available later if nothing else lands."
+        },
+        {
+          "alternative": "Telling one person - accountability to an actual human",
+          "why_it_lost": "It did not lose on merit; the record calls it the strongest effect in the habit literature, outperforming every in-app mechanic combined. It cannot be built, which is exactly why it is written down rather than adopted as a mechanic."
+        }
+      ],
+      "status": "decided_and_built",
+      "implemented_by": [
+        {
+          "kind": "file",
+          "path": "AGENTS.md",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "README.md",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/BackendApplication.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/attempt/AttemptOutcome.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/attempt/AttemptRepository.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "soundbite": "The streak sticks because the record is true - real commits a person cannot fake, honest readiness figures, a scheduled cue, and a capped repair for a bad evening - not because of any currency the app could invent.",
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 7,
+          "comment_id": 5182411379
+        }
+      ],
+      "confidence": "attested",
+      "interview_value": 4
+    },
+    {
+      "type": "decision",
+      "id": "d-issue-9-c5181855182",
+      "title": "Warm-up rep types, grading, and authoring",
+      "question": "What a warm-up rep concretely is in each domain: which rep types exist, how each is answered and graded, where reps come from, and how they relate to the main problem set.",
+      "decision": "Five rep types: pattern identification, complexity of a snippet, fill in the missing line, predict the output, and spot the bug (added to the original sketch). Multiple choice by default; predict-the-output is free text graded by exact match after normalisation. Every rep carries a verified explanation, shown immediately on a wrong answer, one keystroke away otherwise, with asking recorded as a behavioural signal. Nearly every rep is derived from a problem already being authored - five to six reps per problem, so ~75 problems yields roughly 400 LLM-drafted, human-verified reps - making the reference solution the seed and leaving one content pile, not two. Derived reps unlock as problems are attempted; ~75 pattern-ID reps work cold on day one.",
+      "why": "Reps train recognition and discrimination while Challenge exercises own production, a division of labour rather than a compromise. Multiple choice grades exactly where the answer set is finite, and the distractors are the entire value. Deriving reps from the problem set dissolves the second content pile, which is where the project most plausibly dies, and eight reps a day against a ~400-rep pool is comfortably sufficient since repetition is the point under spaced repetition. Spot-the-bug is code review, which is genuinely the job, and coheres with the judging decision to make the captain reason about code without an oracle. Gating derived reps behind attempted problems is not a cold-start problem because pattern identification, the highest-value type, works cold.",
+      "rejected": [
+        {
+          "alternative": "Executing a typed line to grade fill-in-the-blank",
+          "why_it_lost": "A Java compile takes a second or two and eight of those destroys the four-minute session; discrimination is the target anyway."
+        },
+        {
+          "alternative": "Free-text grading for complexity reps",
+          "why_it_lost": "The answer set is finite, so free text would only mean normalising O(n^2) against O(n squared) for no benefit."
+        },
+        {
+          "alternative": "Showing the explanation by default on a correct answer",
+          "why_it_lost": "Re-reading something already known is low-value compared to retrieval, and eight explanations would roughly double the session, attacking the property the whole design protects."
+        },
+        {
+          "alternative": "Buying a confidence signal by interrupting with a flashcard-style 'how hard was that?' prompt",
+          "why_it_lost": "Users learn to click through it; the same signal comes from recording whether the captain asked for the explanation, behaviour that would happen anyway."
+        },
+        {
+          "alternative": "Authoring reps as a second content pile the size of the problem set",
+          "why_it_lost": "Nearly every rep derives from a problem already being authored, so the pile mostly dissolves into the existing authoring unit."
+        }
+      ],
+      "status": "decided_and_built",
+      "implemented_by": [
+        {
+          "kind": "file",
+          "path": "AGENTS.md",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "README.md",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/authoring/AuthorContentCli.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/authoring/MutationCatalog.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        },
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/authoring/RepDeriver.java",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "soundbite": "A warm-up rep is one of five recognition drills - pattern ID, complexity, fill-in-the-blank, predict-the-output, spot-the-bug - graded by multiple choice except predict-the-output, and nearly all of them derive from problems already in the set.",
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 9,
+          "comment_id": 5181855182
+        }
+      ],
+      "confidence": "attested",
+      "interview_value": 4
+    },
+    {
+      "type": "mechanism",
+      "id": "m-ci-guard-ci-yml-test-assert-no-private-content-is-committed",
+      "title": "Assert no private content is committed",
+      "what": ".github/workflows/ci.yml carries a step that fails the build on a policy breach rather than on a failing test.",
+      "why_interesting": "Enforcing a rule in CI is a decision to stop trusting discipline. The rule is what someone was afraid of.",
+      "enforcement": "test-level",
+      "gotchas": [],
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".github/workflows/ci.yml",
+          "line_start": 16,
+          "line_end": 16,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 4,
+      "probe_id": "ci-policy-guards"
+    },
+    {
+      "type": "mechanism",
+      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-grading-grading",
+      "title": "Grading is sealed over 4 permitted types",
+      "what": "Grading permits exactly Grading.TestCases, Grading.AnswerKey, Grading.SelfCheck, Grading.ResultSet. The compiler rejects any implementation outside that set.",
+      "why_interesting": "A sealed hierarchy is a closed enumeration the type system enforces. It is also one of the few things that can witness an absence claim, because the set is provably complete.",
+      "enforcement": "type-level",
+      "gotchas": [],
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/exercise/Grading.java",
+          "line_start": 16,
+          "line_end": 88,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 4,
+      "probe_id": "sealed-hierarchies"
+    },
+    {
+      "type": "mechanism",
+      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-response-response",
+      "title": "Response is sealed over 4 permitted types",
+      "what": "Response permits exactly Response.Code, Response.Choice, Response.FreeText, Response.Query. The compiler rejects any implementation outside that set.",
+      "why_interesting": "A sealed hierarchy is a closed enumeration the type system enforces. It is also one of the few things that can witness an absence claim, because the set is provably complete.",
+      "enforcement": "type-level",
+      "gotchas": [],
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/exercise/Response.java",
+          "line_start": 16,
+          "line_end": 71,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 4,
+      "probe_id": "sealed-hierarchies"
+    },
+    {
+      "type": "edge",
+      "kind": "divergence",
+      "id": "e-divergence-docker",
+      "title": "The record names docker; the build file does not declare it",
+      "statement": "README.md refers to docker, but no build manifest in the tree declares a dependency on it.",
+      "why_it_matters": "The stack a project says it uses and the stack it declares drift apart quietly, and the drift is what a reviewer finds first.",
+      "how_to_say_it": "The README still mentions docker; the build no longer depends on it.",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "README.md",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 3,
+      "probe_id": "dependency-divergence"
+    },
+    {
+      "type": "fact",
+      "id": "f-scale-history",
+      "title": "How long it took",
+      "label": "commits, 7 calendar days",
+      "value": "47",
+      "evidence": [
+        {
+          "kind": "command",
+          "cmd": "git rev-list --count 086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "output_excerpt": "47 commits, over 7 calendar days (2026-08-04 to 2026-08-10)"
+        }
+      ],
+      "source": "command",
+      "confidence": "verified",
+      "interview_value": 3
+    },
+    {
+      "type": "fact",
+      "id": "f-scale-lines",
+      "title": "How much code there is",
+      "label": "lines of production source",
+      "value": "16,488",
+      "evidence": [
+        {
+          "kind": "command",
+          "cmd": "git ls-tree -r --name-only 086c99998ba6eec1353988cd88989cbe836fe6a0 | xargs -I{} git cat-file -p 086c99998ba6eec1353988cd88989cbe836fe6a0:{} | wc -l",
+          "output_excerpt": "16,488 lines across 199 production source files"
+        }
+      ],
+      "source": "command",
+      "confidence": "verified",
+      "interview_value": 3
+    },
+    {
+      "type": "fact",
+      "id": "f-scale-tests",
+      "title": "How much of it is tested",
+      "label": "test files",
+      "value": "71",
+      "evidence": [
+        {
+          "kind": "command",
+          "cmd": "git ls-tree -r --name-only 086c99998ba6eec1353988cd88989cbe836fe6a0",
+          "output_excerpt": "71 test files alongside 199 production files"
+        }
+      ],
+      "source": "command",
+      "confidence": "verified",
+      "interview_value": 3
+    },
+    {
+      "type": "mechanism",
+      "id": "m-refuses-backend-src-main-java-com-sweprep-backend-grader-selfcheckgrader-selfcheckgrader-grade-exercise-string",
+      "title": "SelfCheckGrader.grade refuses where its siblings return",
+      "what": "grade throws outright here, while 3 other implementations return a value.",
+      "why_interesting": "The asymmetry is the design: someone decided this case must fail loudly rather than return something plausible. That choice is invisible unless you compare siblings.",
+      "enforcement": "convention",
+      "gotchas": [],
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/grader/SelfCheckGrader.java",
+          "line_start": 41,
+          "line_end": 47,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 3,
+      "probe_id": "throw-where-siblings-return"
+    },
+    {
+      "type": "mechanism",
+      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-authoring-referenceexecutor-referenceexecutor-runresult",
+      "title": "ReferenceExecutor.RunResult is sealed over 3 permitted types",
+      "what": "ReferenceExecutor.RunResult permits exactly RunResult.CompileError, RunResult.TimedOut, RunResult.Completed. The compiler rejects any implementation outside that set.",
+      "why_interesting": "A sealed hierarchy is a closed enumeration the type system enforces. It is also one of the few things that can witness an absence claim, because the set is provably complete.",
+      "enforcement": "type-level",
+      "gotchas": [],
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/authoring/ReferenceExecutor.java",
+          "line_start": 143,
+          "line_end": 175,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 3,
+      "probe_id": "sealed-hierarchies"
+    }
+  ],
+  "record": {
+    "sources": [
+      {
+        "source": "GitHub issue resolution comments",
+        "what_existed": "9 of 48 issues carry a resolution-shaped comment",
+        "fetched": "in full via gh api .../issues/{n}/comments, count-verified against the issue's own comment count",
+        "admissible_as": "attested"
+      },
+      {
+        "source": "Issue bodies",
+        "what_existed": "48 non-PR issues",
+        "fetched": "in full via gh api, never a convenience view",
+        "admissible_as": "attested (the question, not the answer)"
+      },
+      {
+        "source": "Code at the pinned SHA",
+        "what_existed": "the subject tree",
+        "fetched": "read locally with git cat-file at the pinned commit",
+        "admissible_as": "verified"
+      },
+      {
+        "source": "AGENTS.md, CLAUDE.md",
+        "what_existed": "project memory, 85.8 KB",
+        "fetched": "indexed for navigation only",
+        "admissible_as": "not admissible - navigation, never evidence"
+      }
+    ],
+    "density_signals": {
+      "closed_issues_with_resolution_comment": {
+        "value": 9,
+        "of": 42
+      },
+      "comment_to_body_ratio": {
+        "value": 1.05,
+        "note": "mean over 33 closed issues with both a body and comments"
+      },
+      "source_files_citing_issues": {
+        "value": 168,
+        "of": 199
+      },
+      "adr_directory": {
+        "value": false,
+        "note": "no ADR or decision-record directory in the tree"
+      }
+    },
+    "section_presence": {
+      "synopsis": "present",
+      "facts": "present",
+      "shape": "present",
+      "flows": "absent",
+      "decisions": "present",
+      "mechanisms": "present",
+      "edges": "present"
+    },
+    "confidence_ledger": {
+      "verified": 10,
+      "attested": 8,
+      "absent_cut": 0
+    },
+    "absent_cuts": [],
+    "deletions": [
+      {
+        "id": "b-asymmetry-backend-src-test-java-com-sweprep-backend-attempt-sqldomainpersistencetest-sqldomainpersistencetest-attemptrepository",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "b-asymmetry-backend-src-test-java-com-sweprep-backend-attempt-sqldomainpersistencetest-sqldomainpersistencetest-currentuser",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "b-asymmetry-backend-src-test-java-com-sweprep-backend-content-answertellcheckertest-answertellcheckertest-string",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unbuilt-43",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unbuilt-44",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unbuilt-64",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unbuilt-72",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unbuilt-73",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-1",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-12",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-13",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-14",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-15",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-16",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-17",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-18",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-19",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-20",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-21",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-22",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-24",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-25",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-26",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-31",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-34",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-37",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-38",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-39",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-40",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-41",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-42",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-45",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-46",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-51",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-56",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-59",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-60",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-65",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-67",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unresolved-69",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "f-scale-files",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "m-sealed-backend-src-main-java-com-sweprep-backend-complexity-measurementoutcome-measurementoutcome",
+        "score": 3,
+        "reason": "section budget: mechanisms capped at 5 by the interview profile; ranked 6",
+        "kind": "budget",
+        "section": "mechanisms",
+        "unit": "node"
+      },
+      {
+        "id": "m-sealed-backend-src-main-java-com-sweprep-backend-complexity-scalingmeasurer-scalingmeasurer-sizesample",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-comparison-comparison",
+        "score": 3,
+        "reason": "section budget: mechanisms capped at 5 by the interview profile; ranked 7",
+        "kind": "budget",
+        "section": "mechanisms",
+        "unit": "node"
+      },
+      {
+        "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-content-content",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-inputgenerator-inputgenerator-argument",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "m-sql-predicate-a-user-id-userid-da57b633",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "m-sql-predicate-id-id-6702de03",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "m-sql-predicate-outcome-read-6f889c17",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "m-sql-predicate-user-id-userid-532cb858",
+        "score": 3,
+        "reason": "section budget: mechanisms capped at 5 by the interview profile; ranked 8",
+        "kind": "budget",
+        "section": "mechanisms",
+        "unit": "node"
+      }
+    ],
+    "budgets": {
+      "interview_value_floor": 3,
+      "mechanisms": 5,
+      "interviewer_questions": 10
+    },
+    "private_source": {
+      "declared": true,
+      "repo": "KyleNaluan/swe-prep-content",
+      "readable_at_harvest": false,
+      "note": "declared in the subject's README as a separate private repository; harvest does not read the private side, so no content from it can reach the artifact"
+    },
+    "audit": {
+      "status": "passed_with_warnings",
+      "content_hash": "sha256:4d7bc39a2db572b12a14f43e38dd0ab72aa77c268f09fb49803601a0eca5be84",
+      "audited_at": "2026-08-12T06:22:41.830Z",
+      "checks": [
+        {
+          "id": "S1",
+          "name": "Zero external resource references",
+          "class": "gate",
+          "outcome": "passed",
+          "count": 0
+        },
+        {
+          "id": "S2",
+          "name": "Exactly one network request when loaded",
+          "class": "gate",
+          "outcome": "passed",
+          "count": 1
+        },
+        {
+          "id": "S3",
+          "name": "Console clean on load",
+          "class": "gate",
+          "outcome": "passed",
+          "count": 0
+        },
+        {
+          "id": "S4",
+          "name": "Artifact is one file, no siblings required",
+          "class": "gate",
+          "outcome": "passed",
+          "count": 7
+        },
+        {
+          "id": "L1",
+          "name": "Every file evidence path exists at the pinned SHA",
+          "class": "gate",
+          "outcome": "passed",
+          "count": 36
+        },
+        {
+          "id": "L2",
+          "name": "Every line range is within the file at that SHA",
+          "class": "gate",
+          "outcome": "passed",
+          "count": 5
+        },
+        {
+          "id": "L3",
+          "name": "Every issue and comment citation resolves",
+          "class": "gate",
+          "outcome": "passed",
+          "count": 9
+        },
+        {
+          "id": "L4",
+          "name": "Every internal anchor resolves to an element",
+          "class": "gate",
+          "outcome": "passed",
+          "count": 28
+        },
+        {
+          "id": "L5",
+          "name": "Every rendered evidence link is pinned to the run SHA",
+          "class": "gate",
+          "outcome": "passed",
+          "count": 64
+        },
+        {
+          "id": "G1",
+          "name": "No absent-confidence node appears in the artifact",
+          "class": "gate",
+          "outcome": "passed",
+          "count": 0
+        },
+        {
+          "id": "G2",
+          "name": "No deleted node is resurrected",
+          "class": "gate",
+          "outcome": "passed",
+          "count": 50
+        },
+        {
+          "id": "G3",
+          "name": "Displayed rank, value and rubric match atlas.json",
+          "class": "gate",
+          "outcome": "passed",
+          "count": 7
+        },
+        {
+          "id": "E1",
+          "name": "Every prose passage traces to a graph field or the chrome inventory",
+          "class": "gate",
+          "outcome": "passed",
+          "count": 331
+        },
+        {
+          "id": "E2",
+          "name": "Every present-tense behavioural node carries file or command evidence",
+          "class": "gate",
+          "outcome": "passed",
+          "count": 7
+        },
+        {
+          "id": "P1",
+          "name": "No declared-private source content appears in the artifact",
+          "class": "gate",
+          "outcome": "not_applicable",
+          "reason": "swe-prep declares a private source (KyleNaluan/swe-prep-content) but nothing private was readable at harvest, so no leak check was performed"
+        },
+        {
+          "id": "V1",
+          "name": "Page does not scroll horizontally at declared viewports",
+          "class": "warning",
+          "outcome": "passed",
+          "count": 4
+        },
+        {
+          "id": "V2",
+          "name": "No text clipped by a non-scrollable ancestor",
+          "class": "warning",
+          "outcome": "passed",
+          "count": 4
+        },
+        {
+          "id": "V3",
+          "name": "All text meets WCAG AA contrast",
+          "class": "warning",
+          "outcome": "passed",
+          "count": 4
+        },
+        {
+          "id": "M1",
+          "name": "Each node's prose is supported by its own evidence",
+          "class": "warning",
+          "outcome": "failed",
+          "count": 18,
+          "findings": [
+            "d-issue-10-c5182571856-divergence: The sentence 'Checked against the tree: ... the tree does not carry it' claims the whole SQL engine, fixtures, and grader are absent, but the only tree evidence is one negative grep for 'order_items', which cannot show the engine or grading code is missing.",
+            "m-ci-guard-ci-yml-test-assert-no-private-content-is-committed: The 'what' sentence claims the step fails the build on a policy breach, but the cited line shows only the step's name, not its command or failure behavior.",
+            "e-divergence-docker: The statement's clause 'no build manifest in the tree declares a dependency on it' is an absence claim about build manifests, but the only cited evidence is README.md, which shows only that docker is mentioned.",
+            "f-scale-lines: The label/value claim '16,488 lines of production source' exceeds the evidence: the command counts every tracked file at the commit with no production filter, and wc -l emits only a bare total, so the 'across 199 production source files' excerpt cannot be that command's output.",
+            "m-refuses-backend-src-main-java-com-sweprep-backend-grader-selfcheckgrader-selfcheckgrader-grade-exercise-string: The 'what' sentence claims '3 other implementations return a value', but the cited evidence shows only SelfCheckGrader throwing - no sibling implementations are in evidence."
+          ]
+        },
+        {
+          "id": "M2",
+          "name": "Each absence claim's citation actually witnesses absence",
+          "class": "warning",
+          "outcome": "failed",
+          "count": 10,
+          "findings": [
+            "d-issue-7-c5182411379: The sentence 'no XP, no hearts, no lives, no leagues' is witnessed by nothing cited: the issue comment attests the decision to cut currency, and the files show the positive mechanics (SolutionCommitProperties, StreakProperties, ReadinessProperties, attempt records) exist, but no negative search result is cited and neither closed enumeration covers the right set - AttemptOutcome exhausts sitting outcomes, not currencies, and BackendApplication's properties list is complete only over configuration classes, which a currency feature would not need.",
+            "e-divergence-docker: The absence claim 'no build manifest in the tree declares a dependency on it' cites only README.md, which shows the mention but contains no search over build manifests and no closed enumeration establishing that absence."
+          ]
+        }
+      ],
+      "viewports": [
+        390,
+        768,
+        1280,
+        1440
+      ]
+    }
+  }
+}

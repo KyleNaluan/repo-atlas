@@ -111,6 +111,59 @@ const treeHas = (
   return { found: where.length > 0, where, undecidable };
 };
 
+/** Single-quote for a shell, so a pattern with spaces or metacharacters survives. */
+const quoted = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
+
+/**
+ * What the gate read when it found nothing, cited as evidence.
+ *
+ * A divergence edge born from an overturned PRESENT claim states a fact about
+ * the tree - the thing the record describes is not there - while having no file
+ * to point at, because not finding it is the whole finding. Audit check E2 is
+ * right to refuse that: a node asserting current behaviour on the strength of a
+ * ticket is the failure this engine exists to prevent, and a divergence edge is
+ * the node type most likely to be believed. What actually established it is a
+ * NEGATIVE SEARCH RESULT, which #8's M2 already recognises as witnessing absence.
+ *
+ * The commands below are faithful rather than decorative. The gate searches
+ * through its own tree reader, not a subprocess, so each `cmd` is written as the
+ * closest git invocation that performs the same search at the same SHA and can
+ * actually be run to check the claim. Where git cannot express what the gate did
+ * - a declared-dependency claim is parsed from manifests, and #7's resolution is
+ * explicit that a grep is NOT that rule - no command is invented; the manifests
+ * the gate read are cited as files instead, which a reader can open and check.
+ */
+const negativeEvidence = (ctx: ProbeContext, claim: ExistenceClaim): Evidence[] => {
+  const out: Evidence[] = [];
+  const paths = claim.paths ?? [];
+  if (paths.length > 0) {
+    out.push({
+      kind: "command",
+      cmd: `git ls-tree -r --name-only ${ctx.sha} -- ${paths.map(quoted).join(" ")}`,
+      output_excerpt: "(no output: none of these paths exist at this commit)",
+    });
+  }
+  if (claim.pattern !== undefined) {
+    const include = claim.pattern.include;
+    out.push({
+      kind: "command",
+      cmd: `git grep -I -i -E ${quoted(claim.pattern.regex)} ${ctx.sha}`,
+      output_excerpt: "(no output: no file at this commit matches)",
+      ...(include === undefined
+        ? {}
+        : { note: `the gate searched only files whose path matches /${include}/` }),
+    });
+  }
+  if (claim.declares !== undefined) {
+    // No invented command. The rule is a manifest parse, and #7's resolution is
+    // that a substring grep is a different question with a different answer.
+    for (const m of declaredManifests(ctx)) {
+      if (m.recognized) out.push({ kind: "file", path: m.path, sha: ctx.sha });
+    }
+  }
+  return out;
+};
+
 /**
  * A candidate the tree contradicted becomes a divergence edge.
  *
@@ -118,12 +171,19 @@ const treeHas = (
  * is not noise to be filtered - it is the thing an interviewer asks about, and
  * #7 requires the confirmed contradiction to survive as its own node.
  */
-const toDivergence = (candidate: Candidate, claim: ExistenceClaim, where: string[]): EdgeNode => {
-  const evidence: Evidence[] = where.slice(0, 3).map((path) => ({
-    kind: "file" as const,
-    path,
-    sha: "",
-  }));
+const toDivergence = (
+  ctx: ProbeContext,
+  candidate: Candidate,
+  claim: ExistenceClaim,
+  where: string[],
+): EdgeNode => {
+  // An overturned ABSENT claim found the thing, so the files it was found in are
+  // the evidence. An overturned PRESENT claim found nothing, so what established
+  // it is the search that came back empty.
+  const evidence: Evidence[] =
+    where.length > 0
+      ? where.slice(0, 3).map((path) => ({ kind: "file" as const, path, sha: "" }))
+      : negativeEvidence(ctx, claim);
   const said =
     claim.expect === "absent"
       ? "the record implies this is not built, and the tree says otherwise"
@@ -242,7 +302,7 @@ export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCan
       confirmedAbsent = true;
     }
     if (!agrees) {
-      const divergence = toDivergence(candidate, claim, where);
+      const divergence = toDivergence(ctx, candidate, claim, where);
       const evidence = divergence.evidence.map((e) =>
         e.kind === "file" && e.sha === "" ? { ...e, sha: ctx.sha } : e,
       );

@@ -17,6 +17,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { firstJsonObject } from "../../src/model/ask.js";
 
 const SRC = fileURLToPath(new URL("../../src", import.meta.url));
 
@@ -59,5 +60,35 @@ describe("the model SDK is reached through one function", () => {
     const ask = readFileSync(join(SRC, "model/ask.ts"), "utf8");
     expect(ask).toMatch(/tools:\s*\[\]/);
     expect(ask).toMatch(/allowedTools:\s*\[\]/);
+  });
+});
+
+describe("finding the JSON in a model's reply", () => {
+  it("takes the first complete object, not everything up to the last brace", () => {
+    // The greedy slice all three call sites used works until a reply carries
+    // anything brace-bearing after the object. A real scorer run died on exactly
+    // this, having returned the scores that were asked for.
+    expect(firstJsonObject('{"a":1}\n\nHope that helps! {see above}')).toBe('{"a":1}');
+    expect(firstJsonObject('{"a":1}{"b":2}')).toBe('{"a":1}');
+  });
+
+  it("tolerates a fence or a preamble", () => {
+    expect(firstJsonObject('Here you go:\n```json\n{"a":1}\n```')).toBe('{"a":1}');
+  });
+
+  it("keeps nested objects whole", () => {
+    expect(firstJsonObject('{"a":{"b":{"c":1}},"d":2} trailing')).toBe('{"a":{"b":{"c":1}},"d":2}');
+  });
+
+  it("does not count a brace inside a string as structure", () => {
+    // A regex or a code snippet in a field is data. Counting its braces would end
+    // the object in the wrong place and truncate a valid reply.
+    expect(firstJsonObject('{"regex":"\\\\{[0-9]+\\\\}","n":1} after')).toBe('{"regex":"\\\\{[0-9]+\\\\}","n":1}');
+    expect(firstJsonObject('{"s":"a } b"}')).toBe('{"s":"a } b"}');
+  });
+
+  it("returns null when there is no object at all", () => {
+    expect(firstJsonObject("I could not do that.")).toBeNull();
+    expect(firstJsonObject('{"unterminated": 1')).toBeNull();
   });
 });

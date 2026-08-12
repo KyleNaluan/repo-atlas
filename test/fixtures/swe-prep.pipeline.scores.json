@@ -1,0 +1,349 @@
+{
+  "profile": "interview",
+  "rubric_version": "v1",
+  "rubric_sha256": "b75cd3243c94cd51",
+  "generated_at": "2026-08-12T06:14:31.329Z",
+  "model": "claude-fable-5",
+  "scores": [
+    {
+      "id": "d-issue-2-c5181222288",
+      "score": 4,
+      "because": "decision with recorded rejected alternatives on the stack/shape seam"
+    },
+    {
+      "id": "d-issue-3-c5180801286",
+      "score": 4,
+      "because": "decision with a recorded rejected alternative on the core session seam"
+    },
+    {
+      "id": "d-issue-4-c5182805341",
+      "score": 5,
+      "because": "decision with rejected alternatives plus an honest legal edge worth going first on"
+    },
+    {
+      "id": "d-issue-5-c5180987178",
+      "score": 5,
+      "because": "decision with rejected alternatives and a stated tradeoff on the judging seam"
+    },
+    {
+      "id": "d-issue-6-c5181413478",
+      "score": 5,
+      "because": "decision with rejected alternatives on the central architectural seam"
+    },
+    {
+      "id": "d-issue-7-c5182411379",
+      "score": 4,
+      "because": "decision with rejected alternatives, including one honestly recorded as unbuildable"
+    },
+    {
+      "id": "d-issue-8-c5182242970",
+      "score": 5,
+      "because": "decision with rejected alternatives on a seam an interviewer will probe"
+    },
+    {
+      "id": "d-issue-9-c5181855182",
+      "score": 4,
+      "because": "decision with rejected alternatives, though the seam is content authoring"
+    },
+    {
+      "id": "d-issue-10-c5182571856-divergence",
+      "score": 5,
+      "because": "verified record-vs-build divergence, the go-first honest edge"
+    },
+    {
+      "id": "e-unbuilt-43",
+      "score": 2,
+      "because": "record-tree gap, but interest is content backlog not engineering"
+    },
+    {
+      "id": "e-unbuilt-44",
+      "score": 2,
+      "because": "record-tree gap, but interest is content backlog not engineering"
+    },
+    {
+      "id": "e-unbuilt-64",
+      "score": 2,
+      "because": "record-tree gap, but domain-side and one of several alike"
+    },
+    {
+      "id": "e-unbuilt-72",
+      "score": 1,
+      "because": "open-ticket gap whose interest is in the content domain"
+    },
+    {
+      "id": "e-unbuilt-73",
+      "score": 1,
+      "because": "open-ticket gap whose interest is in the content domain"
+    },
+    {
+      "id": "e-divergence-docker",
+      "score": 3,
+      "because": "verified divergence, honest edge though the drift is minor"
+    },
+    {
+      "id": "m-ci-guard-ci-yml-test-assert-no-private-content-is-committed",
+      "score": 4,
+      "because": "enforcement mechanism guarding the public/private decision, held in CI not discipline"
+    },
+    {
+      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-authoring-referenceexecutor-referenceexecutor-runresult",
+      "score": 3,
+      "because": "type-level enforcement, but one of many similar sealed sets"
+    },
+    {
+      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-complexity-measurementoutcome-measurementoutcome",
+      "score": 3,
+      "because": "type-level enforcement witnessing the inconclusive-measurement case"
+    },
+    {
+      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-complexity-scalingmeasurer-scalingmeasurer-sizesample",
+      "score": 2,
+      "because": "type-level but internal detail among many sealed siblings"
+    },
+    {
+      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-comparison-comparison",
+      "score": 3,
+      "because": "type-level enforcement on the grading comparison seam"
+    },
+    {
+      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-content-content",
+      "score": 2,
+      "because": "type-level but a two-member split a reader would infer"
+    },
+    {
+      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-grading-grading",
+      "score": 4,
+      "because": "type system enforcing the core Grading enumeration an interviewer will probe"
+    },
+    {
+      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-inputgenerator-inputgenerator-argument",
+      "score": 2,
+      "because": "type-level but a minor internal enumeration"
+    },
+    {
+      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-response-response",
+      "score": 4,
+      "because": "type system closing the Response set at the design's central seam"
+    },
+    {
+      "id": "m-refuses-backend-src-main-java-com-sweprep-backend-grader-selfcheckgrader-selfcheckgrader-grade-exercise-string",
+      "score": 3,
+      "because": "genuinely interesting asymmetry, but enforced only by convention"
+    },
+    {
+      "id": "b-asymmetry-backend-src-test-java-com-sweprep-backend-attempt-sqldomainpersistencetest-sqldomainpersistencetest-attemptrepository",
+      "score": 2,
+      "because": "boundary that matters but inferable from the tree"
+    },
+    {
+      "id": "b-asymmetry-backend-src-test-java-com-sweprep-backend-attempt-sqldomainpersistencetest-sqldomainpersistencetest-currentuser",
+      "score": 2,
+      "because": "boundary that matters but duplicates the sibling finding"
+    },
+    {
+      "id": "b-asymmetry-backend-src-test-java-com-sweprep-backend-content-answertellcheckertest-answertellcheckertest-string",
+      "score": 1,
+      "because": "absence of a String field reads as noise, not a boundary"
+    },
+    {
+      "id": "m-sql-predicate-id-id-6702de03",
+      "score": 1,
+      "because": "id lookup predicate is what a reader assumes from the stack"
+    },
+    {
+      "id": "m-sql-predicate-user-id-userid-532cb858",
+      "score": 3,
+      "because": "query-level user-scoping invariant, though repetition is still discipline"
+    },
+    {
+      "id": "m-sql-predicate-outcome-read-6f889c17",
+      "score": 2,
+      "because": "query-level invariant of narrow scope"
+    },
+    {
+      "id": "m-sql-predicate-a-user-id-userid-da57b633",
+      "score": 2,
+      "because": "restates the user-scoping invariant already surfaced"
+    },
+    {
+      "id": "e-unresolved-1",
+      "score": 1,
+      "because": "coverage gap is a footnote beside this subject's rich record"
+    },
+    {
+      "id": "e-unresolved-12",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-13",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-14",
+      "score": 2,
+      "because": "heavily cited gap, still a footnote where the record is rich"
+    },
+    {
+      "id": "e-unresolved-15",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-16",
+      "score": 2,
+      "because": "46 citations makes this the largest located gap, footnote-weighted"
+    },
+    {
+      "id": "e-unresolved-17",
+      "score": 2,
+      "because": "46 citations makes this a large located gap, footnote-weighted"
+    },
+    {
+      "id": "e-unresolved-18",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-19",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-20",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-21",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-22",
+      "score": 2,
+      "because": "widely cited gap, still a footnote beside the decisions"
+    },
+    {
+      "id": "e-unresolved-24",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-25",
+      "score": 2,
+      "because": "widely cited gap, still a footnote beside the decisions"
+    },
+    {
+      "id": "e-unresolved-26",
+      "score": 2,
+      "because": "widely cited gap, still a footnote beside the decisions"
+    },
+    {
+      "id": "e-unresolved-31",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-34",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-37",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-38",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-39",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-40",
+      "score": 2,
+      "because": "widely cited gap, still a footnote beside the decisions"
+    },
+    {
+      "id": "e-unresolved-41",
+      "score": 2,
+      "because": "38 citations makes this a large located gap, footnote-weighted"
+    },
+    {
+      "id": "e-unresolved-42",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-45",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-46",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-51",
+      "score": 2,
+      "because": "34 citations makes this a large located gap, footnote-weighted"
+    },
+    {
+      "id": "e-unresolved-56",
+      "score": 2,
+      "because": "reference to an issue that was never harvested, a sharper gap"
+    },
+    {
+      "id": "e-unresolved-59",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-60",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-65",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-67",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "e-unresolved-69",
+      "score": 1,
+      "because": "footnote-grade gap on a decision-rich record"
+    },
+    {
+      "id": "f-scale-lines",
+      "score": 3,
+      "because": "orientation figure, measured and load-bearing for everything after"
+    },
+    {
+      "id": "f-scale-files",
+      "score": 2,
+      "because": "closer to inventory, removing it changes little for the reader"
+    },
+    {
+      "id": "f-scale-history",
+      "score": 3,
+      "because": "orientation figure that changes how every other finding is read"
+    },
+    {
+      "id": "f-scale-tests",
+      "score": 3,
+      "because": "orientation figure on how much of the code is tested"
+    }
+  ]
+}

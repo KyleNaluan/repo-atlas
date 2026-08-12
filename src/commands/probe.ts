@@ -9,6 +9,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { PROBES, runProbes, treeContext } from "../probes/registry.js";
 import { gate } from "../gate/gate.js";
+import { candidatesFrom, writePromptText, type WrittenFile } from "../write/write.js";
 import type { Candidate, ProbeOutcome } from "../probes/types.js";
 import type { Harvest } from "../harvest/types.js";
 
@@ -27,7 +28,7 @@ emits candidate nodes. Probes are pure deterministic functions: no network, no
 model calls. A probe that finds nothing emits nothing; a probe that does not
 apply to this subject's toolchain says so by name rather than passing silently.`;
 
-const GATE_USAGE = `usage: repo-atlas gate --candidates <candidates.json> --harvest <harvest.json> --clone <path> [-o <gated.json>]
+const GATE_USAGE = `usage: repo-atlas gate --candidates <candidates.json> --harvest <harvest.json> --clone <path> [--written <written.json>] [-o <gated.json>]
 
 Resolves each candidate's claims against the tree at the pinned SHA. The gate
 overturns the record in BOTH directions: a stated decision is not evidence of
@@ -118,9 +119,27 @@ export const gateCommand = async (argv: string[]): Promise<number> => {
   }
   const ctx = treeContext(harvest, resolve(clone));
 
-  const candidates: Candidate[] = file.outcomes.flatMap((o) =>
+  const probed: Candidate[] = file.outcomes.flatMap((o) =>
     o.status === "ran" ? o.candidates : [],
   );
+
+  // The write stage's decision candidates are gated exactly like a probe's (#2's
+  // stage order, and the W1 ruling). They arrive by their own path because write
+  // calls a model and probes may not, but from here on nothing distinguishes
+  // them: a decision read from a record is confirmed against the tree or it is
+  // not, on the same terms as a mechanism read from a parse.
+  const writtenPath = flag(argv, "--written");
+  const written: Candidate[] =
+    writtenPath === undefined
+      ? []
+      : candidatesFrom(
+          JSON.parse(readFileSync(writtenPath, "utf8")) as WrittenFile,
+          harvest.issues,
+          writePromptText(),
+          harvest.subject.sha,
+        );
+
+  const candidates = [...written, ...probed];
   const gated = gate(ctx, candidates);
 
   const output = resolve(flag(argv, "-o", "--out") ?? "out/gated.json");
@@ -128,7 +147,10 @@ export const gateCommand = async (argv: string[]): Promise<number> => {
   writeFileSync(output, `${JSON.stringify({ subject_sha: harvest.subject.sha, gated }, null, 2)}\n`, "utf8");
 
   const by = (v: string) => gated.filter((g) => g.verdict === v).length;
-  console.log(`gated ${candidates.length} candidates at ${harvest.subject.sha} -> ${output}`);
+  console.log(
+    `gated ${candidates.length} candidates at ${harvest.subject.sha} ` +
+      `(${written.length} read from records, ${probed.length} from probes) -> ${output}`,
+  );
   console.log(`  confirmed  ${by("confirmed")}`);
   console.log(`  overturned ${by("overturned")} (the record and the tree disagree; kept as divergence edges)`);
   console.log(`  unresolved ${by("unresolved")} (nothing in the tree settles it; demoted, never admitted as checked)`);

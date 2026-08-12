@@ -1,174 +1,174 @@
 {
   "profile": "interview",
   "rubric_version": "v1",
-  "rubric_sha256": "da0ece2e7bde6dc8",
-  "generated_at": "2026-08-11T15:48:25.915Z",
+  "rubric_sha256": "b75cd3243c94cd51",
+  "generated_at": "2026-08-12T06:16:48.803Z",
   "model": "claude-fable-5",
   "scores": [
     {
       "id": "f-loc-main",
-      "score": 0,
-      "because": "Inventory: a count a reader assumes from the stack"
+      "score": 2,
+      "because": "orientation figure, sizes the subject for everything after"
     },
     {
       "id": "f-loc-test",
-      "score": 0,
-      "because": "Inventory: says nothing an interviewer could not assume"
+      "score": 2,
+      "because": "orientation figure, tested-fraction context"
     },
     {
       "id": "f-tests-backend",
-      "score": 1,
-      "because": "Inventory; the failing test's interest lives in the risk edge, not the count"
+      "score": 3,
+      "because": "orientation that changes reading - the FAILING flag reframes the whole artifact"
     },
     {
       "id": "f-packages",
-      "score": 0,
-      "because": "Package tour, the identified filler"
+      "score": 1,
+      "because": "inventory, a listing wearing a number"
     },
     {
       "id": "f-migrations",
-      "score": 0,
-      "because": "Dependency-count-style inventory"
+      "score": 1,
+      "because": "inventory count, removing it changes nothing"
     },
     {
       "id": "f-age",
-      "score": 1,
-      "because": "Inventory; mildly contextual but not an engineering finding"
+      "score": 3,
+      "because": "orientation figure the rubric itself names as reframing everything else"
     },
     {
       "id": "d-platform",
       "score": 4,
-      "because": "Decision with recorded rejected alternatives on a real seam"
+      "because": "decision with recorded rejected alternatives on a foundational seam"
     },
     {
       "id": "d-abstraction",
       "score": 5,
-      "because": "The central seam, with rejected alternatives that are the payload"
+      "because": "rejected alternatives on the seam the whole system hangs on"
     },
     {
       "id": "d-judging",
-      "score": 4,
-      "because": "Decision with multiple recorded rejected alternatives"
+      "score": 5,
+      "because": "decision with five recorded losers, the payload a summariser destroys"
     },
     {
       "id": "d-licensing",
       "score": 4,
-      "because": "Rejected alternatives plus a mechanically checkable boundary"
+      "because": "decision with rejected alternatives, mechanically enforceable boundary"
     },
     {
       "id": "d-scheduling",
       "score": 5,
-      "because": "Rich rejected alternatives on a non-obvious seam a summariser would destroy"
+      "because": "rejected alternatives with reasoning on a seam that matters"
     },
     {
       "id": "d-flyway-owns-schema",
       "score": 2,
-      "because": "Decision with no recorded alternative: real but weaker"
+      "because": "decision with no recorded alternative, largely assumable from the stack"
     },
     {
       "id": "m-second-language",
       "score": 5,
-      "because": "Test-enforced proof of the project's central claim, with honest cost stated"
+      "because": "central design claim held by a test, the mechanism an interviewer will probe"
     },
     {
       "id": "m-grader-runner-seam",
       "score": 5,
-      "because": "Rule held by the type system, exactly what an interviewer probes"
+      "because": "rule held in the type system, not discipline"
     },
     {
       "id": "m-content-boundary",
       "score": 4,
-      "because": "Enforcement mechanism that survives the author leaving; the guard is guarded"
+      "because": "enforcement mechanism that guards its own guard"
     },
     {
       "id": "m-complexity-honesty",
       "score": 4,
-      "because": "Honesty constraint expressed as a sealed type, not discipline"
+      "because": "honesty constraint enforced at type level"
     },
     {
       "id": "m-three-derivations",
       "score": 4,
-      "because": "Query-level enforcement of a deliberate non-merge"
+      "because": "query-level mechanism answering the consistency probe"
     },
     {
       "id": "b-grader-runner",
       "score": 3,
-      "because": "Boundary that matters but restates the type-level mechanism node"
+      "because": "boundary that matters but inferable beside its mechanism node"
     },
     {
       "id": "b-response-grading",
       "score": 3,
-      "because": "Type-enforced boundary, though inferable from the sealed interfaces"
+      "because": "type-enforced boundary, but inferable from the tree"
     },
     {
       "id": "b-engine-content",
       "score": 3,
-      "because": "Matters, but the enforcement story lives in the mechanism node"
+      "because": "boundary that matters, restates the mechanism node"
     },
     {
       "id": "b-verdict-selfrating",
       "score": 3,
-      "because": "Query-enforced boundary, duplicated by the derivations mechanism"
+      "because": "boundary enforced in query and type, partly covered elsewhere"
     },
     {
       "id": "e-suite-red",
       "score": 5,
-      "because": "An honest edge to go first on: red suite with the real cause named"
+      "because": "honest edge worth going first on - a real bug, volunteered"
     },
     {
       "id": "e-issue-26-stale",
       "score": 4,
-      "because": "Divergence between record and build, volunteered"
+      "because": "verified divergence between record and build"
     },
     {
       "id": "e-frontend-domain",
       "score": 4,
-      "because": "Honest admitted limit of the central abstraction"
+      "because": "honest edge - the one admitted limit of the central abstraction"
     },
     {
       "id": "e-interview-soon",
       "score": 3,
-      "because": "Decided-unbuilt gap, but a smaller edge than its siblings"
+      "because": "unbuilt gap, real but weaker than the divergences"
     },
     {
       "id": "e-jpa-divergence",
       "score": 4,
-      "because": "Divergence from a written decision, worth going first on"
+      "because": "divergence from a written decision, with the tradeoff recorded"
     },
     {
       "id": "e-unsandboxed-runner",
       "score": 4,
-      "because": "Deliberate tradeoff with the hosting caveat recorded"
+      "because": "deliberate tradeoff with the hosted-case answer prepared"
     },
     {
       "id": "e-recompute-on-read",
       "score": 3,
-      "because": "Real tradeoff, but inferable and partly covered by the mechanism"
+      "because": "tradeoff a reader would probe, honestly bounded"
     },
     {
       "id": "e-content-never-in-ci",
       "score": 3,
-      "because": "Honest coverage gap, deliberate and explained"
+      "because": "deliberate coverage gap on a rich record, a footnote beside the decisions"
     },
     {
       "id": "e-corpus-unauthored",
       "score": 4,
-      "because": "Volunteering the project's named biggest risk"
+      "because": "the project's named biggest risk, volunteered"
     },
     {
       "id": "e-surefire-pin",
       "score": 2,
-      "because": "Defensible workaround, but a minor edge comparatively"
+      "because": "defensible tradeoff but narrow, machine-specific interest"
     },
     {
       "id": "fl-submission",
       "score": 3,
-      "because": "Illustrates the seam, but the seam nodes carry the payload"
+      "because": "boundary made visible, but inferable from the seam nodes"
     },
     {
       "id": "fl-derivations",
-      "score": 2,
-      "because": "Restates the derivations mechanism a reader already has"
+      "score": 3,
+      "because": "useful picture of the non-relationships, restates the mechanism"
     }
   ]
 }

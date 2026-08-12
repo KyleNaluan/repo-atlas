@@ -69,3 +69,42 @@ export const askModel = async (prompt: string, label: string): Promise<Reply> =>
   }
   throw new AskError(`the ${label} run produced no result message`);
 };
+
+/**
+ * The first complete JSON object in a reply, or null if there is none.
+ *
+ * Three call sites needed "the model was asked for JSON; find it", and all three
+ * wrote the same shortcut: slice from the first `{` to the LAST `}`. That works
+ * until a reply carries anything brace-bearing after the object - a second
+ * object, a trailing example, a sentence of commentary with a brace in it - at
+ * which point the slice spans both and the parse fails on a reply that did
+ * contain exactly what was asked for. A real scorer run died that way.
+ *
+ * So the scan is balanced rather than greedy, and string-aware: a brace inside a
+ * JSON string is data, not structure, and counting it would end the object in the
+ * wrong place. Fences and preambles are still tolerated, which is the reason
+ * these callers do not simply `JSON.parse` the whole reply.
+ */
+export const firstJsonObject = (text: string): string | null => {
+  const start = text.indexOf("{");
+  if (start === -1) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i]!;
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+};

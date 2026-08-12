@@ -15,8 +15,6 @@ export interface Stage {
   run: (argv: string[]) => Promise<number>;
 }
 
-const notBuilt = async (): Promise<number> => 70;
-
 export const STAGES: Stage[] = [
   {
     name: "harvest",
@@ -74,9 +72,9 @@ export const STAGES: Stage[] = [
   },
   {
     name: "run",
-    summary: "orchestrate every stage over the content-addressed cache",
-    implemented: false,
-    run: notBuilt,
+    summary: "orchestrate every stage over the SHA-keyed work directory (#2)",
+    implemented: true,
+    run: async (argv) => (await import("./commands/run.js")).runCommand(argv),
   },
   {
     name: "validate",

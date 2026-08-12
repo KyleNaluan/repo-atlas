@@ -10,7 +10,7 @@
  * whole point of emitting candidates is that the tree check happens separately,
  * afterwards, by machinery the model does not participate in.
  */
-import { askModel } from "../model/ask.js";
+import { askModel, firstJsonObject } from "../model/ask.js";
 import type {
   ProseRequest,
   RecordToRead,
@@ -64,11 +64,11 @@ ${record.comment.body}
 --- END COMMENT ---`;
 
 const README_LIMIT = 20_000;
-const PATHS_LIMIT = 600;
+export const PROSE_PATH_LIMIT = 600;
 
 const prosePrompt = (request: ProseRequest, prompt: string): string => {
   const readmeDropped = Math.max(0, request.readme.length - README_LIMIT);
-  const pathsDropped = Math.max(0, request.paths.length - PATHS_LIMIT);
+  const pathsDropped = Math.max(0, request.paths.length - PROSE_PATH_LIMIT);
   const readmeNote =
     readmeDropped > 0
       ? `\n[${readmeDropped} more README characters were withheld from you. You are seeing a truncated README; decline rather than describe a repository you were shown a fraction of.]`
@@ -98,7 +98,7 @@ ${request.readme.slice(0, README_LIMIT)}${readmeNote}
 --- END README ---
 
 --- PATHS AT THE PINNED SHA ---
-${request.paths.slice(0, PATHS_LIMIT).join("\n")}${pathsNote}
+${request.paths.slice(0, PROSE_PATH_LIMIT).join("\n")}${pathsNote}
 --- END PATHS ---
 
 --- DECISIONS THAT SURVIVED ---
@@ -108,13 +108,12 @@ ${request.decisions.map((d) => `${d.title}: ${d.decision}`).join("\n") || "(none
 
 /** Pull the JSON object out of a reply, tolerating a stray fence or preamble. */
 export const parseWritten = <T>(text: string): T => {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end <= start) {
+  const json = firstJsonObject(text);
+  if (json === null) {
     throw new WriterError(`the writer returned no JSON object: ${text.slice(0, 200)}`);
   }
   try {
-    return JSON.parse(text.slice(start, end + 1)) as T;
+    return JSON.parse(json) as T;
   } catch (cause) {
     throw new WriterError(`the writer returned unparseable JSON: ${String(cause)}`);
   }

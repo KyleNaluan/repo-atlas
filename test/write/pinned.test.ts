@@ -107,21 +107,51 @@ describe("what the pinned set yields", () => {
     }
   });
 
-  it("sends eight of nine claims to the gate, and drops the unresolvable one", () => {
-    // The number is the finding, so it moves visibly. Eight records say where to
-    // look and get checked against the tree. The ninth (#4, the public/private
-    // content split) claims something is ABSENT and names nothing to search for,
-    // so nothing in the tree can settle it either way - the gate would demote it
-    // rather than resolve it, and sending it anyway would be asking the gate to
-    // confirm a claim nobody can check.
-    const withClaims = candidates.filter((c) => c.claims !== undefined);
-    expect(withClaims).toHaveLength(8);
-    const dropped = candidates.filter((c) => c.claims === undefined);
-    expect(dropped.map((c) => c.node.id)).toEqual([decisionId(4)]);
-    const claim = pinned.decisions.find((d) => d.issue === 4)!.written.implementation_claim!;
-    expect(claim.expect).toBe("absent");
-    expect(claim.paths).toBeUndefined();
-    expect(claim.pattern).toBeUndefined();
+  it("sends all nine claims to the gate, and every one is machine-checkable", () => {
+    // This number moved twice and both moves are the finding.
+    //
+    // It was eight under the first prompt: #4, the public/private content split,
+    // claimed something ABSENT and named nothing to search for, so nothing could
+    // settle it. Requiring absent-claims to name paths or a pattern took it to
+    // nine - but that requirement then produced two WRONG outcomes on the real
+    // subject. #2's claim covered a sub-aspect (auth is not built) while its
+    // decision's subject (the stack) plainly was, stamping the whole decision
+    // `decided_not_built`; and #7's claim searched for the words XP, hearts,
+    // lives and leagues, which matched the English word "lives" and a comment
+    // saying the project has no leagues - overturning a correct decision into a
+    // divergence the artifact would have asserted untruthfully.
+    //
+    // The prompt now requires a claim to be about the decision's OWN SUBJECT and
+    // an absent-claim to name something machine-checkable rather than a
+    // prose-matchable word. Every claim here is now a dependency coordinate, a
+    // symbol, or a path.
+    expect(candidates.filter((c) => c.claims !== undefined)).toHaveLength(9);
+    for (const d of pinned.decisions) {
+      const claim = d.written.implementation_claim!;
+      expect(claim, `issue ${d.issue}`).toBeDefined();
+      expect((claim.paths?.length ?? 0) > 0 || claim.pattern !== undefined).toBe(true);
+    }
+  });
+
+  it("names something a search can settle, never a word that occurs in prose", () => {
+    // The asymmetry that produced a false divergence: a comment saying "no XP,
+    // hearts or leagues here" contains all three words, so searching for them
+    // finds the sentence promising they are gone and reports the opposite.
+    // Absence claims must therefore name artifacts, not vocabulary.
+    const prose = /\b(lives|hearts|leagues?|simple|value|data|user)\b/i;
+    for (const d of pinned.decisions) {
+      const regex = d.written.implementation_claim?.pattern?.regex;
+      if (regex === undefined) continue;
+      expect(prose.test(regex), `issue ${d.issue} searches for a prose word: ${regex}`).toBe(false);
+    }
+  });
+
+  it("has the writer state no build status, leaving that to the gate", () => {
+    // The vocabulary is `decided` or `superseded`. Every record here reads as
+    // `decided`: the resolution comments settle questions, and none of them is
+    // superseded by a later one. Whether any of these was built is the gate's to
+    // establish against the tree, and it does.
+    expect(new Set(pinned.decisions.map((d) => d.written.status))).toEqual(new Set(["decided"]));
   });
 
   it("admits every decision as attested, never as verified", () => {

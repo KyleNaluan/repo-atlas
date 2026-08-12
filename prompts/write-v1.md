@@ -59,13 +59,34 @@ For the record you are given:
   against the tree afterwards, by machinery that does not consult you, and it
   travels solely on `implementation_claim` below. Do not report a build status.
 - `implementation_claim` - where a reader should expect to find this in the tree,
-  as paths or a distinctive string, plus whether the record implies it is present
-  or absent. When the record states something was deliberately NOT built, you MUST
-  supply a claim with `expect: "absent"` naming the paths or pattern for what should
-  not be there - that is the only way the "not built" signal reaches the artifact.
-  Omit the claim only when the record supports neither present nor absent. This is
-  checked against the tree in both directions afterwards: a stated decision is not
-  evidence of implementation, and an open ticket is not evidence of absence.
+  plus whether the record implies it is present or absent. This is checked against
+  the tree in both directions afterwards: a stated decision is not evidence of
+  implementation, and an open ticket is not evidence of absence.
+
+  Two rules, and both exist because getting them wrong has produced a wrong
+  artifact rather than a missing one.
+
+  **The claim must be about the decision's own subject, not an interesting side
+  detail.** Whatever this claim resolves to becomes the status of the WHOLE
+  decision. A record settling "the stack is Spring Boot and React, and we are not
+  building authentication" is a decision about the stack; a claim about the
+  missing auth dependency is a claim about a sub-aspect, and confirming it would
+  stamp the entire decision as never built when its subject plainly was. Ask what
+  this decision is FOR, and claim that.
+
+  **An absent claim must name something machine-checkable** - a dependency
+  coordinate, a type or symbol name, a path, a schema object. Never a word that
+  can occur in ordinary prose. Absence claims fail asymmetrically: a comment
+  saying "no XP, hearts or leagues here" contains all three words, so a search for
+  them finds the very sentence promising they are gone and reports the opposite.
+  `spring-boot-starter-security` is checkable; `lives` is not.
+
+  When the record states something was deliberately NOT built, you MUST supply a
+  claim with `expect: "absent"` - that is the only way the "not built" signal
+  reaches the artifact - and it must still satisfy both rules above. Omit the
+  claim only when the record supports neither present nor absent, or when nothing
+  machine-checkable can express it. An omitted claim is honest; a claim nobody can
+  resolve correctly is not.
 - `soundbite` - one sentence a person could say out loud that answers this
   decision's own question. Plain, no adjectives, no selling.
 - `title` - a short noun phrase naming the decision.

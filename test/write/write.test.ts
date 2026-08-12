@@ -331,23 +331,48 @@ describe("the model writer", () => {
     expect(prompt).not.toContain("issue 9");
   });
 
-  it("treats a reply it cannot read as inadmissible, not as a crash", async () => {
-    // The subject is not at fault for the model's output. The honest record is
-    // that this comment produced nothing usable, and the reason is carried.
-    const written = await modelWriter({ ask: async () => "I could not do that." }).decision(
-      RECORD,
-      "PROMPT",
-    );
-    expect(written.admissible).toBe(false);
-    expect(written.because).toMatch(/could not be read/);
+  it("fails the run on a reply that is not a verdict, rather than recording a cut", async () => {
+    // The rule this pins, and it reverses what the stage did first. An
+    // `admissible: false` is not a statement about the model - it is a permanent
+    // record that this resolution comment settles no decision, carried into the
+    // artifact as a cut for want of evidence. A service message where JSON was
+    // expected must therefore never produce one.
+    //
+    // It is pinned because it already happened: a refresh run hit a session
+    // limit and wrote issue #10 - the record that produces the reference
+    // subject's divergence finding - into the pinned set as a comment that
+    // settles nothing. A fixture attesting to an infrastructure failure attests
+    // to nothing, and would have read as a real measurement forever.
+    await expect(
+      modelWriter({ ask: async () => "You've hit your session limit" }).decision(RECORD, "PROMPT"),
+    ).rejects.toThrow(WriterError);
   });
 
-  it("treats a reply that omits admissible as inadmissible", async () => {
-    const written = await modelWriter({ ask: async () => '{"decision":"we did a thing"}' }).decision(
-      RECORD,
-      "PROMPT",
-    );
+  it("fails the run on a reply that omits the verdict", async () => {
+    // The model answered, but not the question it was asked. Recording that as
+    // "this record settles nothing" would attribute the model's miss to the
+    // subject.
+    await expect(
+      modelWriter({ ask: async () => '{"decision":"we did a thing"}' }).decision(RECORD, "PROMPT"),
+    ).rejects.toThrow(WriterError);
+  });
+
+  it("still lets the model declare a record inadmissible", async () => {
+    // The one route to a cut: the model saying so in a well-formed verdict.
+    const written = await modelWriter({
+      ask: async () => '{"admissible": false, "because": "a status update, not a decision"}',
+    }).decision(RECORD, "PROMPT");
     expect(written.admissible).toBe(false);
+    expect(written.because).toContain("status update");
+  });
+
+  it("fails the prose the same way, rather than reporting the subject shapeless", async () => {
+    await expect(
+      modelWriter({ ask: async () => "You've hit your session limit" }).prose(
+        { readme: "r", paths: ["a"], decisions: [] },
+        "PROMPT",
+      ),
+    ).rejects.toThrow(WriterError);
   });
 
   it("tolerates a fence or a preamble around the JSON", () => {

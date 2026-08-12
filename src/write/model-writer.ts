@@ -115,24 +115,37 @@ export interface ModelWriterOptions {
 }
 
 /**
- * A reading that cannot be read is not a decision.
+ * ONLY THE MODEL MAY DECLARE A RECORD INADMISSIBLE.
  *
- * An unparseable reply becomes `admissible: false` rather than a throw, for the
- * same reason the audit's judge treats an unreadable verdict as no finding: the
- * subject is not at fault for the model's output, and the honest record is that
- * this comment produced nothing usable. The reason is carried through, so the
- * artifact says which record it could not read rather than losing it silently.
+ * This reverses what this file said first, and the reason it changed is worth
+ * keeping. The original rule was that an unreadable reply becomes
+ * `admissible: false`, reasoning that the subject is not at fault for the model's
+ * output. That reasoning is wrong at the join: `admissible: false` is not a
+ * statement about the model, it is a permanent record that THIS RESOLUTION
+ * COMMENT SETTLES NO DECISION, and it is carried into the artifact as a cut for
+ * want of evidence.
+ *
+ * It was caught by exactly the failure it invites. A refresh run hit a session
+ * limit, the service message came back where JSON was expected, and issue #10 -
+ * the record that produces the reference subject's divergence finding - was
+ * written into the pinned set as a decision-shaped comment that settles nothing.
+ * A fixture attesting to an infrastructure failure is a fixture attesting to
+ * nothing, and it would have read as a real measurement forever.
+ *
+ * So the only route to `admissible: false` is the model saying so in a
+ * well-formed verdict. Anything else - no JSON, unparseable JSON, a reply
+ * missing the field - means the model did not answer the question, which is a
+ * failure of the run and never a finding about the subject. The run is cheap to
+ * repeat; a silently wrong pinned record is not.
  */
 const readDecision = (text: string): WrittenDecision => {
-  try {
-    const parsed = parseWritten<WrittenDecision>(text);
-    if (typeof parsed.admissible !== "boolean") {
-      return { admissible: false, because: "the writer did not say whether this record is admissible" };
-    }
-    return parsed;
-  } catch (cause) {
-    return { admissible: false, because: `the writer's reply could not be read: ${String(cause)}` };
+  const parsed = parseWritten<WrittenDecision>(text);
+  if (typeof parsed.admissible !== "boolean") {
+    throw new WriterError(
+      `the writer returned no admissibility verdict, so this record was not read: ${text.slice(0, 200)}`,
+    );
   }
+  return parsed;
 };
 
 export const modelWriter = (options: ModelWriterOptions = {}): Writer => {
@@ -154,16 +167,18 @@ export const modelWriter = (options: ModelWriterOptions = {}): Writer => {
       // than be reported as prose that could not be read, which would mask the
       // exact regression the empty-allowlist fix exists to surface. Only a parse
       // failure becomes admissible:false.
+      // Same rule as the decision path: `admissible: false` here means the README
+      // and listing could not support a product sentence, which is a claim about
+      // the subject. A reply that is not a verdict is a failed run, not a subject
+      // with no describable shape.
       const text = await ask(prosePrompt(request, prompt));
-      try {
-        const parsed = parseWritten<WrittenProse>(text);
-        if (typeof parsed.admissible !== "boolean") {
-          return { admissible: false, because: "the writer did not say whether the prose is admissible" };
-        }
-        return parsed;
-      } catch (cause) {
-        return { admissible: false, because: `the writer's reply could not be read: ${String(cause)}` };
+      const parsed = parseWritten<WrittenProse>(text);
+      if (typeof parsed.admissible !== "boolean") {
+        throw new WriterError(
+          `the writer returned no admissibility verdict for the prose: ${text.slice(0, 200)}`,
+        );
       }
+      return parsed;
     },
   };
 };

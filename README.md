@@ -170,7 +170,7 @@ The rendered page is one view of it, which is what keeps a downstream consumer (
 Schema 1.1 adds edge-level Flow links ([#37](https://github.com/KyleNaluan/repo-atlas/issues/37)).
 Each `FlowLink` owns its endpoints, typed relation, optional label/kind, and evidence, so a fan-out can preserve a distinct meaning and citation for every arrow.
 The renderer prefers `links` while continuing to accept the legacy `FlowStep.calls_next` and `edge_label` fields for 1.x inputs.
-Audit E2 checks links-based Flow topology and substantive step/link evidence, and M1 weighs the boxes, details, and arrow labels rather than only the caption.
+Audit E2 checks links-based Flow topology and substantive step/link evidence, M1 weighs the boxes, details, and arrow labels rather than only the caption, and G3 confirms each rendered Flow carries its `atlas.json` value attribution and that any cut-to-budget flows are disclosed against the deletion record.
 
 The published JSON Schema lives at [`schema/atlas.schema.json`](schema/atlas.schema.json) and is **generated** from [`src/schema/types.ts`](src/schema/types.ts) by `npm run schema:gen`.
 CI runs `npm run schema:check`, so the types and the contract cannot drift.

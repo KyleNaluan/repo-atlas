@@ -60,6 +60,7 @@ import {
   type DecisionNode,
   type EdgeNode,
   type Evidence,
+  type FlowNode,
   type MechanismNode,
 } from "../schema/types.js";
 
@@ -93,6 +94,57 @@ const evidenceList = (
               : ""}
             ${r.output
               ? html`<pre><code>${prose(r.output, from(owner, `${field}[${i}].output_excerpt`))}</code></pre>`
+              : ""}
+          </li>`;
+        }),
+      )}
+    </ul>
+  </details>`;
+};
+
+/**
+ * Link evidence stays attached to the arrow it establishes. Flattening these
+ * citations into node evidence would recreate the contract defect #37 closed:
+ * a fan-out reader could no longer tell which source establishes which branch.
+ */
+const flowLinkEvidence = (flow: FlowNode, atlas: Atlas): Safe => {
+  const cited = (flow.links ?? []).flatMap((link, linkIndex) =>
+    link.evidence.map((evidence, evidenceIndex) => ({ link, linkIndex, evidence, evidenceIndex })),
+  );
+  if (cited.length === 0) return html``;
+  return html`<details class="ev">
+    <summary>${chrome`Arrow evidence (${cited.length})`}</summary>
+    <ul>
+      ${join(
+        cited.map(({ link, linkIndex, evidence, evidenceIndex }) => {
+          const r = renderEvidence(evidence, atlas.subject);
+          const base = `links[${linkIndex}]`;
+          const evidenceField = `${base}.evidence[${evidenceIndex}]`;
+          return html`<li>
+            <span class="k">${prose(link.relation, from(flow.id, `${base}.relation`))}</span>
+            <code
+              >${prose(link.from, from(flow.id, `${base}.from`))} &rarr;
+              ${prose(link.to, from(flow.id, `${base}.to`))}</code
+            >
+            ${link.label
+              ? html`<span class="n">${prose(link.label, from(flow.id, `${base}.label`))}</span>`
+              : ""}
+            <span class="k ${r.kind}">${r.kind}</span>
+            ${r.href
+              ? html`<a href="${r.href}" data-ev="${provAttr(from(flow.id, evidenceField))}"
+                  >${r.label}</a
+                >`
+              : html`<code data-ev="${provAttr(from(flow.id, evidenceField))}">${r.label}</code>`}
+            ${r.note
+              ? html`<span class="n"
+                  >- ${prose(r.note, from(flow.id, `${evidenceField}.note`))}</span
+                >`
+              : ""}
+            ${r.output
+              ? html`<pre><code>${prose(
+                  r.output,
+                  from(flow.id, `${evidenceField}.output_excerpt`),
+                )}</code></pre>`
               : ""}
           </li>`;
         }),
@@ -297,15 +349,26 @@ export const sectionFlows = async (
   for (const flow of flows) {
     const { svg, long } = await renderFlow(flow, cache);
     figures.push(html`
-      <h3 id="${flow.id}">${title(flow)}</h3>
+      <div class="dive-head">
+        <h3 id="${flow.id}">${title(flow)}</h3>
+        <span class="score"
+          ><span data-ev="${provAttr(from(flow.id, "interview_value"))}"
+            >value ${flow.interview_value}/5 &middot; ${flow.confidence}</span
+          >
+          ${chrome`· rubric ${atlas.rubric_version}`}</span
+        >
+      </div>
       <figure>
-        <div class="diagram-frame" data-ev="${provAttr(from(flow.id, "steps"))}">
+        <div
+          class="diagram-frame"
+          data-ev="${provAttr(from(flow.id, flow.links === undefined ? "steps" : "links"))}"
+        >
           ${raw(svg)}
         </div>
         <div class="legend">
           <span>${chrome`<i style="background:#7aa2f7"></i>request path`}</span>
           <span>${chrome`<i style="background:#7ec699"></i>response path`}</span>
-          <span>${chrome`<i style="background:#d9a441"></i>outside the transaction`}</span>
+          <span>${chrome`<i style="background:#d9a441"></i>side path or side effect`}</span>
           <span class="dim"
             >${chrome`laid out by Graphviz - no coordinate in this file was written by hand`}</span
           >
@@ -326,8 +389,9 @@ export const sectionFlows = async (
         atlas,
         flow.id,
         "evidence",
-        "Every box on this diagram, cited",
-      )}`);
+        "Flow and box evidence",
+      )}
+      ${flowLinkEvidence(flow, atlas)}`);
   }
   return html`
     <section id="flow">

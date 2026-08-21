@@ -163,6 +163,10 @@ The rendered page is one view of it, which is what keeps a downstream consumer (
 - **`rejected[]` uses explicit-absence semantics**: a Decision carries either a populated `rejected[]` or `rejected_absent_from_record`. "Decided without recording an alternative" and "no decision record at all" are different states and stay different.
 - **Semver, additive-only within a major**; consumers pin the major, and a document from a future major is refused rather than best-effort read.
 
+Schema 1.1 adds edge-level Flow links ([#37](https://github.com/KyleNaluan/repo-atlas/issues/37)).
+Each `FlowLink` owns its endpoints, typed relation, optional label/kind, and evidence, so a fan-out can preserve a distinct meaning and citation for every arrow.
+The renderer prefers `links` while continuing to accept the legacy `FlowStep.calls_next` and `edge_label` fields for 1.x inputs.
+
 The published JSON Schema lives at [`schema/atlas.schema.json`](schema/atlas.schema.json) and is **generated** from [`src/schema/types.ts`](src/schema/types.ts) by `npm run schema:gen`.
 CI runs `npm run schema:check`, so the types and the contract cannot drift.
 

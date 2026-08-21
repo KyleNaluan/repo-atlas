@@ -1,0 +1,78 @@
+{
+  "type": "flow",
+  "id": "fl-link-request-side-path",
+  "title": "Request, response, and side effect",
+  "evidence": [],
+  "confidence": "verified",
+  "interview_value": 4,
+  "orientation": "TB",
+  "steps": [
+    {
+      "id": "entry",
+      "node": "HTTP route",
+      "kind": "request"
+    },
+    {
+      "id": "service",
+      "node": "Submission service",
+      "kind": "request"
+    },
+    {
+      "id": "response",
+      "node": "RunResponse",
+      "kind": "response"
+    },
+    {
+      "id": "commit",
+      "node": "Solution commit",
+      "kind": "aside"
+    }
+  ],
+  "links": [
+    {
+      "id": "entry-service",
+      "from": "entry",
+      "to": "service",
+      "relation": "call",
+      "kind": "request",
+      "label": "submit()",
+      "evidence": [
+        {
+          "kind": "command",
+          "cmd": "trace submit call",
+          "output_excerpt": "entry -> service"
+        }
+      ]
+    },
+    {
+      "id": "service-response",
+      "from": "service",
+      "to": "response",
+      "relation": "return",
+      "kind": "response",
+      "label": "RunResponse",
+      "evidence": [
+        {
+          "kind": "command",
+          "cmd": "trace response",
+          "output_excerpt": "service -> RunResponse"
+        }
+      ]
+    },
+    {
+      "id": "service-commit",
+      "from": "service",
+      "to": "commit",
+      "relation": "side_effect",
+      "kind": "aside",
+      "label": "best effort",
+      "evidence": [
+        {
+          "kind": "command",
+          "cmd": "trace solution commit",
+          "output_excerpt": "service -> commit side path"
+        }
+      ]
+    }
+  ]
+}

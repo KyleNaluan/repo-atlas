@@ -749,6 +749,13 @@
           "items": {
             "$ref": "#/definitions/FlowStep"
           }
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FlowLink"
+          },
+          "description": "Preferred edge contract. Omitted only for legacy `calls_next` input (#37)."
         }
       },
       "required": [
@@ -801,6 +808,63 @@
         "node"
       ],
       "additionalProperties": false
+    },
+    "FlowLink": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "relation": {
+          "$ref": "#/definitions/FlowRelation"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "request",
+            "response",
+            "aside"
+          ],
+          "description": "Drives edge colour and dashed aside styling, never position."
+        },
+        "label": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Evidence"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "from",
+        "to",
+        "relation",
+        "evidence"
+      ],
+      "additionalProperties": false,
+      "description": "An edge-level Flow claim.\n\n`calls_next` and `edge_label` remain accepted on FlowStep for legacy v1 input, but cannot express distinct labels or evidence when one step fans out. New flows use links so every arrow has its own meaning and citations. The later Flow semantic gate owns the non-empty-evidence and endpoint-integrity rules; this schema-minor addition provides the durable slot without pre-empting it."
+    },
+    "FlowRelation": {
+      "type": "string",
+      "enum": [
+        "call",
+        "transport",
+        "dispatch",
+        "read",
+        "write",
+        "return",
+        "side_effect"
+      ],
+      "description": "The relationship represented by one independently evidenced Flow arrow (#37)."
     },
     "AtlasRecord": {
       "type": "object",

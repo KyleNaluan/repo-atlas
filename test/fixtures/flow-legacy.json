@@ -1,0 +1,23 @@
+{
+  "type": "flow",
+  "id": "fl-legacy",
+  "title": "Legacy calls_next input",
+  "evidence": [],
+  "confidence": "verified",
+  "interview_value": 3,
+  "steps": [
+    {
+      "id": "old-source",
+      "node": "Legacy source",
+      "calls_next": [
+        "old-target"
+      ],
+      "edge_label": "legacy label"
+    },
+    {
+      "id": "old-target",
+      "node": "Legacy target",
+      "kind": "response"
+    }
+  ]
+}

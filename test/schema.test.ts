@@ -12,13 +12,23 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { AtlasValidationError, loadAtlas, validateAtlas } from "../src/schema/validate.js";
-import { SCHEMA_VERSION, admissible, isType, type Atlas } from "../src/schema/types.js";
+import {
+  SCHEMA_VERSION,
+  admissible,
+  isType,
+  type Atlas,
+  type FlowLink,
+  type FlowNode,
+} from "../src/schema/types.js";
 
 const fixture = (name: string): string =>
   fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
 
 const read = (name: string): Atlas =>
   JSON.parse(readFileSync(fixture(name), "utf8")) as Atlas;
+
+const readFlow = (name: string): FlowNode =>
+  JSON.parse(readFileSync(fixture(name), "utf8")) as FlowNode;
 
 /** Structured clone, so a mutation in one case cannot leak into another. */
 const mutate = (name: string, f: (a: Atlas) => void): unknown => {
@@ -60,9 +70,23 @@ describe("the generated schema accepts real documents", () => {
   });
 
   it("agrees with the version this build reads", () => {
+    expect(SCHEMA_VERSION).toBe("1.1.0");
     expect(read("swe-prep.atlas.json").schema_version.split(".")[0]).toBe(
       SCHEMA_VERSION.split(".")[0],
     );
+  });
+
+  it("accepts the additive edge-level FlowLink contract", () => {
+    const atlas = read("swe-prep.atlas.json");
+    atlas.schema_version = SCHEMA_VERSION;
+    atlas.nodes.push(readFlow("flow-fan-out.json"));
+    expect(() => validateAtlas(atlas, "<linked-flow>")).not.toThrow();
+  });
+
+  it("continues to accept legacy calls_next Flow input", () => {
+    const atlas = read("swe-prep.atlas.json");
+    atlas.nodes.push(readFlow("flow-legacy.json"));
+    expect(() => validateAtlas(atlas, "<legacy-flow>")).not.toThrow();
   });
 });
 
@@ -130,6 +154,24 @@ describe("validation fails closed", () => {
       }),
     );
     expect(problems.length).toBeGreaterThan(0);
+  });
+
+  it("refuses a FlowLink relation outside the closed contract", () => {
+    const atlas = read("swe-prep.atlas.json");
+    const linked = readFlow("flow-fan-out.json");
+    (linked.links![0] as { relation: string }).relation = "probably_calls";
+    atlas.nodes.push(linked);
+    expect(problemsOf(atlas).join("\n")).toMatch(
+      /call.*transport.*dispatch.*read.*write.*return.*side_effect/s,
+    );
+  });
+
+  it("requires the link-owned evidence slot", () => {
+    const atlas = read("swe-prep.atlas.json");
+    const linked = readFlow("flow-fan-out.json");
+    delete (linked.links![0] as Partial<FlowLink>).evidence;
+    atlas.nodes.push(linked);
+    expect(problemsOf(atlas).join("\n")).toMatch(/links.*evidence/s);
   });
 
   it("refuses a future major, rather than best-effort reading it", () => {

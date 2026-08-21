@@ -10,6 +10,13 @@ import type { FlowNode, FlowRelation, FlowStep } from "../schema/types.js";
 
 export type FlowArchetype = "request_response" | "shared_state_lineage";
 
+/**
+ * A Flow's classification for scoring and slotting. The two `FlowArchetype`
+ * values are the preferred slots #39 reserves; `unknown` is a Flow whose
+ * topology shows no entry signal at all - it may claim neither preferred slot.
+ */
+export type FlowClass = FlowArchetype | "unknown";
+
 interface TopologyLink {
   from: string;
   to: string;
@@ -59,11 +66,17 @@ const rootsAndTerminals = (flow: FlowNode, links: TopologyLink[]) => {
  * with an HTTP/request entry is request/response even when it also fans out over
  * shared state, so the lineage slot is reserved for Flows whose story is the
  * lineage itself. Absent a request signal, a read fan-out (or the legacy bridge's
- * three-way reference fan-out) marks shared-state lineage. Every other
- * currently-supported Flow belongs to the request/response slot. Later adapter
- * families can extend this closed mapping when their own budget decision lands.
+ * three-way reference fan-out) marks shared-state lineage.
+ *
+ * What is left has no verified entry signal. A legacy `calls_next` Flow is the
+ * reference submission-walkthrough shape, so the legacy bridge still reads it as
+ * request/response. But a modern links-based Flow with neither a request signal
+ * nor a read fan-out - a raw call graph - shows no entry the topology supports,
+ * so it is `unknown` rather than a default request: it may not claim an entry
+ * kind the evidence does not establish. Later adapter families can extend this
+ * closed mapping when their own budget decision lands.
  */
-export const flowArchetype = (flow: FlowNode): FlowArchetype => {
+export const flowArchetype = (flow: FlowNode): FlowClass => {
   const links = topologyLinks(flow);
   const requestSignal =
     flow.steps.some((step) => step.kind === "request") ||
@@ -79,7 +92,16 @@ export const flowArchetype = (flow: FlowNode): FlowArchetype => {
     flow.links === undefined &&
     !requestSignal &&
     [...fanOut.values()].some((outgoing) => outgoing.length >= 3);
-  return readFanOut || legacyThreeWayFanOut ? "shared_state_lineage" : "request_response";
+  if (readFanOut || legacyThreeWayFanOut) return "shared_state_lineage";
+  if (requestSignal) return "request_response";
+  return flow.links === undefined ? "request_response" : "unknown";
+};
+
+/** The scorer-facing entry label for each class; `unknown` asserts no entry. */
+const ENTRY_KIND: Record<FlowClass, string> = {
+  request_response: "request",
+  shared_state_lineage: "durable_shared_state",
+  unknown: "unknown",
 };
 
 const BOUNDARY_RELATIONS = new Set<FlowRelation>([
@@ -101,7 +123,7 @@ export const flowScoringProjection = (flow: FlowNode): Record<string, unknown> =
   return {
     caption: flow.caption ?? "",
     archetype,
-    entry_kind: archetype === "shared_state_lineage" ? "durable_shared_state" : "request",
+    entry_kind: ENTRY_KIND[archetype],
     steps: flow.steps.map((step) => ({
       id: step.id,
       title: step.node,

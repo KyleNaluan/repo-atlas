@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { rank, type ScoredNode } from "../../src/rank/rank.js";
-import { flowArchetype } from "../../src/rank/flow.js";
+import { flowArchetype, flowScoringProjection } from "../../src/rank/flow.js";
 import { absentCutsOf } from "../../src/assemble/assemble.js";
 import { INTERVIEW, profile, rubricText, UnknownProfileError } from "../../src/rank/profile.js";
 import {
@@ -360,7 +360,7 @@ describe("a request signal wins the archetype even alongside a read fan-out", ()
   // links. The request signal takes precedence, so it belongs to the
   // request/response slot and never competes for the lineage slot #39 reserves
   // for Flows whose story is the lineage itself.
-  const mixedTopology = (id: string, score: number): ScoredNode => ({
+  const mixedTopology = (id: string, score: number): { score: number; node: FlowNode } => ({
     score,
     node: {
       type: "flow",
@@ -378,7 +378,7 @@ describe("a request signal wins the archetype even alongside a read fan-out", ()
         { id: "route-learned", from: "route", to: "learned", relation: "read", evidence: [] },
         { id: "route-due", from: "route", to: "due", relation: "read", evidence: [] },
       ],
-    } as FlowNode,
+    },
   });
 
   it("classifies the mixed-topology Flow as request/response", () => {
@@ -401,6 +401,89 @@ describe("a request signal wins the archetype even alongside a read fan-out", ()
     expect(result.nodes.map((node) => node.id)).toEqual(["fl-mixed", "fl-lineage-signal"]);
     const cut = result.deletions.find((deletion) => deletion.id === "fl-route-wrapper-a")!;
     expect(cut.reason).toContain("request/response slot capped at 1");
+  });
+});
+
+/* ------------------------------ an unknown-entry Flow asserts no entry kind */
+
+describe("a Flow with no entry signal is unknown, and claims no preferred slot", () => {
+  // A modern links-based raw call graph: a single `call` arrow, no request step
+  // and no read fan-out. flowArchetype's fallthrough used to label it
+  // request/response, which then stamped entry_kind "request" onto the scorer
+  // projection - an entry the topology never showed. It is `unknown` instead.
+  const rawCallGraph = (id: string, score: number): { score: number; node: FlowNode } => ({
+    score,
+    node: {
+      type: "flow",
+      id,
+      title: "Web layer calls service layer",
+      evidence: [],
+      confidence: "verified",
+      interview_value: 0,
+      steps: [
+        { id: "web", node: "WebController" },
+        { id: "svc", node: "ServiceBean" },
+      ],
+      links: [{ id: "web-svc", from: "web", to: "svc", relation: "call", evidence: [] }],
+    },
+  });
+
+  it("classifies a modern raw call graph as unknown, not a default request/response", () => {
+    expect(flowArchetype(rawCallGraph("fl-raw", 5).node)).toBe("unknown");
+  });
+
+  it("still reads a legacy calls_next Flow with no request signal as request/response", () => {
+    // The legacy bridge keeps the reference submission-walkthrough shape: a
+    // calls_next Flow with no request step is request/response, not unknown.
+    const legacy = flowRanking.scored.find((entry) => entry.node.id === "fl-request-signal")!.node;
+    const legacyBridge: FlowNode = {
+      type: "flow",
+      id: "fl-legacy-bridge",
+      title: legacy.title,
+      evidence: [],
+      confidence: "verified",
+      interview_value: 0,
+      steps: [
+        { id: "a", node: "A", calls_next: ["b"] },
+        { id: "b", node: "B" },
+      ],
+    };
+    expect(flowArchetype(legacyBridge)).toBe("request_response");
+  });
+
+  it("projects entry_kind unknown for the scorer rather than asserting request", () => {
+    const projection = flowScoringProjection(rawCallGraph("fl-raw", 5).node);
+    expect(projection.archetype).toBe("unknown");
+    expect(projection.entry_kind).toBe("unknown");
+  });
+
+  it("fills a Flow slot the preferred archetypes leave genuinely open", () => {
+    // Only one preferred Flow (a request/response route) qualifies, so one of the
+    // two Flow slots is genuinely open. The unknown-entry Flow may take it.
+    const route = flowRanking.scored.find((entry) => entry.node.id === "fl-route-wrapper-a")!;
+    const result = rank([route, rawCallGraph("fl-raw", 3)], INTERVIEW);
+    expect(result.nodes.map((node) => node.id).sort()).toEqual(["fl-raw", "fl-route-wrapper-a"]);
+    expect(result.deletions.filter((deletion) => deletion.section === "flows")).toEqual([]);
+  });
+
+  it("never displaces a qualifying preferred Flow, even at a higher score", () => {
+    // The two preferred slots are both claimed by a request/response and a
+    // shared-state/data-lineage Flow. A higher-scoring unknown Flow must not evict
+    // either - it competes for neither preferred slot - so it is cut for want of
+    // fallback capacity while both preferred stories survive.
+    const request = flowRanking.scored.find((entry) => entry.node.id === "fl-request-signal")!;
+    const lineage = flowRanking.scored.find((entry) => entry.node.id === "fl-lineage-signal")!;
+    const result = rank([rawCallGraph("fl-raw", 5), request, lineage], INTERVIEW);
+    expect(result.nodes.map((node) => node.id)).toEqual(["fl-request-signal", "fl-lineage-signal"]);
+    const cut = result.deletions.find((deletion) => deletion.id === "fl-raw")!;
+    expect(cut).toMatchObject({ kind: "budget", section: "flows", unit: "node", score: 5 });
+    expect(cut.reason).toContain("no open Flow slot remains for an unknown-entry Flow");
+    expect(cut.reason).toContain("claimed 2 of 2 flow slots");
+    expect(cut.reason).toContain("leaving 0 for unknown-entry Flows");
+    // The record must not blame a preferred slot or the section cap it never
+    // contended for - only the exhausted fallback capacity that actually bound.
+    expect(cut.reason).not.toContain("slot capped");
+    expect(cut.reason).not.toContain("flows capped at");
   });
 });
 

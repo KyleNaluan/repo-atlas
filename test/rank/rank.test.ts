@@ -292,7 +292,15 @@ describe("the Flow budget keeps two complementary interview stories", () => {
     );
     const result = rank(routes, INTERVIEW);
     expect(result.nodes.map((node) => node.id)).toEqual(["fl-request-signal"]);
-    expect(result.deletions.filter((deletion) => deletion.section === "flows")).toHaveLength(2);
+    const flowCuts = result.deletions.filter((deletion) => deletion.section === "flows");
+    expect(flowCuts).toHaveLength(2);
+    // Only the request/response slot ever bound - one Flow was kept, so the flows
+    // section (cap 2) was never full. The recorded reason must name the archetype
+    // slot alone and must not claim the section cap bound.
+    for (const cut of flowCuts) {
+      expect(cut.reason).toContain("request/response slot capped at 1");
+      expect(cut.reason).not.toContain("flows capped at");
+    }
   });
 
   it("degrades honestly to zero when no verified Flow clears the floor", () => {

@@ -207,15 +207,22 @@ export const rank = (
     const archetype = s.node.type === "flow" ? flowArchetype(s.node) : null;
     const archetypeBudget = archetype === null ? undefined : p.flow_archetype_budgets[archetype];
     const archetypeUsed = archetype === null ? 0 : (kept_flow_archetype.get(archetype) ?? 0);
-    if (used >= budget || (archetypeBudget !== undefined && archetypeUsed >= archetypeBudget)) {
-      const archetypeReason =
-        archetype === null || archetypeBudget === undefined || archetypeUsed < archetypeBudget
-          ? ""
-          : `; ${FLOW_ARCHETYPE_LABEL[archetype]} slot capped at ${archetypeBudget}`;
+    const sectionBound = used >= budget;
+    const archetypeBound =
+      archetype !== null && archetypeBudget !== undefined && archetypeUsed >= archetypeBudget;
+    if (sectionBound || archetypeBound) {
+      // A `capped at N` clause may only name a constraint that actually bound.
+      // The section cap and an archetype slot can each bind alone, so the reason
+      // states only the one(s) that did - the deletion record #8's G2 relies on
+      // must never claim the section was full when the archetype slot bound alone.
+      const clauses: string[] = [];
+      if (sectionBound) clauses.push(`${section} capped at ${budget} by the ${p.name} profile`);
+      if (archetypeBound)
+        clauses.push(`${FLOW_ARCHETYPE_LABEL[archetype!]} slot capped at ${archetypeBudget}`);
       deletions.push({
         id: s.node.id,
         score: s.score,
-        reason: `section budget: ${section} capped at ${budget} by the ${p.name} profile${archetypeReason}; ranked ${position}`,
+        reason: `section budget: ${clauses.join("; ")}; ranked ${position}`,
         kind: "budget",
         section,
         unit: "node",

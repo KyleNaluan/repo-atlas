@@ -72,6 +72,23 @@ describe("nodeEvidence", () => {
     expect(nodeEvidence(baseFlow)).toHaveLength(1);
   });
 
+  it("counts a flow's per-link evidence even when every other slot is empty", () => {
+    const flow: FlowNode = {
+      ...baseFlow,
+      steps: [{ id: "s1", node: "n1" }, { id: "s2", node: "n2" }],
+      links: [
+        {
+          id: "s1-s2",
+          from: "s1",
+          to: "s2",
+          relation: "call",
+          evidence: [fileEv("call.ts")],
+        },
+      ],
+    };
+    expect(nodeEvidence(flow)).toEqual([fileEv("call.ts")]);
+  });
+
   it("returns nothing for a node with no evidence in any slot", () => {
     expect(nodeEvidence(baseDecision)).toHaveLength(0);
     expect(nodeEvidence(baseMechanism)).toHaveLength(0);

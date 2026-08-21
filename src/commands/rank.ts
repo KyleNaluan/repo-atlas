@@ -82,6 +82,9 @@ export const rankCommand = async (argv: string[]): Promise<number> => {
   const byKind = (kind: string) => result.deletions.filter((d) => d.kind === kind).length;
   console.log(`ranked ${nodes.length} nodes under ${p.name}/${p.rubric_version} -> ${output}`);
   console.log(`  kept       ${result.nodes.length}`);
+  console.log(
+    `  quarantined ${nodes.filter((n) => n.confidence === "absent").length} (absent confidence; recorded separately as evidence cuts by assemble)`,
+  );
   console.log(`  cut: floor ${byKind("floor")} (below interview_value ${p.budgets.interview_value_floor}, or suppressed)`);
   console.log(`  cut: budget ${byKind("budget")} (scored above the floor and still cut to fit a section)`);
   for (const d of result.deletions) console.log(`    ${d.id} (${d.score}) - ${d.reason}`);

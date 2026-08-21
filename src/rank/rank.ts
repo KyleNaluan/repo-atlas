@@ -144,6 +144,13 @@ export const rank = (
 
   const survivors: ScoredNode[] = [];
   for (const s of adjusted) {
+    // Confidence is an admission gate, not a score. In particular, a Flow with
+    // one unresolvable arrow is quarantined atomically as `absent`; no high model
+    // score and no project pin may resurrect part of that story. Assemble records
+    // this cut in absent_cuts, separately from floor/budget deletions, so the two
+    // reasons remain distinct (#35, accepted design 6.3 and 10).
+    if (s.node.confidence === "absent") continue;
+
     const suppressed = suppressedBy(overrides, s.node);
     if (suppressed) {
       deletions.push({

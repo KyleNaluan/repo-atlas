@@ -10,8 +10,20 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { qaIndex, ranked, sourceIndex, deletionsFor } from "../../src/render/projections.js";
-import type { Atlas, AtlasNode, DecisionNode, MechanismNode } from "../../src/schema/types.js";
+import {
+  qaIndex,
+  ranked,
+  sourceIndex,
+  deletionsFor,
+  evidenceCount,
+} from "../../src/render/projections.js";
+import type {
+  Atlas,
+  AtlasNode,
+  DecisionNode,
+  FlowNode,
+  MechanismNode,
+} from "../../src/schema/types.js";
 
 const atlas = JSON.parse(
   readFileSync(fileURLToPath(new URL("../fixtures/swe-prep.atlas.json", import.meta.url)), "utf8"),
@@ -147,6 +159,34 @@ describe("the source index fold", () => {
       const hrefRange = range(f.href ?? "", /#L(\d+)(?:-L(\d+))?$/);
       expect(hrefRange, `${f.label} -> ${f.href}`).toBe(labelRange);
     }
+  });
+
+  it("folds link-owned evidence into the source index and trust count", () => {
+    const flow: FlowNode = {
+      type: "flow",
+      id: "fl-links",
+      title: "linked",
+      evidence: [],
+      confidence: "verified",
+      interview_value: 4,
+      steps: [
+        { id: "a", node: "A" },
+        { id: "b", node: "B" },
+      ],
+      links: [
+        {
+          id: "a-b",
+          from: "a",
+          to: "b",
+          relation: "call",
+          evidence: [{ kind: "command", cmd: "trace a-b", output_excerpt: "a -> b" }],
+        },
+      ],
+    };
+    const commands = sourceIndex([flow], [], atlas.subject).get("command") ?? [];
+    expect(commands.map((entry) => entry.label)).toContain("trace a-b");
+    expect(commands.find((entry) => entry.label === "trace a-b")?.citedBy).toEqual([flow]);
+    expect(evidenceCount(flow)).toBe(1);
   });
 });
 

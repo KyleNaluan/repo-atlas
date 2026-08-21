@@ -30,7 +30,7 @@ import {
   type Overrides,
   type ProjectOverride,
 } from "../../src/rank/overrides.js";
-import type { Atlas, AtlasNode, MechanismNode } from "../../src/schema/types.js";
+import type { Atlas, AtlasNode, FlowNode, MechanismNode } from "../../src/schema/types.js";
 
 const atlas = JSON.parse(
   readFileSync(fileURLToPath(new URL("../fixtures/swe-prep.atlas.json", import.meta.url)), "utf8"),
@@ -208,6 +208,27 @@ describe("deletion uses two mechanisms, and needs both", () => {
   it("writes the adjusted score onto the node the renderer will display", () => {
     const result = rank(scored([["a", 4]]), INTERVIEW);
     expect(result.nodes[0]!.interview_value).toBe(4);
+  });
+
+  it("cuts an absent Flow independently of its score and any pin", () => {
+    const absent: FlowNode = {
+      type: "flow",
+      id: "fl-quarantined",
+      title: "one stale arrow",
+      evidence: [],
+      confidence: "absent",
+      interview_value: 0,
+      steps: [],
+      links: [],
+    };
+    const overrides: Overrides = {
+      overrides: [{ id: absent.id, pin: true, why: "even a pin cannot admit an unverified chain" }],
+    };
+    const result = rank([{ node: absent, score: 5 }], INTERVIEW, overrides);
+    expect(result.nodes).toEqual([]);
+    // Assemble records this in absent_cuts. It must stay distinct from a score
+    // floor/budget deletion, rather than appearing in both ledgers.
+    expect(result.deletions).toEqual([]);
   });
 });
 

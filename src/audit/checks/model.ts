@@ -33,6 +33,8 @@ import type { AtlasNode, Evidence } from "../../schema/types.js";
 export interface JudgeRequest {
   /** The one node under judgement. */
   node: AtlasNode;
+  /** Exactly the prose fields this judgement weighs. */
+  prose: string[];
   /** Its own evidence, resolved to text the model can read. */
   evidence: { citation: string; text: string }[];
 }
@@ -59,7 +61,20 @@ export const proseOf = (node: AtlasNode): string[] => {
     case "fact":
       return [`${node.label}: ${node.value}`];
     case "flow":
-      return node.caption === undefined ? [] : [node.caption];
+      // The boxes and arrows are the Flow's substantive claim. Judging only the
+      // caption lets a plausible one-line narration hide a wrong target in the
+      // diagram, so M1 weighs the same titles/details/labels the reader sees.
+      return [
+        ...(node.caption === undefined ? [] : [node.caption]),
+        ...node.steps.flatMap((step) => [
+          step.node,
+          ...(step.detail === undefined ? [] : [step.detail]),
+          ...(step.edge_label === undefined ? [] : [step.edge_label]),
+        ]),
+        ...(node.links ?? []).flatMap((link) =>
+          link.label === undefined ? [] : [link.label],
+        ),
+      ];
   }
 };
 
@@ -175,7 +190,7 @@ const runJudgements = async (
   let judged = 0;
   try {
     for (const { node, evidence } of toJudge) {
-      const verdict = await judge({ node, evidence }, question);
+      const verdict = await judge({ node, prose: proseOf(node), evidence }, question);
       if (!verdict.supported) findings.push(`${node.id}: ${verdict.note}`);
       judged += 1;
     }

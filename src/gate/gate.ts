@@ -24,6 +24,7 @@
 import type { Candidate, ExistenceClaim, ProbeContext } from "../probes/types.js";
 import { declaredManifests } from "../probes/manifests.js";
 import type { AtlasNode, EdgeNode, Evidence } from "../schema/types.js";
+import { gateFlowCandidate } from "./flow.js";
 
 export type Verdict = "confirmed" | "overturned" | "unresolved";
 
@@ -259,6 +260,11 @@ const settleBuild = (
 };
 
 export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCandidate => {
+  // A Flow is atomic and never follows the generic demote/divergence path. One
+  // broken arrow invalidates the story on both sides, so the Flow gate either
+  // verifies the complete links-based graph or quarantines it as absent (#35).
+  if (candidate.node.type === "flow") return gateFlowCandidate(ctx, candidate);
+
   const claims = candidate.claims ?? [];
   /** Where a confirmed present-claim was found, for the settlement below. */
   const confirmedAt: string[] = [];

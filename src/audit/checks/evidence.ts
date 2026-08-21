@@ -10,11 +10,21 @@ import { spec } from "../register.js";
 import { failed, notApplicable, passed, type AuditContext, type CheckResult } from "../types.js";
 import { resolveComment, resolveIssue } from "../../harvest/cache.js";
 import type { IssueStore } from "../issue-store.js";
-import type { Atlas, AtlasNode, Evidence, FileEvidence } from "../../schema/types.js";
+import { flowTopologyProblems } from "../../gate/flow.js";
+import type {
+  Atlas,
+  AtlasNode,
+  Evidence,
+  FileEvidence,
+  FlowLink,
+  FlowNode,
+  FlowStep,
+} from "../../schema/types.js";
 
 /**
  * The one traversal of the evidence-bearing locations (synopsis, shape,
- * node.evidence, decision.implemented_by, mechanism.code_excerpt, flow.steps).
+ * node.evidence, decision.implemented_by, mechanism.code_excerpt, flow.steps,
+ * flow.links).
  *
  * L1/L2 coverage and the synthetic subject the tests build both resolve
  * citations at exactly these locations, so they share this walk rather than
@@ -35,7 +45,7 @@ export const eachEvidence = (atlas: Atlas, visit: (e: Evidence, owner: string) =
  * Every evidence-bearing location a single node carries: NodeBase.evidence,
  * plus the type-specific slots the schema gives certain nodes -
  * DecisionNode.implemented_by, MechanismNode.code_excerpt.evidence, and
- * FlowNode.steps[].evidence.
+ * FlowNode.steps[].evidence and FlowNode.links[].evidence.
  *
  * This is the definition of "the evidence a node has". E1 asks whether a stamped
  * owner carries any evidence at all, and `eachEvidence` (hence L1/L2) walks the
@@ -47,7 +57,10 @@ export const nodeEvidence = (n: AtlasNode): Evidence[] => {
   const out: Evidence[] = [...n.evidence];
   if (n.type === "decision") out.push(...n.implemented_by);
   if (n.type === "mechanism" && n.code_excerpt) out.push(n.code_excerpt.evidence);
-  if (n.type === "flow") for (const s of n.steps) if (s.evidence) out.push(s.evidence);
+  if (n.type === "flow") {
+    for (const s of n.steps) if (s.evidence) out.push(s.evidence);
+    for (const link of n.links ?? []) out.push(...link.evidence);
+  }
   return out;
 };
 
@@ -246,6 +259,183 @@ const isBehavioural = (n: AtlasNode): boolean =>
 
 const observesBehaviour = (e: Evidence): boolean => e.kind === "file" || e.kind === "command";
 
+const FLOW_STOPWORDS = new Set([
+  "after",
+  "before",
+  "best",
+  "call",
+  "caller",
+  "controller",
+  "data",
+  "effect",
+  "flow",
+  "from",
+  "into",
+  "path",
+  "read",
+  "request",
+  "response",
+  "return",
+  "rows",
+  "service",
+  "side",
+  "step",
+  "through",
+  "with",
+  "write",
+]);
+
+const tokensOf = (value: string): string[] => {
+  const raw = value.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) ?? [];
+  const expanded = raw.flatMap((token) => [
+    token,
+    ...token.replace(/([a-z0-9])([A-Z])/g, "$1 $2").split(" "),
+  ]);
+  return [
+    ...new Set(
+      expanded
+        .map((token) => token.toLowerCase())
+        .filter((token) => token.length >= 4 && !FLOW_STOPWORDS.has(token)),
+    ),
+  ];
+};
+
+const evidenceText = (ctx: AuditContext, evidence: Evidence): string | undefined => {
+  if (evidence.kind === "issue") return undefined;
+  if (evidence.kind === "command") return evidence.output_excerpt;
+  const blob = blobAt(ctx.clone, ctx.atlas.subject.sha, evidence.path);
+  if (blob === null) return undefined; // L1 owns the missing-path failure.
+  if (evidence.line_start === undefined) return blob;
+  const end = evidence.line_end ?? evidence.line_start;
+  const lines = lineCount(blob);
+  if (evidence.line_start < 1 || end < evidence.line_start || end > lines) {
+    return undefined; // L2 owns the stale-range failure.
+  }
+  return sliceLines(blob, evidence.line_start, evidence.line_end);
+};
+
+const textCarries = (text: string, tokens: string[]): boolean => {
+  const folded = text.toLowerCase().replace(/[^a-z0-9_$]+/g, " ");
+  return tokens.some((token) => folded.includes(token));
+};
+
+const stepProblem = (ctx: AuditContext, flow: FlowNode, step: FlowStep): string | null => {
+  if (!step.evidence || !observesBehaviour(step.evidence)) return null;
+  const text = evidenceText(ctx, step.evidence);
+  if (text === undefined) return null;
+  const tokens = tokensOf(`${step.node} ${step.detail ?? ""}`);
+  if (tokens.length === 0) {
+    return `${flow.id} step ${step.id} does not name a machine-checkable landmark`;
+  }
+  return textCarries(text, tokens)
+    ? null
+    : `${flow.id} step ${step.id} cites readable source that does not name the landmark it renders`;
+};
+
+const normalizedHttpPath = (value: string): string => {
+  const path = (value.split("?")[0] ?? value)
+    .replace(/\$\{[^}]+\}/g, "{}")
+    .replace(/:[A-Za-z_$][\w$]*/g, "{}")
+    .replace(/\{[^}]+\}/g, "{}")
+    .replace(/\/{2,}/g, "/");
+  return path.length > 1 ? path.replace(/\/$/, "") : path;
+};
+
+const transportContract = (
+  flow: FlowNode,
+  link: FlowLink,
+): { method: string; path: string } | null => {
+  const steps = new Map(flow.steps.map((step) => [step.id, step]));
+  const described = [
+    link.label ?? "",
+    steps.get(link.from)?.detail ?? "",
+    steps.get(link.to)?.detail ?? "",
+  ].join(" ");
+  const match = /\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(\/[^\s"']+)/i.exec(described);
+  return match?.[1] && match[2]
+    ? { method: match[1].toUpperCase(), path: normalizedHttpPath(match[2]) }
+    : null;
+};
+
+const transportSupported = (texts: string[], contract: { method: string; path: string }): boolean => {
+  const combined = texts.join("\n");
+  const method = new RegExp(
+    `(?:@${contract.method[0]}${contract.method.slice(1).toLowerCase()}Mapping\\b|RequestMethod\\.${contract.method}\\b|\\b${contract.method}\\b)`,
+  );
+  const paths = [...combined.matchAll(/["'`]((?:\/)[^"'`]*)["'`]/g)].map((m) =>
+    normalizedHttpPath(m[1] ?? ""),
+  );
+  return method.test(combined) && paths.includes(contract.path);
+};
+
+const linkProblem = (ctx: AuditContext, flow: FlowNode, link: FlowLink): string | null => {
+  const texts = link.evidence
+    .map((evidence) => evidenceText(ctx, evidence))
+    .filter((text): text is string => text !== undefined);
+  if (texts.length === 0) return null; // L1/L2 own unreadable file citations.
+
+  if (link.relation === "transport") {
+    const contract = transportContract(flow, link);
+    if (!contract) {
+      return `${flow.id} link ${link.id} is transport but does not name an HTTP method and path`;
+    }
+    return transportSupported(texts, contract)
+      ? null
+      : `${flow.id} link ${link.id} cites a route that does not establish ${contract.method} ${contract.path}`;
+  }
+
+  const target = flow.steps.find((step) => step.id === link.to);
+  const labelTokens = tokensOf(link.label ?? "");
+  const targetTokens = tokensOf(`${target?.node ?? ""} ${target?.detail ?? ""}`);
+  const expected = labelTokens.length > 0 ? labelTokens : targetTokens;
+  if (expected.length === 0) {
+    return `${flow.id} link ${link.id} does not name a machine-checkable relationship target`;
+  }
+  const combined = texts.join("\n");
+  if (!textCarries(combined, expected)) {
+    return `${flow.id} link ${link.id} cites readable source that names a different target`;
+  }
+
+  if (link.relation === "read" && !/\b(?:select|from|join|find|get|read|load|fetch|query|lookup|search)\w*\b/i.test(combined)) {
+    return `${flow.id} link ${link.id} is typed read but its evidence establishes no read`;
+  }
+  if (link.relation === "write" && !/\b(?:insert|update|delete|save|write|persist|store|upsert|merge)\w*\b/i.test(combined)) {
+    return `${flow.id} link ${link.id} is typed write but its evidence establishes no write`;
+  }
+  if (
+    link.relation === "dispatch" &&
+    !/\b(?:supports|switch|case|instanceof|implementation|implementations)\b/i.test(combined)
+  ) {
+    return `${flow.id} link ${link.id} asserts one dispatch target without closed-selection evidence`;
+  }
+  return null;
+};
+
+const flowProblems = (ctx: AuditContext, flow: FlowNode): string[] => {
+  const problems: string[] = [];
+  if (flow.confidence !== "verified") {
+    problems.push(`${flow.id} is a behavioural Flow but has confidence ${flow.confidence}, not verified`);
+  }
+  // Legacy calls_next artifacts remain readable through the explicit 1.1 bridge.
+  // New links-based graphs receive topology and per-step/per-link semantic checks.
+  if (flow.links === undefined) {
+    if (!nodeEvidence(flow).some(observesBehaviour)) {
+      problems.push(`${flow.id} describes current behaviour but cites no file or command evidence`);
+    }
+    return problems;
+  }
+  problems.push(...flowTopologyProblems(flow, false).map((p) => `${flow.id}: ${p}`));
+  for (const step of flow.steps) {
+    const problem = stepProblem(ctx, flow, step);
+    if (problem) problems.push(problem);
+  }
+  for (const link of flow.links) {
+    const problem = linkProblem(ctx, flow, link);
+    if (problem) problems.push(problem);
+  }
+  return problems;
+};
+
 export const presentTenseClaims = (ctx: AuditContext): CheckResult => {
   const admissible = ctx.atlas.nodes.filter((n) => n.confidence !== "absent");
   const problems: string[] = [];
@@ -254,7 +444,9 @@ export const presentTenseClaims = (ctx: AuditContext): CheckResult => {
   for (const n of admissible) {
     if (isBehavioural(n)) {
       behavioural += 1;
-      if (!n.evidence.some(observesBehaviour)) {
+      if (n.type === "flow") {
+        problems.push(...flowProblems(ctx, n));
+      } else if (!n.evidence.some(observesBehaviour)) {
         problems.push(
           `${n.id} (${n.type}) describes current behaviour but cites no file or command evidence - only a record of intent`,
         );

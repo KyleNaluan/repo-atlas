@@ -175,7 +175,7 @@ describe("pass A on a clean artifact", () => {
 
 describe("every gate rejects its own mutant, and only its own", () => {
   it("has a mutant for every gate pass A runs", () => {
-    expect(MUTANTS.map((m) => m.check).sort()).toEqual(
+    expect([...new Set(MUTANTS.map((m) => m.check))].sort()).toEqual(
       checksInPass("A")
         .map((c) => c.id)
         .sort(),

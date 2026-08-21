@@ -33,7 +33,9 @@ const GATE_USAGE = `usage: repo-atlas gate --candidates <candidates.json> --harv
 Resolves each candidate's claims against the tree at the pinned SHA. The gate
 overturns the record in BOTH directions: a stated decision is not evidence of
 implementation, and an open ticket is not evidence of absence. A confirmed
-contradiction becomes a divergence edge rather than being dropped.`;
+contradiction becomes a divergence edge rather than being dropped. Flow chains
+are the deliberate exception: one unresolved or contradicted arrow quarantines
+the complete Flow as absent, never as a partial diagram or subject divergence.`;
 
 export interface CandidateFile {
   subject_sha: string;
@@ -152,8 +154,12 @@ export const gateCommand = async (argv: string[]): Promise<number> => {
       `(${written.length} read from records, ${probed.length} from probes) -> ${output}`,
   );
   console.log(`  confirmed  ${by("confirmed")}`);
-  console.log(`  overturned ${by("overturned")} (the record and the tree disagree; kept as divergence edges)`);
-  console.log(`  unresolved ${by("unresolved")} (nothing in the tree settles it; demoted, never admitted as checked)`);
+  console.log(
+    `  overturned ${by("overturned")} (record contradictions become divergence edges; broken Flow chains are quarantined)`,
+  );
+  console.log(
+    `  unresolved ${by("unresolved")} (generic claims are demoted; Flow chains are quarantined, never admitted as checked)`,
+  );
   for (const g of gated.filter((x) => x.verdict !== "confirmed")) {
     console.log(`  ${g.verdict.padEnd(10)} ${g.probe_id}: ${g.finding}`);
   }

@@ -345,6 +345,7 @@ export const sectionFlows = async (
   cache?: DiagramCache,
 ): Promise<Safe> => {
   const flows = ranked(nodes.filter(isType("flow")));
+  const cut = deletionsFor(atlas, "flows");
   const figures: Safe[] = [];
   for (const flow of flows) {
     const { svg, long } = await renderFlow(flow, cache);
@@ -402,7 +403,14 @@ export const sectionFlows = async (
       </p>
       ${flows.length === 0
         ? absencePanel("Traced flows", "No flow survived the confidence gate.")
-        : join(figures)}
+        : join(figures)}${cut.length > 0
+        ? html`<p class="small dim">
+            ${chrome`${cut.length} further ${plural(cut.length, "flow", "flows")} scored above the
+            value floor and ${plural(cut.length, "was", "were")} still cut by the rank stage to keep
+            this section within its budget. Each cut is recorded with its score in
+            <code>atlas.json</code>; see <a href="#record">The record</a>.`}
+          </p>`
+        : ""}
     </section>`;
 };
 

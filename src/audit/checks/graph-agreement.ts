@@ -108,6 +108,20 @@ export const displayedRankMatches = (ctx: AuditContext): CheckResult => {
     problems.push(`the artifact does not display the profile ${ctx.atlas.profile}`);
   }
 
+  // Section 04 is the first non-mechanism ranked section. Its chip is part of
+  // the Flow contract, not optional chrome: removing it would make a chain look
+  // verified without exposing the judgement that selected it.
+  for (const flow of ctx.atlas.nodes.filter((n) => n.type === "flow" && n.confidence !== "absent")) {
+    const start = ctx.artifact.indexOf(`id="${flow.id}"`);
+    if (start < 0) continue; // G1/G2 own structural presence and resurrection.
+    const block = ctx.artifact.slice(start, start + 1_500);
+    if (!block.includes(`value ${flow.interview_value}/5`)) {
+      problems.push(
+        `${flow.id} is rendered without its atlas.json value ${flow.interview_value}/5 attribution`,
+      );
+    }
+  }
+
   // The generated "N further items were cut" line is a claim about the deletion
   // record, so it is checked against the deletion record.
   const cutLine = /(\d+) further mechanisms? scored above the value floor/.exec(
@@ -124,6 +138,23 @@ export const displayedRankMatches = (ctx: AuditContext): CheckResult => {
   if (!cutLine && budgetCuts > 0) {
     problems.push(
       `the deletion record holds ${budgetCuts} mechanisms cut to budget but the artifact reports none`,
+    );
+  }
+
+  const flowCutLine = /(\d+) further flows? scored above the value floor/.exec(
+    ctx.artifact.replace(/<[^>]*>/g, "").replace(/\s+/g, " "),
+  );
+  const flowBudgetCuts = ctx.atlas.record.deletions.filter(
+    (d) => d.kind === "budget" && d.section === "flows" && d.unit !== "question",
+  ).length;
+  if (flowCutLine && Number(flowCutLine[1]) !== flowBudgetCuts) {
+    problems.push(
+      `the artifact reports ${flowCutLine[1]} flows cut to budget but the deletion record holds ${flowBudgetCuts}`,
+    );
+  }
+  if (!flowCutLine && flowBudgetCuts > 0) {
+    problems.push(
+      `the deletion record holds ${flowBudgetCuts} flows cut to budget but section 04 reports none`,
     );
   }
 

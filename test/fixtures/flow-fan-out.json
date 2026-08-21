@@ -1,0 +1,103 @@
+{
+  "type": "flow",
+  "id": "fl-link-fan-out",
+  "title": "One durable record drives three derivations",
+  "evidence": [
+    {
+      "kind": "command",
+      "cmd": "trace durable-record",
+      "output_excerpt": "attempt -> learned, rep due, challenge priority"
+    }
+  ],
+  "confidence": "verified",
+  "interview_value": 5,
+  "orientation": "LR",
+  "steps": [
+    {
+      "id": "attempt",
+      "node": "Attempt record",
+      "evidence": {
+        "kind": "command",
+        "cmd": "locate attempt record",
+        "output_excerpt": "AttemptRepository"
+      }
+    },
+    {
+      "id": "learned",
+      "node": "Learned state",
+      "kind": "response",
+      "evidence": {
+        "kind": "command",
+        "cmd": "locate learned derivation",
+        "output_excerpt": "LearnedCriterion"
+      }
+    },
+    {
+      "id": "repdue",
+      "node": "Rep due state",
+      "kind": "response",
+      "evidence": {
+        "kind": "command",
+        "cmd": "locate rep due derivation",
+        "output_excerpt": "RepDueService -> Sm2Scheduler"
+      }
+    },
+    {
+      "id": "priority",
+      "node": "Challenge priority",
+      "kind": "response",
+      "evidence": {
+        "kind": "command",
+        "cmd": "locate challenge derivation",
+        "output_excerpt": "ChallengePriority"
+      }
+    }
+  ],
+  "links": [
+    {
+      "id": "attempt-learned",
+      "from": "attempt",
+      "to": "learned",
+      "relation": "read",
+      "kind": "response",
+      "label": "PASSED rows",
+      "evidence": [
+        {
+          "kind": "command",
+          "cmd": "trace learned predicate",
+          "output_excerpt": "outcome = 'PASSED'"
+        }
+      ]
+    },
+    {
+      "id": "attempt-repdue",
+      "from": "attempt",
+      "to": "repdue",
+      "relation": "read",
+      "kind": "response",
+      "label": "terminal rep attempts",
+      "evidence": [
+        {
+          "kind": "command",
+          "cmd": "trace rep due predicate",
+          "output_excerpt": "terminal rep attempt -> Sm2Scheduler"
+        }
+      ]
+    },
+    {
+      "id": "attempt-priority",
+      "from": "attempt",
+      "to": "priority",
+      "relation": "read",
+      "kind": "response",
+      "label": "terminal challenge attempts",
+      "evidence": [
+        {
+          "kind": "command",
+          "cmd": "trace challenge predicate",
+          "output_excerpt": "terminal challenge attempt -> ChallengePriority"
+        }
+      ]
+    }
+  ]
+}

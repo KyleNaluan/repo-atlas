@@ -14,7 +14,7 @@
  */
 import { Graphviz } from "@hpcc-js/wasm-graphviz";
 import { createHash } from "node:crypto";
-import type { FlowNode, FlowStep } from "../schema/types.js";
+import type { FlowLink, FlowNode, FlowStep } from "../schema/types.js";
 
 /**
  * Graphviz measures Helvetica/Times/Courier with built-in metrics, needing no
@@ -87,6 +87,17 @@ const nodeAttrs = (step: FlowStep): string => {
   ].join(", ");
 };
 
+type FlowKind = NonNullable<FlowLink["kind"]>;
+
+const edgeAttrs = (kind: FlowKind, edgeLabel?: string): string => {
+  const color =
+    kind === "response" ? COLORS.response : kind === "aside" ? COLORS.aside : COLORS.request;
+  const attrs = [`color=${quote(color)}`];
+  if (edgeLabel) attrs.push(`label=${quote(edgeLabel)}`);
+  if (kind === "aside") attrs.push(`style=dashed`);
+  return attrs.join(", ");
+};
+
 export const toDot = (flow: FlowNode): string => {
   const byId = new Map(flow.steps.map((s) => [s.id, s]));
   const lines: string[] = [
@@ -98,19 +109,34 @@ export const toDot = (flow: FlowNode): string => {
     `  edge [fontname="${DETAIL_FONT}", fontsize=9, fontcolor="${COLORS.label}", penwidth=1.4, arrowsize=0.75];`,
   ];
   for (const step of flow.steps) lines.push(`  ${quote(step.id)} [${nodeAttrs(step)}];`);
-  for (const step of flow.steps) {
-    for (const target of step.calls_next ?? []) {
-      const to = byId.get(target);
-      if (!to) throw new Error(`flow ${flow.id}: step ${step.id} points at unknown step ${target}`);
-      // Edge colour follows the TARGET's kind, so a response box is reached by a
-      // response-coloured edge without the author placing anything.
-      const kind = to.kind ?? step.kind ?? "request";
-      const color =
-        kind === "response" ? COLORS.response : kind === "aside" ? COLORS.aside : COLORS.request;
-      const attrs = [`color=${quote(color)}`];
-      if (step.edge_label) attrs.push(`label=${quote(step.edge_label)}`);
-      if (kind === "aside") attrs.push(`style=dashed`);
-      lines.push(`  ${quote(step.id)} -> ${quote(target)} [${attrs.join(", ")}];`);
+
+  // Presence, not length, selects the new contract. An explicit empty links
+  // array means this graph has no edges; falling back in that case would merge
+  // two authorities and resurrect legacy edges the author deliberately replaced.
+  if (flow.links !== undefined) {
+    for (const link of flow.links) {
+      const from = byId.get(link.from);
+      const to = byId.get(link.to);
+      if (!from || !to) {
+        const endpoint = !from ? `from step ${link.from}` : `to step ${link.to}`;
+        throw new Error(`flow ${flow.id}: link ${link.id} points at unknown ${endpoint}`);
+      }
+      // An explicit link kind owns its own presentation. The endpoint fallback
+      // preserves the legacy colour convention for link authors who omit it.
+      const kind = link.kind ?? to.kind ?? from.kind ?? "request";
+      lines.push(
+        `  ${quote(link.from)} -> ${quote(link.to)} [${edgeAttrs(kind, link.label)}];`,
+      );
+    }
+  } else {
+    for (const step of flow.steps) {
+      for (const target of step.calls_next ?? []) {
+        const to = byId.get(target);
+        if (!to) throw new Error(`flow ${flow.id}: step ${step.id} points at unknown step ${target}`);
+        // Legacy edge colour follows the target's kind, as it did before #37.
+        const kind = to.kind ?? step.kind ?? "request";
+        lines.push(`  ${quote(step.id)} -> ${quote(target)} [${edgeAttrs(kind, step.edge_label)}];`);
+      }
     }
   }
   lines.push("}");

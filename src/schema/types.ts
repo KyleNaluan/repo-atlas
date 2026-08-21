@@ -8,12 +8,12 @@
  *
  * Versioning: `schema_version` is semver and additive-only within a major.
  * The v1 shape is #3's six node types, with #7's three additive amendments
- * (`interviewer_questions` object form, `FlowNode.orientation`, `Fact.label`)
- * and the run metadata #6, #8 and #9 require.
+ * (`interviewer_questions` object form, `FlowNode.orientation`, `Fact.label`),
+ * #37's edge-level Flow links, and the run metadata #6, #8 and #9 require.
  */
 
 /** The contract version this build reads and writes. */
-export const SCHEMA_VERSION = "1.0.0";
+export const SCHEMA_VERSION = "1.1.0";
 
 /* ------------------------------------------------------------- evidence */
 
@@ -177,6 +177,36 @@ export interface FlowStep {
   evidence?: Evidence;
 }
 
+/** The relationship represented by one independently evidenced Flow arrow (#37). */
+export type FlowRelation =
+  | "call"
+  | "transport"
+  | "dispatch"
+  | "read"
+  | "write"
+  | "return"
+  | "side_effect";
+
+/**
+ * An edge-level Flow claim.
+ *
+ * `calls_next` and `edge_label` remain accepted on FlowStep for legacy v1 input,
+ * but cannot express distinct labels or evidence when one step fans out. New
+ * flows use links so every arrow has its own meaning and citations. The later
+ * Flow semantic gate owns the non-empty-evidence and endpoint-integrity rules;
+ * this schema-minor addition provides the durable slot without pre-empting it.
+ */
+export interface FlowLink {
+  id: string;
+  from: string;
+  to: string;
+  relation: FlowRelation;
+  /** Drives edge colour and dashed aside styling, never position. */
+  kind?: "request" | "response" | "aside";
+  label?: string;
+  evidence: Evidence[];
+}
+
 export interface FlowNode extends NodeBase {
   type: "flow";
   caption?: string;
@@ -186,6 +216,8 @@ export interface FlowNode extends NodeBase {
    */
   orientation?: "LR" | "TB";
   steps: FlowStep[];
+  /** Preferred edge contract. Omitted only for legacy `calls_next` input (#37). */
+  links?: FlowLink[];
 }
 
 export type AtlasNode =

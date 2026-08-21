@@ -25,7 +25,7 @@ import {
   StaleScoresError,
   type ScoreFile,
 } from "../../src/rank/scorer.js";
-import type { Atlas, AtlasNode, MechanismNode } from "../../src/schema/types.js";
+import type { Atlas, AtlasNode, FlowNode, MechanismNode } from "../../src/schema/types.js";
 
 const read = <T>(name: string): T =>
   JSON.parse(readFileSync(fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url)), "utf8")) as T;
@@ -111,7 +111,12 @@ describe("the rubric reproduces the human ranking", () => {
     }
   });
 
-  it("agrees with the human on 14 of 33 nodes overall, and that number is the finding", () => {
+  it("scores the reference request and lineage Flows as high-signal", () => {
+    expect(pinned.scores.find((score) => score.id === "fl-submission")?.score).toBe(5);
+    expect(pinned.scores.find((score) => score.id === "fl-derivations")?.score).toBe(4);
+  });
+
+  it("agrees with the human on 16 of 33 nodes overall, and that number is the finding", () => {
     // Recorded rather than asserted-away. #9's ground truth is the ORDERED DEEP
     // DIVES, and those match exactly; across the whole graph the model and the
     // hand-authored scores agree on well under half. That is expected - the
@@ -126,11 +131,13 @@ describe("the rubric reproduces the human ranking", () => {
     // before - still below what the human gave them, so none of them is what
     // moved the count - and the ordered deep dives, which are #9's actual ground
     // truth, did not move at all. A rubric edit that changed the ground truth
-    // would be a different matter and would fail the test above.
+    // would be a different matter and would fail the test above. It moved again
+    // from 14 to 16 when Flow criteria were added; the two reference Flows kept
+    // their human scores and the ordered deep dives remained unchanged.
     const agree = atlas.nodes.filter(
       (n) => pinned.scores.find((s) => s.id === n.id)!.score === n.interview_value,
     ).length;
-    expect(agree).toBe(14);
+    expect(agree).toBe(16);
   });
 });
 
@@ -248,6 +255,74 @@ describe("the model scorer", () => {
     // Evidence is deliberately withheld: the rubric says evidence is a gate and
     // not a score, so showing citations invites rewarding a node for having many.
     expect(prompt).not.toContain("evidence");
+  });
+
+  it("shows Flow topology and seams without showing its evidence", async () => {
+    const flow: FlowNode = {
+      type: "flow",
+      id: "fl-lineage",
+      title: "One record drives two derivations",
+      caption: "Two independently computed read models.",
+      confidence: "verified",
+      interview_value: 0,
+      evidence: [{ kind: "file", path: "secret/node-evidence.ts", sha: "a".repeat(40) }],
+      steps: [
+        {
+          id: "record",
+          node: "Attempt record",
+          detail: "durable state",
+          evidence: { kind: "file", path: "secret/step-evidence.ts", sha: "a".repeat(40) },
+        },
+        {
+          id: "learned",
+          node: "Learned state",
+          kind: "response",
+          evidence: { kind: "command", cmd: "locate learned", output_excerpt: "LearnedCriterion" },
+        },
+        {
+          id: "due",
+          node: "Due state",
+          kind: "response",
+          evidence: { kind: "command", cmd: "locate due", output_excerpt: "Sm2Scheduler" },
+        },
+      ],
+      links: [
+        {
+          id: "learned-link",
+          from: "record",
+          to: "learned",
+          relation: "read",
+          label: "passed rows",
+          evidence: [{ kind: "file", path: "secret/link-evidence.ts", sha: "a".repeat(40) }],
+        },
+        {
+          id: "due-link",
+          from: "record",
+          to: "due",
+          relation: "read",
+          label: "terminal reps",
+          evidence: [{ kind: "command", cmd: "trace due read", output_excerpt: "terminal reps" }],
+        },
+      ],
+    };
+    let prompt = "";
+    await modelScorer({
+      ask: async (value) => {
+        prompt = value;
+        return JSON.stringify({ scores: [{ id: flow.id, score: 5, because: "lineage seam" }] });
+      },
+    })({ nodes: [flow], profile: INTERVIEW, rubric: "r" });
+
+    expect(prompt).toContain('"archetype": "shared_state_lineage"');
+    expect(prompt).toContain('"entry_kind": "durable_shared_state"');
+    expect(prompt).toContain('"title": "Attempt record"');
+    expect(prompt).toContain('"relation": "read"');
+    expect(prompt).toContain('"label": "passed rows"');
+    expect(prompt).toContain('"roots"');
+    expect(prompt).toContain('"terminals"');
+    expect(prompt).toContain('"architectural_boundaries"');
+    expect(prompt).not.toContain("secret/");
+    expect(prompt).not.toContain('"evidence"');
   });
 });
 

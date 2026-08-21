@@ -24,6 +24,7 @@
  */
 import type { AtlasNode, Deletion, InterviewerQuestion } from "../schema/types.js";
 import type { Profile } from "./profile.js";
+import { flowArchetype, type FlowArchetype } from "./flow.js";
 import {
   boostFor,
   clampScore,
@@ -54,11 +55,42 @@ export interface RankResult {
 
 /** Which budget, if any, governs a node type. */
 const sectionOf = (node: AtlasNode): string | null =>
-  node.type === "mechanism" ? "mechanisms" : null;
+  node.type === "mechanism" ? "mechanisms" : node.type === "flow" ? "flows" : null;
+
+const FLOW_ARCHETYPE_LABEL: Record<FlowArchetype, string> = {
+  request_response: "request/response",
+  shared_state_lineage: "shared-state/data-lineage",
+};
 
 /** value desc, then id, so equal scores never shuffle between runs. */
 const byValue = (a: ScoredNode, b: ScoredNode): number =>
   b.score - a.score || a.node.id.localeCompare(b.node.id);
+
+/**
+ * How many preferred-archetype Flows will take a slot, under the same allocation
+ * the main pass runs: value order, each archetype capped at its slot, the section
+ * capped overall, pinned Flows spending no slot. Unknown-entry Flows are ignored
+ * here - they may only fill what this leaves open - so the count is what bounds
+ * their fallback capacity and guarantees they never displace a preferred Flow.
+ */
+const countPreferredFlowsKept = (
+  survivors: ScoredNode[],
+  p: Profile,
+  overrides: Overrides,
+): number => {
+  const usedByArchetype = new Map<FlowArchetype, number>();
+  let used = 0;
+  for (const s of [...survivors].sort(byValue)) {
+    if (s.node.type !== "flow" || pinnedBy(overrides, s.node)) continue;
+    const flowClass = flowArchetype(s.node);
+    if (flowClass === "unknown") continue;
+    const archetypeUsed = usedByArchetype.get(flowClass) ?? 0;
+    if (used >= p.budgets.flows || archetypeUsed >= p.flow_archetype_budgets[flowClass]) continue;
+    used += 1;
+    usedByArchetype.set(flowClass, archetypeUsed + 1);
+  }
+  return used;
+};
 
 const questionText = (q: InterviewerQuestion): string =>
   typeof q === "string" ? q : q.question;
@@ -182,14 +214,27 @@ export const rank = (
   // ranking rather than add to it.
   const kept: ScoredNode[] = [];
   const kept_in = new Map<string, number>();
+  const kept_flow_archetype = new Map<FlowArchetype, number>();
   // Rank position within the section, counting every candidate rather than only
   // the ones that fit. A counter that stops at the cap would report the seventh
   // cut as "ranked 6" alongside the sixth - a recorded reason stating something
   // that is not true, in the record that exists to make deletion auditable.
   const seen_in = new Map<string, number>();
+
+  // An unknown-entry Flow claims neither preferred archetype slot, so it may only
+  // fill Flow-section capacity the two preferred archetypes leave genuinely open,
+  // and it must never displace a qualifying preferred Flow. That reserve is fixed
+  // before the pass: preferredFlowsKept is how many request/response and
+  // shared-state/data-lineage Flows will take a slot, so at most `flows -
+  // preferredFlowsKept` unknown Flows may fill what is left, whatever the value
+  // order they arrive in.
+  const preferredFlowsKept = countPreferredFlowsKept(survivors, p, overrides);
+  const unknownFlowSlots = Math.max(0, p.budgets.flows - preferredFlowsKept);
+  let kept_unknown_flows = 0;
+
   for (const s of [...survivors].sort(byValue)) {
     const section = sectionOf(s.node);
-    const budget = section === null ? undefined : p.budgets[section as "mechanisms"];
+    const budget = section === null ? undefined : p.budgets[section as "mechanisms" | "flows"];
     if (section === null || budget === undefined || pinnedBy(overrides, s.node)) {
       kept.push(s);
       continue;
@@ -197,11 +242,49 @@ export const rank = (
     const position = (seen_in.get(section) ?? 0) + 1;
     seen_in.set(section, position);
     const used = kept_in.get(section) ?? 0;
-    if (used >= budget) {
+    const flowClass = s.node.type === "flow" ? flowArchetype(s.node) : null;
+
+    if (flowClass === "unknown") {
+      // No verified request or lineage entry, so it competes for no preferred
+      // slot - only for the fallback capacity the preferred archetypes left open.
+      // The recorded reason names that this fallback governed, never a preferred
+      // slot or the section cap it never contended for.
+      if (kept_unknown_flows >= unknownFlowSlots) {
+        deletions.push({
+          id: s.node.id,
+          score: s.score,
+          reason: `section budget: no open Flow slot remains for an unknown-entry Flow; the request/response and shared-state/data-lineage archetypes claimed ${preferredFlowsKept} of ${budget} flow slots, leaving ${unknownFlowSlots} for unknown-entry Flows; ranked ${position}`,
+          kind: "budget",
+          section,
+          unit: "node",
+        });
+        continue;
+      }
+      kept_unknown_flows += 1;
+      kept_in.set(section, used + 1);
+      kept.push(s);
+      continue;
+    }
+
+    const archetype: FlowArchetype | null = flowClass;
+    const archetypeBudget = archetype === null ? undefined : p.flow_archetype_budgets[archetype];
+    const archetypeUsed = archetype === null ? 0 : (kept_flow_archetype.get(archetype) ?? 0);
+    const sectionBound = used >= budget;
+    const archetypeBound =
+      archetype !== null && archetypeBudget !== undefined && archetypeUsed >= archetypeBudget;
+    if (sectionBound || archetypeBound) {
+      // A `capped at N` clause may only name a constraint that actually bound.
+      // The section cap and an archetype slot can each bind alone, so the reason
+      // states only the one(s) that did - the deletion record #8's G2 relies on
+      // must never claim the section was full when the archetype slot bound alone.
+      const clauses: string[] = [];
+      if (sectionBound) clauses.push(`${section} capped at ${budget} by the ${p.name} profile`);
+      if (archetypeBound)
+        clauses.push(`${FLOW_ARCHETYPE_LABEL[archetype!]} slot capped at ${archetypeBudget}`);
       deletions.push({
         id: s.node.id,
         score: s.score,
-        reason: `section budget: ${section} capped at ${budget} by the ${p.name} profile; ranked ${position}`,
+        reason: `section budget: ${clauses.join("; ")}; ranked ${position}`,
         kind: "budget",
         section,
         unit: "node",
@@ -209,6 +292,7 @@ export const rank = (
       continue;
     }
     kept_in.set(section, used + 1);
+    if (archetype !== null) kept_flow_archetype.set(archetype, archetypeUsed + 1);
     kept.push(s);
   }
 

@@ -30,6 +30,14 @@ interviewer nothing they could not assume.
   between the record and the build, a deliberate tradeoff. Going first on these
   is strictly better than being caught by them, and volunteering one is the
   single strongest signal available.
+- **A complete Flow that crosses architectural boundaries and exposes a seam.**
+  A request/response narrative earns top marks when its verified landmarks show
+  more than a controller wrapper: dispatch, transaction, data, process, return,
+  or side-effect boundaries should reveal how the result is actually produced.
+  A shared-state/data-lineage narrative earns the same marks when one durable
+  state drives independently meaningful derivations with distinct predicates or
+  algorithms. Prefer these two complementary stories over several routes through
+  the same layers.
 
 ## Middle (2-3)
 
@@ -60,6 +68,10 @@ how a reader interprets the rest, it is inventory.
 - Anything a reader would assume from the stack. That the web layer has
   controllers is not a finding.
 - Anything whose interest is in the domain rather than in the engineering.
+- A Flow that is only a controller-to-service wrapper, endpoint listing, package
+  tour, or raw call graph saying "web code calls service code". These are route
+  inventory, not an end-to-end narrative, and score 0-1 even when every arrow is
+  verified.
 
 ## Scoring against what the subject actually offers
 

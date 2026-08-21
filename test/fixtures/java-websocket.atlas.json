@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "generated_at": "2026-08-12T06:25:44.308Z",
   "profile": "interview",
   "rubric_version": "v1",
@@ -53,7 +53,7 @@
         }
       ],
       "confidence": "verified",
-      "interview_value": 5,
+      "interview_value": 4,
       "probe_id": "decided-but-unbuilt"
     },
     {
@@ -86,7 +86,30 @@
         }
       ],
       "confidence": "verified",
-      "interview_value": 5,
+      "interview_value": 4,
+      "probe_id": "decided-but-unbuilt"
+    },
+    {
+      "type": "edge",
+      "kind": "divergence",
+      "id": "e-unbuilt-1374-divergence",
+      "title": "Allow the use of String type connection links, not just URIs",
+      "statement": "#1374 \"Allow the use of String type connection links, not just URIs\" is open, so the record implies it is not built. Checked against the tree: the record implies this is not built, and the tree says otherwise.",
+      "why_it_matters": "The record and the build disagree. Going first on that is strictly better than being caught by it, and it is the one finding a summariser cannot produce.",
+      "how_to_say_it": "The tracker and the code disagree here - the record implies this is not built, and the tree says otherwise.",
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 1374
+        },
+        {
+          "kind": "file",
+          "path": "src/main/java/org/java_websocket/drafts/Draft_6455.java",
+          "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 4,
       "probe_id": "decided-but-unbuilt"
     },
     {
@@ -119,7 +142,7 @@
         }
       ],
       "confidence": "verified",
-      "interview_value": 5,
+      "interview_value": 4,
       "probe_id": "decided-but-unbuilt"
     },
     {
@@ -152,7 +175,7 @@
         }
       ],
       "confidence": "verified",
-      "interview_value": 5,
+      "interview_value": 4,
       "probe_id": "decided-but-unbuilt"
     },
     {
@@ -185,7 +208,7 @@
         }
       ],
       "confidence": "verified",
-      "interview_value": 5,
+      "interview_value": 4,
       "probe_id": "decided-but-unbuilt"
     },
     {
@@ -213,7 +236,30 @@
         }
       ],
       "confidence": "verified",
-      "interview_value": 5,
+      "interview_value": 4,
+      "probe_id": "decided-but-unbuilt"
+    },
+    {
+      "type": "edge",
+      "kind": "divergence",
+      "id": "e-unbuilt-977-divergence",
+      "title": "Custom error message in error response",
+      "statement": "#977 \"Custom error message in error response\" is open, so the record implies it is not built. Checked against the tree: the record implies this is not built, and the tree says otherwise.",
+      "why_it_matters": "The record and the build disagree. Going first on that is strictly better than being caught by it, and it is the one finding a summariser cannot produce.",
+      "how_to_say_it": "The tracker and the code disagree here - the record implies this is not built, and the tree says otherwise.",
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 977
+        },
+        {
+          "kind": "file",
+          "path": "src/main/java/org/java_websocket/framing/CloseFrame.java",
+          "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 4,
       "probe_id": "decided-but-unbuilt"
     },
     {
@@ -252,30 +298,7 @@
         }
       ],
       "confidence": "verified",
-      "interview_value": 5
-    },
-    {
-      "type": "edge",
-      "kind": "divergence",
-      "id": "e-unbuilt-1374-divergence",
-      "title": "Allow the use of String type connection links, not just URIs",
-      "statement": "#1374 \"Allow the use of String type connection links, not just URIs\" is open, so the record implies it is not built. Checked against the tree: the record implies this is not built, and the tree says otherwise.",
-      "why_it_matters": "The record and the build disagree. Going first on that is strictly better than being caught by it, and it is the one finding a summariser cannot produce.",
-      "how_to_say_it": "The tracker and the code disagree here - the record implies this is not built, and the tree says otherwise.",
-      "evidence": [
-        {
-          "kind": "issue",
-          "number": 1374
-        },
-        {
-          "kind": "file",
-          "path": "src/main/java/org/java_websocket/drafts/Draft_6455.java",
-          "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
-        }
-      ],
-      "confidence": "verified",
-      "interview_value": 4,
-      "probe_id": "decided-but-unbuilt"
+      "interview_value": 4
     },
     {
       "type": "edge",
@@ -292,7 +315,7 @@
         }
       ],
       "confidence": "attested",
-      "interview_value": 4,
+      "interview_value": 3,
       "probe_id": "decided-but-unbuilt"
     },
     {
@@ -307,181 +330,6 @@
         {
           "kind": "issue",
           "number": 1507
-        }
-      ],
-      "confidence": "attested",
-      "interview_value": 4,
-      "probe_id": "decided-but-unbuilt"
-    },
-    {
-      "type": "edge",
-      "kind": "divergence",
-      "id": "e-unbuilt-977-divergence",
-      "title": "Custom error message in error response",
-      "statement": "#977 \"Custom error message in error response\" is open, so the record implies it is not built. Checked against the tree: the record implies this is not built, and the tree says otherwise.",
-      "why_it_matters": "The record and the build disagree. Going first on that is strictly better than being caught by it, and it is the one finding a summariser cannot produce.",
-      "how_to_say_it": "The tracker and the code disagree here - the record implies this is not built, and the tree says otherwise.",
-      "evidence": [
-        {
-          "kind": "issue",
-          "number": 977
-        },
-        {
-          "kind": "file",
-          "path": "src/main/java/org/java_websocket/framing/CloseFrame.java",
-          "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
-        }
-      ],
-      "confidence": "verified",
-      "interview_value": 4,
-      "probe_id": "decided-but-unbuilt"
-    },
-    {
-      "type": "edge",
-      "kind": "coverage_gap",
-      "id": "e-unresolved-114",
-      "title": "#114 is referenced but not explained",
-      "statement": "The source cites #114 in 1 place in the source, and the record does not resolve it: issue #114 exists (closed) but carries no resolution-shaped comment.",
-      "why_it_matters": "The code was written with a reason that lives outside the repository. Saying so is the honest report; inventing the reason from the surrounding code is the failure this engine exists to avoid.",
-      "how_to_say_it": "There is a reference to #114 here that the record does not explain.",
-      "evidence": [
-        {
-          "kind": "file",
-          "path": "src/main/java/org/java_websocket/WebSocketImpl.java",
-          "line_start": 541,
-          "line_end": 541,
-          "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
-        },
-        {
-          "kind": "issue",
-          "number": 114
-        }
-      ],
-      "confidence": "verified",
-      "interview_value": 4
-    },
-    {
-      "type": "edge",
-      "kind": "coverage_gap",
-      "id": "e-unresolved-222",
-      "title": "#222 is referenced but not explained",
-      "statement": "The source cites #222 in 1 place in the source, and the record does not resolve it: issue #222 exists (closed) but carries no resolution-shaped comment.",
-      "why_it_matters": "The code was written with a reason that lives outside the repository. Saying so is the honest report; inventing the reason from the surrounding code is the failure this engine exists to avoid.",
-      "how_to_say_it": "There is a reference to #222 here that the record does not explain.",
-      "evidence": [
-        {
-          "kind": "file",
-          "path": "src/main/java/org/java_websocket/server/WebSocketServer.java",
-          "line_start": 750,
-          "line_end": 750,
-          "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
-        },
-        {
-          "kind": "issue",
-          "number": 222
-        }
-      ],
-      "confidence": "verified",
-      "interview_value": 4
-    },
-    {
-      "type": "edge",
-      "kind": "coverage_gap",
-      "id": "e-unresolved-458",
-      "title": "#458 is referenced but not explained",
-      "statement": "The source cites #458 in 1 place in the source, and the record does not resolve it: issue #458 exists (closed) but carries no resolution-shaped comment.",
-      "why_it_matters": "The code was written with a reason that lives outside the repository. Saying so is the honest report; inventing the reason from the surrounding code is the failure this engine exists to avoid.",
-      "how_to_say_it": "There is a reference to #458 here that the record does not explain.",
-      "evidence": [
-        {
-          "kind": "file",
-          "path": "src/main/java/org/java_websocket/SSLSocketChannel2.java",
-          "line_start": 213,
-          "line_end": 213,
-          "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
-        },
-        {
-          "kind": "issue",
-          "number": 458
-        }
-      ],
-      "confidence": "verified",
-      "interview_value": 4
-    },
-    {
-      "type": "edge",
-      "kind": "coverage_gap",
-      "id": "e-unresolved-459",
-      "title": "#459 is referenced but not explained",
-      "statement": "The source cites #459 in 1 place in the source, and the record does not resolve it: no issue with that number was harvested for this subject.",
-      "why_it_matters": "The code was written with a reason that lives outside the repository. Saying so is the honest report; inventing the reason from the surrounding code is the failure this engine exists to avoid.",
-      "how_to_say_it": "There is a reference to #459 here that the record does not explain.",
-      "evidence": [
-        {
-          "kind": "file",
-          "path": "src/main/java/org/java_websocket/SSLSocketChannel2.java",
-          "line_start": 213,
-          "line_end": 213,
-          "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
-        }
-      ],
-      "confidence": "verified",
-      "interview_value": 4
-    },
-    {
-      "type": "edge",
-      "kind": "coverage_gap",
-      "id": "e-unresolved-512",
-      "title": "#512 is referenced but not explained",
-      "statement": "The source cites #512 in 1 place in the source, and the record does not resolve it: issue #512 exists (closed) but carries no resolution-shaped comment.",
-      "why_it_matters": "The code was written with a reason that lives outside the repository. Saying so is the honest report; inventing the reason from the surrounding code is the failure this engine exists to avoid.",
-      "how_to_say_it": "There is a reference to #512 here that the record does not explain.",
-      "evidence": [
-        {
-          "kind": "file",
-          "path": "src/main/java/org/java_websocket/server/WebSocketServer.java",
-          "line_start": 813,
-          "line_end": 813,
-          "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
-        },
-        {
-          "kind": "issue",
-          "number": 512
-        }
-      ],
-      "confidence": "verified",
-      "interview_value": 4
-    },
-    {
-      "type": "edge",
-      "kind": "unbuilt",
-      "id": "e-unbuilt-1329",
-      "title": "Some flaky tests",
-      "statement": "#1329 is open, so the record implies this is not built.",
-      "why_it_matters": "A decision that is settled but not built is the gap between the record and the tree, and it is what an interviewer asks about first.",
-      "how_to_say_it": "The tracker still has #1329 open for that.",
-      "evidence": [
-        {
-          "kind": "issue",
-          "number": 1329
-        }
-      ],
-      "confidence": "attested",
-      "interview_value": 3,
-      "probe_id": "decided-but-unbuilt"
-    },
-    {
-      "type": "edge",
-      "kind": "unbuilt",
-      "id": "e-unbuilt-1470",
-      "title": "Risk of race-condition when calling reconnect()",
-      "statement": "#1470 is open, so the record implies this is not built.",
-      "why_it_matters": "A decision that is settled but not built is the gap between the record and the tree, and it is what an interviewer asks about first.",
-      "how_to_say_it": "The tracker still has #1470 open for that.",
-      "evidence": [
-        {
-          "kind": "issue",
-          "number": 1470
         }
       ],
       "confidence": "attested",
@@ -527,24 +375,6 @@
     {
       "type": "edge",
       "kind": "unbuilt",
-      "id": "e-unbuilt-877",
-      "title": "3 issue tests fail",
-      "statement": "#877 is open, so the record implies this is not built.",
-      "why_it_matters": "A decision that is settled but not built is the gap between the record and the tree, and it is what an interviewer asks about first.",
-      "how_to_say_it": "The tracker still has #877 open for that.",
-      "evidence": [
-        {
-          "kind": "issue",
-          "number": 877
-        }
-      ],
-      "confidence": "attested",
-      "interview_value": 3,
-      "probe_id": "decided-but-unbuilt"
-    },
-    {
-      "type": "edge",
-      "kind": "unbuilt",
       "id": "e-unbuilt-879",
       "title": "Race Conditions when closing server, port is still bound",
       "statement": "#879 is open, so the record implies this is not built.",
@@ -577,6 +407,122 @@
       "confidence": "attested",
       "interview_value": 3,
       "probe_id": "decided-but-unbuilt"
+    },
+    {
+      "type": "edge",
+      "kind": "coverage_gap",
+      "id": "e-unresolved-114",
+      "title": "#114 is referenced but not explained",
+      "statement": "The source cites #114 in 1 place in the source, and the record does not resolve it: issue #114 exists (closed) but carries no resolution-shaped comment.",
+      "why_it_matters": "The code was written with a reason that lives outside the repository. Saying so is the honest report; inventing the reason from the surrounding code is the failure this engine exists to avoid.",
+      "how_to_say_it": "There is a reference to #114 here that the record does not explain.",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/main/java/org/java_websocket/WebSocketImpl.java",
+          "line_start": 541,
+          "line_end": 541,
+          "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+        },
+        {
+          "kind": "issue",
+          "number": 114
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 3
+    },
+    {
+      "type": "edge",
+      "kind": "coverage_gap",
+      "id": "e-unresolved-222",
+      "title": "#222 is referenced but not explained",
+      "statement": "The source cites #222 in 1 place in the source, and the record does not resolve it: issue #222 exists (closed) but carries no resolution-shaped comment.",
+      "why_it_matters": "The code was written with a reason that lives outside the repository. Saying so is the honest report; inventing the reason from the surrounding code is the failure this engine exists to avoid.",
+      "how_to_say_it": "There is a reference to #222 here that the record does not explain.",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/main/java/org/java_websocket/server/WebSocketServer.java",
+          "line_start": 750,
+          "line_end": 750,
+          "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+        },
+        {
+          "kind": "issue",
+          "number": 222
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 3
+    },
+    {
+      "type": "edge",
+      "kind": "coverage_gap",
+      "id": "e-unresolved-458",
+      "title": "#458 is referenced but not explained",
+      "statement": "The source cites #458 in 1 place in the source, and the record does not resolve it: issue #458 exists (closed) but carries no resolution-shaped comment.",
+      "why_it_matters": "The code was written with a reason that lives outside the repository. Saying so is the honest report; inventing the reason from the surrounding code is the failure this engine exists to avoid.",
+      "how_to_say_it": "There is a reference to #458 here that the record does not explain.",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/main/java/org/java_websocket/SSLSocketChannel2.java",
+          "line_start": 213,
+          "line_end": 213,
+          "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+        },
+        {
+          "kind": "issue",
+          "number": 458
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 3
+    },
+    {
+      "type": "edge",
+      "kind": "coverage_gap",
+      "id": "e-unresolved-459",
+      "title": "#459 is referenced but not explained",
+      "statement": "The source cites #459 in 1 place in the source, and the record does not resolve it: no issue with that number was harvested for this subject.",
+      "why_it_matters": "The code was written with a reason that lives outside the repository. Saying so is the honest report; inventing the reason from the surrounding code is the failure this engine exists to avoid.",
+      "how_to_say_it": "There is a reference to #459 here that the record does not explain.",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/main/java/org/java_websocket/SSLSocketChannel2.java",
+          "line_start": 213,
+          "line_end": 213,
+          "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 3
+    },
+    {
+      "type": "edge",
+      "kind": "coverage_gap",
+      "id": "e-unresolved-512",
+      "title": "#512 is referenced but not explained",
+      "statement": "The source cites #512 in 1 place in the source, and the record does not resolve it: issue #512 exists (closed) but carries no resolution-shaped comment.",
+      "why_it_matters": "The code was written with a reason that lives outside the repository. Saying so is the honest report; inventing the reason from the surrounding code is the failure this engine exists to avoid.",
+      "how_to_say_it": "There is a reference to #512 here that the record does not explain.",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/main/java/org/java_websocket/server/WebSocketServer.java",
+          "line_start": 813,
+          "line_end": 813,
+          "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+        },
+        {
+          "kind": "issue",
+          "number": 512
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 3
     },
     {
       "type": "fact",
@@ -680,7 +626,7 @@
     },
     "confidence_ledger": {
       "verified": 17,
-      "attested": 9,
+      "attested": 6,
       "absent_cut": 0
     },
     "absent_cuts": [],
@@ -701,7 +647,7 @@
       },
       {
         "id": "e-unbuilt-1086",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -715,7 +661,7 @@
       },
       {
         "id": "e-unbuilt-1130",
-        "score": 1,
+        "score": 0,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -729,7 +675,7 @@
       },
       {
         "id": "e-unbuilt-1289",
-        "score": 1,
+        "score": 0,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -743,7 +689,14 @@
       },
       {
         "id": "e-unbuilt-1320",
-        "score": 1,
+        "score": 0,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unbuilt-1329",
+        "score": 2,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -757,7 +710,7 @@
       },
       {
         "id": "e-unbuilt-1335",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -771,27 +724,34 @@
       },
       {
         "id": "e-unbuilt-1429",
-        "score": 2,
-        "reason": "below the interview_value floor of 3",
-        "kind": "floor",
-        "unit": "node"
-      },
-      {
-        "id": "e-unbuilt-1455",
         "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
+        "id": "e-unbuilt-1455",
+        "score": 0,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
         "id": "e-unbuilt-1456",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
         "id": "e-unbuilt-1460",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unbuilt-1470",
         "score": 2,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
@@ -820,14 +780,14 @@
       },
       {
         "id": "e-unbuilt-424",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
         "id": "e-unbuilt-517",
-        "score": 1,
+        "score": 0,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -841,21 +801,28 @@
       },
       {
         "id": "e-unbuilt-719",
-        "score": 2,
-        "reason": "below the interview_value floor of 3",
-        "kind": "floor",
-        "unit": "node"
-      },
-      {
-        "id": "e-unbuilt-823",
         "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
-        "id": "e-unbuilt-896",
+        "id": "e-unbuilt-823",
+        "score": 0,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unbuilt-877",
         "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unbuilt-896",
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -869,14 +836,14 @@
       },
       {
         "id": "e-unbuilt-957",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
         "id": "e-unbuilt-983",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -892,12 +859,13 @@
     "budgets": {
       "interview_value_floor": 3,
       "mechanisms": 5,
+      "flows": 2,
       "interviewer_questions": 10
     },
     "audit": {
-      "status": "passed",
-      "content_hash": "sha256:3f3fe68df448d70fa39f168de86a5c8234a84b59c76ea0609a0ceaeda456be37",
-      "audited_at": "2026-08-12T06:25:44.704Z",
+      "status": "passed_with_warnings",
+      "content_hash": "sha256:a210f2f7bbca3616bd9bb3d383fc61482256d50b9220467fd5cc6b1746e61f7e",
+      "audited_at": "2026-08-21T06:56:57.782Z",
       "checks": [
         {
           "id": "S1",
@@ -910,22 +878,22 @@
           "id": "S2",
           "name": "Exactly one network request when loaded",
           "class": "gate",
-          "outcome": "not_run",
-          "reason": "pass B did not run in this invocation"
+          "outcome": "passed",
+          "count": 1
         },
         {
           "id": "S3",
           "name": "Console clean on load",
           "class": "gate",
-          "outcome": "not_run",
-          "reason": "pass B did not run in this invocation"
+          "outcome": "passed",
+          "count": 0
         },
         {
           "id": "S4",
           "name": "Artifact is one file, no siblings required",
           "class": "gate",
-          "outcome": "not_run",
-          "reason": "pass B did not run in this invocation"
+          "outcome": "passed",
+          "count": 1021
         },
         {
           "id": "L1",
@@ -945,15 +913,15 @@
           "id": "L3",
           "name": "Every issue and comment citation resolves",
           "class": "gate",
-          "outcome": "not_run",
-          "reason": "pass C did not run in this invocation"
+          "outcome": "passed",
+          "count": 19
         },
         {
           "id": "L4",
           "name": "Every internal anchor resolves to an element",
           "class": "gate",
-          "outcome": "not_run",
-          "reason": "pass B did not run in this invocation"
+          "outcome": "passed",
+          "count": 33
         },
         {
           "id": "L5",
@@ -974,21 +942,21 @@
           "name": "No deleted node is resurrected",
           "class": "gate",
           "outcome": "passed",
-          "count": 29
+          "count": 32
         },
         {
           "id": "G3",
           "name": "Displayed rank, value and rubric match atlas.json",
           "class": "gate",
           "outcome": "passed",
-          "count": 23
+          "count": 20
         },
         {
           "id": "E1",
           "name": "Every prose passage traces to a graph field or the chrome inventory",
           "class": "gate",
-          "outcome": "not_run",
-          "reason": "pass B did not run in this invocation"
+          "outcome": "passed",
+          "count": 260
         },
         {
           "id": "E2",
@@ -1008,37 +976,85 @@
           "id": "V1",
           "name": "Page does not scroll horizontally at declared viewports",
           "class": "warning",
-          "outcome": "not_run",
-          "reason": "pass B did not run in this invocation"
+          "outcome": "passed",
+          "count": 4
         },
         {
           "id": "V2",
           "name": "No text clipped by a non-scrollable ancestor",
           "class": "warning",
-          "outcome": "not_run",
-          "reason": "pass B did not run in this invocation"
+          "outcome": "passed",
+          "count": 4
         },
         {
           "id": "V3",
           "name": "All text meets WCAG AA contrast",
           "class": "warning",
-          "outcome": "not_run",
-          "reason": "pass B did not run in this invocation"
+          "outcome": "passed",
+          "count": 4
         },
         {
           "id": "M1",
           "name": "Each node's prose is supported by its own evidence",
           "class": "warning",
-          "outcome": "not_run",
-          "reason": "pass D did not run in this invocation"
+          "outcome": "failed",
+          "count": 23,
+          "findings": [
+            "e-unbuilt-1271-divergence: Sentence 2 ('Going first on that is strictly better... the one finding a summariser cannot produce') is editorial self-praise no cited evidence establishes, and the cited WebSocketServer.java excerpt never shows basic auth actually built, so 'the tree says otherwise' is also unestablished.",
+            "e-unbuilt-1302-divergence: The sentence 'the tree says otherwise' claims the code implements retrieving a refused handshake's HTTP body, but the cited files (ExampleClient, AbstractWebSocket, WebSocket interface) show no API exposing that body.",
+            "e-unbuilt-1374-divergence: The sentence \"the tree says otherwise\" claims the code supports String connection links, but the cited Draft_6455.java evidence shows only protocol/handshake code, not any String-based connection API contradicting open #1374.",
+            "e-unbuilt-1423-divergence: The sentence \"the tree says otherwise\" claims 401 handshake responses are implemented, but the cited files only show generic handshake rejection via InvalidDataException (answered with 404 per the issue), not 401 support.",
+            "e-unbuilt-1454-divergence: The claim 'the tree says otherwise' (sentences 1 and 3) asserts the code implements HTTP-response access on failed handshakes, but the cited files only show handshake callbacks for received/successful handshakes, not exposure of a failed handshake's status code.",
+            "e-unbuilt-1471-divergence: Sentence 2 (\"Going first on that is strictly better than being caught by it, and it is the one finding a summariser cannot produce\") asserts strategic value and summariser-comparison claims that no cited evidence establishes.",
+            "e-unbuilt-347-divergence: The sentence \"the record implies this is not built, and the tree says otherwise\" claims the code contradicts #347, but the cited source excerpts show no pre-connection close handling that would establish the behavior is built.",
+            "e-unbuilt-977-divergence: The sentence \"the record implies this is not built, and the tree says otherwise\" is unsupported: the cited code is CloseFrame.java, which handles close frames, not the HTTP handshake error response (generateHttpResponseDueToError) that #977 asks to change, so the evidence never shows the feature built.",
+            "e-unresolved-190: Sentence 1 claims #190 is cited in 6 places and that the closed issue carries no resolution-shaped comment; the evidence shows only 3 source lines and the issue body, with no issue state or comment record.",
+            "e-unbuilt-1499: Sentence 2 calls the decision 'settled but not built', but #1499 is only an open report/recommendation - the evidence shows no settled decision anywhere.",
+            "e-unbuilt-1508: The sentence '#1508 is open' (and 'The tracker still has #1508 open') asserts the issue's state, but the cited evidence is only the issue body - a security audit report - which shows no open/closed state and settles nothing about whether something is built.",
+            "e-unbuilt-811: \"A decision that is settled but not built...\" claims a settled decision, but #811 is only a bug report requesting thread-safety review; the evidence shows no decision was made, nor does it show the issue's open state.",
+            "e-unbuilt-879: Sentence 1 ('#879 is open, so the record implies this is not built') overreaches: the evidence is a bug report describing a race condition, which shows neither the issue's open state nor that anything is unbuilt - an open ticket is not evidence of absence.",
+            "e-unbuilt-985: \"The tracker still has #985 open for that\" (and sentence 1) claims #985 tracks an unbuilt decision, but the evidence is only a bug report about connectBlocking hanging with SSL - it shows no decision, no build-status claim, and not even the issue's open state.",
+            "e-unresolved-114: Sentence 1 claims issue #114 is closed and carries no resolution-shaped comment, but the evidence shows only the issue's opening bug report, not its state or its full comment record.",
+            "e-unresolved-222: The sentences 'the record does not resolve it' and 'There is a reference to #222 here that the record does not explain' claim more than the evidence shows - the cited issue #222 body itself explains the reference (bind failure left worker threads running, hence the shutdown code), and the evidence also shows nothing about the issue being closed.",
+            "e-unresolved-458: Sentence 1 says issue #458 is closed and carries no resolution-shaped comment; the cited evidence shows only the issue body and one source comment, establishing neither the closed state nor the absence of resolution comments.",
+            "e-unresolved-512: Sentence 1 says 'issue #512 exists (closed)', but the cited evidence shows only the issue body and never its state, so 'closed' claims more than the evidence establishes."
+          ]
         },
         {
           "id": "M2",
           "name": "Each absence claim's citation actually witnesses absence",
           "class": "warning",
-          "outcome": "not_run",
-          "reason": "pass D did not run in this invocation"
+          "outcome": "failed",
+          "count": 20,
+          "findings": [
+            "e-unbuilt-1271-divergence: \"#1271 is open, so the record implies it is not built\" - the issue is a user question asking if the feature exists, not a negative search or closed enumeration, and one source file cannot witness absence either way.",
+            "e-unbuilt-1302-divergence: \"the tree says otherwise\" is unwitnessed: the cited files are example code and generic interfaces showing no refused-handshake body access, and nothing cited is a negative search or closed enumeration settling presence or absence.",
+            "e-unbuilt-1374-divergence: \"the tree says otherwise\" is unwitnessed - Draft_6455.java covers RFC 6455 handshake/framing, not connection-link construction, so it shows neither a String-based connect API nor its absence, and the open issue #1374 only shows a request exists, not the build state either way.",
+            "e-unbuilt-1423-divergence: The sentence 'the tree says otherwise' is unwitnessed: the three cited example files only show handshake rejection via InvalidDataException (which the issue itself says yields 404), never a 401 status line, while the issue's quoted closed switch (404/500) actually witnesses absence - the opposite of the claimed divergence.",
+            "e-unbuilt-1454-divergence: \"the tree says otherwise\" is not witnessed: the cited code (a server-side header example and WebSocketAdapter's success-path onWebsocketHandshakeReceivedAsClient) neither shows client access to a failed-handshake HTTP response nor is a negative search or closed enumeration establishing absence either way.",
+            "e-unbuilt-1471-divergence: \"the record implies this is not built, and the tree says otherwise\" - the open #1471 is not a witness of absence, and the cited rejection tests exercise server-rejected handshakes closing cleanly, not the exception-during-upgrade close failure the issue describes; no negative search or closed enumeration establishes either side",
+            "e-unbuilt-347-divergence: The sentence \"the record implies this is not built, and the tree says otherwise\" cites only an open issue and two whole-file dumps; an open ticket is not evidence of absence, and neither file is a negative search or closed enumeration showing pre-connection close handling present or absent.",
+            "e-unbuilt-977-divergence: \"the tree says otherwise\" is unsupported - CloseFrame.java covers close-frame reason codes, not the generateHttpResponseDueToError HTTP handshake path #977 targets, so nothing cited settles built-or-not either way.",
+            "e-unresolved-190: The sentence 'issue #190 exists (closed) but carries no resolution-shaped comment' asserts absence over the issue's comments, but the evidence cites only the issue body and code references - no enumeration or negative search of #190's comments is shown.",
+            "e-unbuilt-1499: \"#1499 is open, so the record implies this is not built\" rests only on the issue's existence and open state; an open ticket is a request, not a negative search or closed enumeration, and nothing cited shows the tree lacks a default frame-size limit.",
+            "e-unbuilt-1507: Sentence '#1507 is open, so the record implies this is not built' infers absence of a fix from an open ticket; the issue text describes the vulnerability but never witnesses the tree lacking the fix - an open ticket is not evidence of absence.",
+            "e-unbuilt-1508: \"#1508 is open, so the record implies this is not built\" - the cited evidence is only the audit report filed as the issue body; it shows a vulnerability was reported, not a negative search or closed enumeration of the tree, so an open ticket does not witness that no fix was built.",
+            "e-unbuilt-811: \"#811 is open, so the record implies this is not built\" - an open issue body only states a request; open status is neither a negative search nor a closed enumeration, so it does not witness absence.",
+            "e-unbuilt-879: \"#879 is open, so the record implies this is not built\" - the evidence is only the bug report's own text; an open ticket shows a claim was filed, not a negative search or closed enumeration over the tree, so it cannot witness that no fix exists.",
+            "e-unbuilt-985: \"#985 is open, so the record implies this is not built\" - the cited issue body only shows a bug was reported and the ticket remains open; an open ticket is not evidence of absence in the tree, and no negative search or closed enumeration is cited.",
+            "e-unresolved-114: \"issue #114 exists (closed) but carries no resolution-shaped comment\" - the evidence shows only the issue's opening report, not an enumeration or empty search of its comments, so nothing witnesses that no resolution comment exists.",
+            "e-unresolved-222: The sentence 'issue #222 exists (closed) but carries no resolution-shaped comment' is not witnessed: the evidence cites only the issue body, not a negative search or enumeration of its comments, so absence of a resolution comment is asserted, not shown.",
+            "e-unresolved-458: The sentence 'the record does not resolve it: issue #458 ... carries no resolution-shaped comment' is unwitnessed - the evidence shows only the issue body and a code comment, not a negative search or enumeration of #458's comments proving none is resolution-shaped.",
+            "e-unresolved-459: The sentence 'no issue with that number was harvested for this subject' claims absence from the harvest record, but the only evidence is the source comment mentioning #459, which witnesses the reference's presence and says nothing about what the harvest contains.",
+            "e-unresolved-512: The sentence 'issue #512 exists (closed) but carries no resolution-shaped comment' claims absence over the whole comment record, yet the evidence cites only the issue's opening body - no comment enumeration or empty-search result witnesses that no resolving comment exists."
+          ]
         }
+      ],
+      "viewports": [
+        390,
+        768,
+        1280,
+        1440
       ]
     }
   }

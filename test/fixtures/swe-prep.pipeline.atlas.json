@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "generated_at": "2026-08-12T06:14:31.339Z",
   "profile": "interview",
   "rubric_version": "v1",
@@ -56,54 +56,6 @@
       "confidence": "verified",
       "interview_value": 5,
       "probe_id": "write"
-    },
-    {
-      "type": "decision",
-      "id": "d-issue-4-c5182805341",
-      "title": "Public engine, private problem content",
-      "question": "Can Blind 75 problem statements ship in a public repository, and if not, what is the cheapest lawful source of problem text?",
-      "decision": "Ship the engine publicly and keep all problem content - statements, test data, reference solutions, generators - in the private repo the solutions already go to, loaded by the app via a private submodule or a gitignored local path. The public repo carries the engine, the list of problem titles, and optionally a few original demo statements.",
-      "why": "LeetCode's statement prose is copyrighted expression, while titles, the list, and the algorithmic ideas are free facts under 17 U.S.C. §102(b). The streak decision already sent solutions to a separate private repo, and since the authoring unit is statement + test cases + reference solution + input generator, three of the four were already going private - moving the statement across costs nothing and leaves the public repo with zero protected prose. This is also the fastest path to the first daily session, the map's binding constraint, because no 75-statement authoring project stands between now and drilling.",
-      "rejected": [
-        {
-          "alternative": "An openly-licensed source of Blind 75 / NeetCode 150 statements",
-          "why_it_lost": "None exists and none can: Blind 75 is a curated list of LeetCode's problems, and repos claiming to have it either license only their author's solution code or reproduce LeetCode text with no right to grant."
-        },
-        {
-          "alternative": "Clean permissive datasets (HumanEval, MBPP, Exercism problem-specifications)",
-          "why_it_lost": "They are general or entry-level programming katas rather than interview-algorithm curation, so adopting them would mean abandoning the curated set - useful as a format demo, not as the content pile."
-        },
-        {
-          "alternative": "Scraped-provenance datasets with permissive wrappers (APPS, CodeContests)",
-          "why_it_lost": "A permissive wrapper licence does not cure scraped provenance - a licensor can only license what they own, and these aggregate problems from Codeforces, AtCoder and others under separate terms."
-        },
-        {
-          "alternative": "Writing fresh original statements now, as a gate",
-          "why_it_lost": "Confirmed clean, since describing a known problem in original words with your own examples and generated test data produces a statement you own, but it loses as a gate purely on time - good later work for portfolio polish."
-        },
-        {
-          "alternative": "Scraping Blind 75 into the app",
-          "why_it_lost": "LeetCode's ToS forbids crawling, scraping and spidering outright, independent of the copyright analysis and regardless of whether content lands in a public or private repo - off the table permanently."
-        }
-      ],
-      "status": "decided_and_built",
-      "implemented_by": [
-        {
-          "kind": "file",
-          "path": ".gitignore",
-          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
-        }
-      ],
-      "soundbite": "Problem statements go in the private content repo with the solutions, so the public repo ships the engine and the title list with zero protected prose.",
-      "evidence": [
-        {
-          "kind": "issue",
-          "number": 4,
-          "comment_id": 5182805341
-        }
-      ],
-      "confidence": "attested",
-      "interview_value": 5
     },
     {
       "type": "decision",
@@ -408,6 +360,54 @@
     },
     {
       "type": "decision",
+      "id": "d-issue-4-c5182805341",
+      "title": "Public engine, private problem content",
+      "question": "Can Blind 75 problem statements ship in a public repository, and if not, what is the cheapest lawful source of problem text?",
+      "decision": "Ship the engine publicly and keep all problem content - statements, test data, reference solutions, generators - in the private repo the solutions already go to, loaded by the app via a private submodule or a gitignored local path. The public repo carries the engine, the list of problem titles, and optionally a few original demo statements.",
+      "why": "LeetCode's statement prose is copyrighted expression, while titles, the list, and the algorithmic ideas are free facts under 17 U.S.C. §102(b). The streak decision already sent solutions to a separate private repo, and since the authoring unit is statement + test cases + reference solution + input generator, three of the four were already going private - moving the statement across costs nothing and leaves the public repo with zero protected prose. This is also the fastest path to the first daily session, the map's binding constraint, because no 75-statement authoring project stands between now and drilling.",
+      "rejected": [
+        {
+          "alternative": "An openly-licensed source of Blind 75 / NeetCode 150 statements",
+          "why_it_lost": "None exists and none can: Blind 75 is a curated list of LeetCode's problems, and repos claiming to have it either license only their author's solution code or reproduce LeetCode text with no right to grant."
+        },
+        {
+          "alternative": "Clean permissive datasets (HumanEval, MBPP, Exercism problem-specifications)",
+          "why_it_lost": "They are general or entry-level programming katas rather than interview-algorithm curation, so adopting them would mean abandoning the curated set - useful as a format demo, not as the content pile."
+        },
+        {
+          "alternative": "Scraped-provenance datasets with permissive wrappers (APPS, CodeContests)",
+          "why_it_lost": "A permissive wrapper licence does not cure scraped provenance - a licensor can only license what they own, and these aggregate problems from Codeforces, AtCoder and others under separate terms."
+        },
+        {
+          "alternative": "Writing fresh original statements now, as a gate",
+          "why_it_lost": "Confirmed clean, since describing a known problem in original words with your own examples and generated test data produces a statement you own, but it loses as a gate purely on time - good later work for portfolio polish."
+        },
+        {
+          "alternative": "Scraping Blind 75 into the app",
+          "why_it_lost": "LeetCode's ToS forbids crawling, scraping and spidering outright, independent of the copyright analysis and regardless of whether content lands in a public or private repo - off the table permanently."
+        }
+      ],
+      "status": "decided_and_built",
+      "implemented_by": [
+        {
+          "kind": "file",
+          "path": ".gitignore",
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "soundbite": "Problem statements go in the private content repo with the solutions, so the public repo ships the engine and the title list with zero protected prose.",
+      "evidence": [
+        {
+          "kind": "issue",
+          "number": 4,
+          "comment_id": 5182805341
+        }
+      ],
+      "confidence": "attested",
+      "interview_value": 4
+    },
+    {
+      "type": "decision",
       "id": "d-issue-7-c5182411379",
       "title": "Streak mechanics without invented currency",
       "question": "What actually generates the pull to open the app tomorrow when the captain is the only user and the author, self-imposed points create no obligation, and Duolingo's social and loss-aversion levers are unavailable?",
@@ -560,67 +560,6 @@
       "probe_id": "ci-policy-guards"
     },
     {
-      "type": "mechanism",
-      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-grading-grading",
-      "title": "Grading is sealed over 4 permitted types",
-      "what": "Grading permits exactly Grading.TestCases, Grading.AnswerKey, Grading.SelfCheck, Grading.ResultSet. The compiler rejects any implementation outside that set.",
-      "why_interesting": "A sealed hierarchy is a closed enumeration the type system enforces. It is also one of the few things that can witness an absence claim, because the set is provably complete.",
-      "enforcement": "type-level",
-      "gotchas": [],
-      "evidence": [
-        {
-          "kind": "file",
-          "path": "backend/src/main/java/com/sweprep/backend/exercise/Grading.java",
-          "line_start": 16,
-          "line_end": 88,
-          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
-        }
-      ],
-      "confidence": "verified",
-      "interview_value": 4,
-      "probe_id": "sealed-hierarchies"
-    },
-    {
-      "type": "mechanism",
-      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-response-response",
-      "title": "Response is sealed over 4 permitted types",
-      "what": "Response permits exactly Response.Code, Response.Choice, Response.FreeText, Response.Query. The compiler rejects any implementation outside that set.",
-      "why_interesting": "A sealed hierarchy is a closed enumeration the type system enforces. It is also one of the few things that can witness an absence claim, because the set is provably complete.",
-      "enforcement": "type-level",
-      "gotchas": [],
-      "evidence": [
-        {
-          "kind": "file",
-          "path": "backend/src/main/java/com/sweprep/backend/exercise/Response.java",
-          "line_start": 16,
-          "line_end": 71,
-          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
-        }
-      ],
-      "confidence": "verified",
-      "interview_value": 4,
-      "probe_id": "sealed-hierarchies"
-    },
-    {
-      "type": "edge",
-      "kind": "divergence",
-      "id": "e-divergence-docker",
-      "title": "The record names docker; the build file does not declare it",
-      "statement": "README.md refers to docker, but no build manifest in the tree declares a dependency on it.",
-      "why_it_matters": "The stack a project says it uses and the stack it declares drift apart quietly, and the drift is what a reviewer finds first.",
-      "how_to_say_it": "The README still mentions docker; the build no longer depends on it.",
-      "evidence": [
-        {
-          "kind": "file",
-          "path": "README.md",
-          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
-        }
-      ],
-      "confidence": "verified",
-      "interview_value": 3,
-      "probe_id": "dependency-divergence"
-    },
-    {
       "type": "fact",
       "id": "f-scale-history",
       "title": "How long it took",
@@ -631,40 +570,6 @@
           "kind": "command",
           "cmd": "git rev-list --count 086c99998ba6eec1353988cd88989cbe836fe6a0",
           "output_excerpt": "47 commits, over 7 calendar days (2026-08-04 to 2026-08-10)"
-        }
-      ],
-      "source": "command",
-      "confidence": "verified",
-      "interview_value": 3
-    },
-    {
-      "type": "fact",
-      "id": "f-scale-lines",
-      "title": "How much code there is",
-      "label": "lines of production source",
-      "value": "16,488",
-      "evidence": [
-        {
-          "kind": "command",
-          "cmd": "git ls-tree -r --name-only 086c99998ba6eec1353988cd88989cbe836fe6a0 | xargs -I{} git cat-file -p 086c99998ba6eec1353988cd88989cbe836fe6a0:{} | wc -l",
-          "output_excerpt": "16,488 lines across 199 production source files"
-        }
-      ],
-      "source": "command",
-      "confidence": "verified",
-      "interview_value": 3
-    },
-    {
-      "type": "fact",
-      "id": "f-scale-tests",
-      "title": "How much of it is tested",
-      "label": "test files",
-      "value": "71",
-      "evidence": [
-        {
-          "kind": "command",
-          "cmd": "git ls-tree -r --name-only 086c99998ba6eec1353988cd88989cbe836fe6a0",
-          "output_excerpt": "71 test files alongside 199 production files"
         }
       ],
       "source": "command",
@@ -694,18 +599,60 @@
     },
     {
       "type": "mechanism",
-      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-authoring-referenceexecutor-referenceexecutor-runresult",
-      "title": "ReferenceExecutor.RunResult is sealed over 3 permitted types",
-      "what": "ReferenceExecutor.RunResult permits exactly RunResult.CompileError, RunResult.TimedOut, RunResult.Completed. The compiler rejects any implementation outside that set.",
+      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-complexity-measurementoutcome-measurementoutcome",
+      "title": "MeasurementOutcome is sealed over 3 permitted types",
+      "what": "MeasurementOutcome permits exactly MeasurementOutcome.Skipped, MeasurementOutcome.Inconclusive, MeasurementOutcome.Conclusive. The compiler rejects any implementation outside that set.",
       "why_interesting": "A sealed hierarchy is a closed enumeration the type system enforces. It is also one of the few things that can witness an absence claim, because the set is provably complete.",
       "enforcement": "type-level",
       "gotchas": [],
       "evidence": [
         {
           "kind": "file",
-          "path": "backend/src/main/java/com/sweprep/backend/authoring/ReferenceExecutor.java",
-          "line_start": 143,
-          "line_end": 175,
+          "path": "backend/src/main/java/com/sweprep/backend/complexity/MeasurementOutcome.java",
+          "line_start": 11,
+          "line_end": 36,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 3,
+      "probe_id": "sealed-hierarchies"
+    },
+    {
+      "type": "mechanism",
+      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-comparison-comparison",
+      "title": "Comparison is sealed over 3 permitted types",
+      "what": "Comparison permits exactly Comparison.Exact, Comparison.OrderInsensitiveSequence, Comparison.SetEquality. The compiler rejects any implementation outside that set.",
+      "why_interesting": "A sealed hierarchy is a closed enumeration the type system enforces. It is also one of the few things that can witness an absence claim, because the set is provably complete.",
+      "enforcement": "type-level",
+      "gotchas": [],
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/exercise/Comparison.java",
+          "line_start": 23,
+          "line_end": 119,
+          "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 3,
+      "probe_id": "sealed-hierarchies"
+    },
+    {
+      "type": "mechanism",
+      "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-grading-grading",
+      "title": "Grading is sealed over 4 permitted types",
+      "what": "Grading permits exactly Grading.TestCases, Grading.AnswerKey, Grading.SelfCheck, Grading.ResultSet. The compiler rejects any implementation outside that set.",
+      "why_interesting": "A sealed hierarchy is a closed enumeration the type system enforces. It is also one of the few things that can witness an absence claim, because the set is provably complete.",
+      "enforcement": "type-level",
+      "gotchas": [],
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "backend/src/main/java/com/sweprep/backend/exercise/Grading.java",
+          "line_start": 16,
+          "line_end": 88,
           "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
         }
       ],
@@ -769,7 +716,7 @@
       "edges": "present"
     },
     "confidence_ledger": {
-      "verified": 10,
+      "verified": 7,
       "attested": 8,
       "absent_cut": 0
     },
@@ -797,6 +744,13 @@
         "unit": "node"
       },
       {
+        "id": "e-divergence-docker",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
         "id": "e-unbuilt-43",
         "score": 2,
         "reason": "below the interview_value floor of 3",
@@ -812,7 +766,7 @@
       },
       {
         "id": "e-unbuilt-64",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -854,7 +808,7 @@
       },
       {
         "id": "e-unresolved-14",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -868,14 +822,14 @@
       },
       {
         "id": "e-unresolved-16",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
         "id": "e-unresolved-17",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -910,7 +864,7 @@
       },
       {
         "id": "e-unresolved-22",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -924,14 +878,14 @@
       },
       {
         "id": "e-unresolved-25",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
         "id": "e-unresolved-26",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -973,14 +927,14 @@
       },
       {
         "id": "e-unresolved-40",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
         "id": "e-unresolved-41",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -1008,14 +962,14 @@
       },
       {
         "id": "e-unresolved-51",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
         "id": "e-unresolved-56",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -1057,17 +1011,30 @@
       },
       {
         "id": "f-scale-files",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "f-scale-lines",
         "score": 2,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
-        "id": "m-sealed-backend-src-main-java-com-sweprep-backend-complexity-measurementoutcome-measurementoutcome",
-        "score": 3,
-        "reason": "section budget: mechanisms capped at 5 by the interview profile; ranked 6",
-        "kind": "budget",
-        "section": "mechanisms",
+        "id": "f-scale-tests",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "m-sealed-backend-src-main-java-com-sweprep-backend-authoring-referenceexecutor-referenceexecutor-runresult",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
         "unit": "node"
       },
       {
@@ -1075,14 +1042,6 @@
         "score": 2,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
-        "unit": "node"
-      },
-      {
-        "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-comparison-comparison",
-        "score": 3,
-        "reason": "section budget: mechanisms capped at 5 by the interview profile; ranked 7",
-        "kind": "budget",
-        "section": "mechanisms",
         "unit": "node"
       },
       {
@@ -1100,8 +1059,16 @@
         "unit": "node"
       },
       {
+        "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-response-response",
+        "score": 3,
+        "reason": "section budget: mechanisms capped at 5 by the interview profile; ranked 6",
+        "kind": "budget",
+        "section": "mechanisms",
+        "unit": "node"
+      },
+      {
         "id": "m-sql-predicate-a-user-id-userid-da57b633",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -1123,7 +1090,7 @@
       {
         "id": "m-sql-predicate-user-id-userid-532cb858",
         "score": 3,
-        "reason": "section budget: mechanisms capped at 5 by the interview profile; ranked 8",
+        "reason": "section budget: mechanisms capped at 5 by the interview profile; ranked 7",
         "kind": "budget",
         "section": "mechanisms",
         "unit": "node"
@@ -1132,6 +1099,7 @@
     "budgets": {
       "interview_value_floor": 3,
       "mechanisms": 5,
+      "flows": 2,
       "interviewer_questions": 10
     },
     "private_source": {
@@ -1142,8 +1110,8 @@
     },
     "audit": {
       "status": "passed_with_warnings",
-      "content_hash": "sha256:4d7bc39a2db572b12a14f43e38dd0ab72aa77c268f09fb49803601a0eca5be84",
-      "audited_at": "2026-08-12T06:22:41.830Z",
+      "content_hash": "sha256:0461ab1108237d92c538386968ad5e1cafa4a4ae08b2d9e19034453af8bd0ec2",
+      "audited_at": "2026-08-21T07:02:45.935Z",
       "checks": [
         {
           "id": "S1",
@@ -1171,14 +1139,14 @@
           "name": "Artifact is one file, no siblings required",
           "class": "gate",
           "outcome": "passed",
-          "count": 7
+          "count": 1040
         },
         {
           "id": "L1",
           "name": "Every file evidence path exists at the pinned SHA",
           "class": "gate",
           "outcome": "passed",
-          "count": 36
+          "count": 35
         },
         {
           "id": "L2",
@@ -1199,14 +1167,14 @@
           "name": "Every internal anchor resolves to an element",
           "class": "gate",
           "outcome": "passed",
-          "count": 28
+          "count": 25
         },
         {
           "id": "L5",
           "name": "Every rendered evidence link is pinned to the run SHA",
           "class": "gate",
           "outcome": "passed",
-          "count": 64
+          "count": 63
         },
         {
           "id": "G1",
@@ -1220,28 +1188,28 @@
           "name": "No deleted node is resurrected",
           "class": "gate",
           "outcome": "passed",
-          "count": 50
+          "count": 53
         },
         {
           "id": "G3",
           "name": "Displayed rank, value and rubric match atlas.json",
           "class": "gate",
           "outcome": "passed",
-          "count": 7
+          "count": 6
         },
         {
           "id": "E1",
           "name": "Every prose passage traces to a graph field or the chrome inventory",
           "class": "gate",
           "outcome": "passed",
-          "count": 331
+          "count": 323
         },
         {
           "id": "E2",
           "name": "Every present-tense behavioural node carries file or command evidence",
           "class": "gate",
           "outcome": "passed",
-          "count": 7
+          "count": 6
         },
         {
           "id": "P1",
@@ -1276,13 +1244,12 @@
           "name": "Each node's prose is supported by its own evidence",
           "class": "warning",
           "outcome": "failed",
-          "count": 18,
+          "count": 15,
           "findings": [
-            "d-issue-10-c5182571856-divergence: The sentence 'Checked against the tree: ... the tree does not carry it' claims the whole SQL engine, fixtures, and grader are absent, but the only tree evidence is one negative grep for 'order_items', which cannot show the engine or grading code is missing.",
-            "m-ci-guard-ci-yml-test-assert-no-private-content-is-committed: The 'what' sentence claims the step fails the build on a policy breach, but the cited line shows only the step's name, not its command or failure behavior.",
-            "e-divergence-docker: The statement's clause 'no build manifest in the tree declares a dependency on it' is an absence claim about build manifests, but the only cited evidence is README.md, which shows only that docker is mentioned.",
-            "f-scale-lines: The label/value claim '16,488 lines of production source' exceeds the evidence: the command counts every tracked file at the commit with no production filter, and wc -l emits only a bare total, so the 'across 199 production source files' excerpt cannot be that command's output.",
-            "m-refuses-backend-src-main-java-com-sweprep-backend-grader-selfcheckgrader-selfcheckgrader-grade-exercise-string: The 'what' sentence claims '3 other implementations return a value', but the cited evidence shows only SelfCheckGrader throwing - no sibling implementations are in evidence."
+            "d-issue-10-c5182571856-divergence: Sentence 2 ('Going first on that is strictly better... the one finding a summariser cannot produce') asserts value judgments no cited evidence establishes; the evidence only shows the #10 resolution and a single negative grep for 'order_items'.",
+            "d-issue-2-c5181222288: The last sentence ('It runs as a local Spring Boot web app with a React front end, autostarted so opening it is one click') asserts a running React front end and working autostart as fact; the evidence shows only the decision plus a backend pom.xml (which also says 3.4.7/JDBC, not 3.4.3/JPA+Lombok), not that autostart or the front end exist.",
+            "m-ci-guard-ci-yml-test-assert-no-private-content-is-committed: 'The rule is what someone was afraid of' attributes motive/fear to a person; the evidence shows only a CI step name, nothing about anyone's intent.",
+            "m-refuses-backend-src-main-java-com-sweprep-backend-grader-selfcheckgrader-selfcheckgrader-grade-exercise-string: The first sentence claims '3 other implementations return a value', but the cited evidence shows only this grader's throw and nothing about any sibling implementation."
           ]
         },
         {
@@ -1290,10 +1257,10 @@
           "name": "Each absence claim's citation actually witnesses absence",
           "class": "warning",
           "outcome": "failed",
-          "count": 10,
+          "count": 9,
           "findings": [
-            "d-issue-7-c5182411379: The sentence 'no XP, no hearts, no lives, no leagues' is witnessed by nothing cited: the issue comment attests the decision to cut currency, and the files show the positive mechanics (SolutionCommitProperties, StreakProperties, ReadinessProperties, attempt records) exist, but no negative search result is cited and neither closed enumeration covers the right set - AttemptOutcome exhausts sitting outcomes, not currencies, and BackendApplication's properties list is complete only over configuration classes, which a currency feature would not need.",
-            "e-divergence-docker: The absence claim 'no build manifest in the tree declares a dependency on it' cites only README.md, which shows the mention but contains no search over build manifests and no closed enumeration establishing that absence."
+            "d-issue-5-c5180987178: 'There is no style feedback' (and 'reported, not graded') cites only resolution #5 asserting the decision; a stated decision is not a negative search or closed enumeration, and nothing in Practice.tsx enumerates grading outputs to prove the app emits none.",
+            "d-issue-8-c5182242970: 'Nothing is ever deleted' is witnessed only by the resolution's stated intent; the cited code (AttemptRepository shows insert/update, truncated) is neither a negative search nor a closed enumeration proving no deletion path exists."
           ]
         }
       ],

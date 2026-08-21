@@ -1,0 +1,137 @@
+{
+  "scored": [
+    {
+      "score": 5,
+      "node": {
+        "type": "flow",
+        "id": "fl-request-signal",
+        "title": "Submission crosses dispatch and persistence",
+        "evidence": [],
+        "confidence": "verified",
+        "interview_value": 0,
+        "steps": [
+          { "id": "route", "node": "POST /submissions", "kind": "request", "evidence": { "kind": "command", "cmd": "locate route", "output_excerpt": "POST /submissions" } },
+          { "id": "dispatch", "node": "Grader dispatch", "evidence": { "kind": "command", "cmd": "locate dispatch", "output_excerpt": "GraderRegistry" } },
+          { "id": "write", "node": "Submission write", "evidence": { "kind": "command", "cmd": "locate write", "output_excerpt": "SubmissionRepository.save" } },
+          { "id": "response", "node": "RunResponse", "kind": "response", "evidence": { "kind": "command", "cmd": "locate response", "output_excerpt": "RunResponse" } }
+        ],
+        "links": [
+          { "id": "route-dispatch", "from": "route", "to": "dispatch", "relation": "dispatch", "evidence": [{ "kind": "command", "cmd": "trace route dispatch", "output_excerpt": "route -> dispatch" }] },
+          { "id": "dispatch-write", "from": "dispatch", "to": "write", "relation": "write", "evidence": [{ "kind": "command", "cmd": "trace persistence", "output_excerpt": "dispatch -> write" }] },
+          { "id": "write-response", "from": "write", "to": "response", "relation": "return", "kind": "response", "evidence": [{ "kind": "command", "cmd": "trace return", "output_excerpt": "write -> response" }] }
+        ]
+      }
+    },
+    {
+      "score": 4,
+      "node": {
+        "type": "flow",
+        "id": "fl-lineage-signal",
+        "title": "One record drives three independent derivations",
+        "evidence": [],
+        "confidence": "verified",
+        "interview_value": 0,
+        "steps": [
+          { "id": "record", "node": "Attempt record", "evidence": { "kind": "command", "cmd": "locate record", "output_excerpt": "AttemptRepository" } },
+          { "id": "learned", "node": "Learned state", "kind": "response", "evidence": { "kind": "command", "cmd": "locate learned", "output_excerpt": "LearnedCriterion" } },
+          { "id": "due", "node": "Due state", "kind": "response", "evidence": { "kind": "command", "cmd": "locate due", "output_excerpt": "Sm2Scheduler" } },
+          { "id": "priority", "node": "Priority state", "kind": "response", "evidence": { "kind": "command", "cmd": "locate priority", "output_excerpt": "ChallengePriority" } }
+        ],
+        "links": [
+          { "id": "record-learned", "from": "record", "to": "learned", "relation": "read", "label": "passed rows", "evidence": [{ "kind": "command", "cmd": "trace learned read", "output_excerpt": "passed rows" }] },
+          { "id": "record-due", "from": "record", "to": "due", "relation": "read", "label": "terminal reps", "evidence": [{ "kind": "command", "cmd": "trace due read", "output_excerpt": "terminal reps" }] },
+          { "id": "record-priority", "from": "record", "to": "priority", "relation": "read", "label": "terminal challenges", "evidence": [{ "kind": "command", "cmd": "trace priority read", "output_excerpt": "terminal challenges" }] }
+        ]
+      }
+    },
+    {
+      "score": 3,
+      "node": {
+        "type": "flow",
+        "id": "fl-lineage-wrapper",
+        "title": "Popular repository feeds three CRUD views",
+        "evidence": [],
+        "confidence": "verified",
+        "interview_value": 0,
+        "steps": [
+          { "id": "record", "node": "Account record", "evidence": { "kind": "command", "cmd": "locate account record", "output_excerpt": "AccountRepository" } },
+          { "id": "list", "node": "List view", "kind": "response", "evidence": { "kind": "command", "cmd": "locate list view", "output_excerpt": "AccountList" } },
+          { "id": "detail", "node": "Detail view", "kind": "response", "evidence": { "kind": "command", "cmd": "locate detail view", "output_excerpt": "AccountDetail" } },
+          { "id": "export", "node": "Export view", "kind": "response", "evidence": { "kind": "command", "cmd": "locate export view", "output_excerpt": "AccountExport" } }
+        ],
+        "links": [
+          { "id": "record-list", "from": "record", "to": "list", "relation": "read", "evidence": [{ "kind": "command", "cmd": "trace list read", "output_excerpt": "record -> list" }] },
+          { "id": "record-detail", "from": "record", "to": "detail", "relation": "read", "evidence": [{ "kind": "command", "cmd": "trace detail read", "output_excerpt": "record -> detail" }] },
+          { "id": "record-export", "from": "record", "to": "export", "relation": "read", "evidence": [{ "kind": "command", "cmd": "trace export read", "output_excerpt": "record -> export" }] }
+        ]
+      }
+    },
+    {
+      "score": 4,
+      "node": {
+        "type": "flow",
+        "id": "fl-route-wrapper-a",
+        "title": "Account route calls account service",
+        "evidence": [],
+        "confidence": "verified",
+        "interview_value": 0,
+        "steps": [
+          { "id": "route", "node": "AccountController", "kind": "request", "evidence": { "kind": "command", "cmd": "locate account route", "output_excerpt": "AccountController" } },
+          { "id": "service", "node": "AccountService", "kind": "response", "evidence": { "kind": "command", "cmd": "locate account service", "output_excerpt": "AccountService" } }
+        ],
+        "links": [
+          { "id": "account-route-service", "from": "route", "to": "service", "relation": "call", "evidence": [{ "kind": "command", "cmd": "trace account call", "output_excerpt": "route -> service" }] }
+        ]
+      }
+    },
+    {
+      "score": 4,
+      "node": {
+        "type": "flow",
+        "id": "fl-route-wrapper-b",
+        "title": "History route calls history service",
+        "evidence": [],
+        "confidence": "verified",
+        "interview_value": 0,
+        "steps": [
+          { "id": "route", "node": "HistoryController", "kind": "request", "evidence": { "kind": "command", "cmd": "locate history route", "output_excerpt": "HistoryController" } },
+          { "id": "service", "node": "HistoryService", "kind": "response", "evidence": { "kind": "command", "cmd": "locate history service", "output_excerpt": "HistoryService" } }
+        ],
+        "links": [
+          { "id": "history-route-service", "from": "route", "to": "service", "relation": "call", "evidence": [{ "kind": "command", "cmd": "trace history call", "output_excerpt": "route -> service" }] }
+        ]
+      }
+    },
+    {
+      "score": 2,
+      "node": {
+        "type": "flow",
+        "id": "fl-under-floor",
+        "title": "Complete but routine health route",
+        "evidence": [],
+        "confidence": "verified",
+        "interview_value": 0,
+        "steps": [
+          { "id": "route", "node": "GET /health", "kind": "request", "evidence": { "kind": "command", "cmd": "locate health route", "output_excerpt": "GET /health" } },
+          { "id": "response", "node": "OK", "kind": "response", "evidence": { "kind": "command", "cmd": "locate health response", "output_excerpt": "OK" } }
+        ],
+        "links": [
+          { "id": "health-route-response", "from": "route", "to": "response", "relation": "return", "kind": "response", "evidence": [{ "kind": "command", "cmd": "trace health return", "output_excerpt": "route -> response" }] }
+        ]
+      }
+    },
+    {
+      "score": 5,
+      "node": {
+        "type": "flow",
+        "id": "fl-absent",
+        "title": "Quarantined stale chain",
+        "evidence": [],
+        "confidence": "absent",
+        "interview_value": 0,
+        "steps": [],
+        "links": []
+      }
+    }
+  ]
+}

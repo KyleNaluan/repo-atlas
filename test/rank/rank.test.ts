@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { rank, type ScoredNode } from "../../src/rank/rank.js";
+import { flowArchetype } from "../../src/rank/flow.js";
 import { absentCutsOf } from "../../src/assemble/assemble.js";
 import { INTERVIEW, profile, rubricText, UnknownProfileError } from "../../src/rank/profile.js";
 import {
@@ -349,6 +350,57 @@ describe("the Flow budget keeps two complementary interview stories", () => {
         note: "no admissible evidence at this SHA (flow-fixture)",
       },
     ]);
+  });
+});
+
+/* ------------------------------------ archetype classification precedence */
+
+describe("a request signal wins the archetype even alongside a read fan-out", () => {
+  // A modern links-based Flow whose request entry also fans out over two read
+  // links. The request signal takes precedence, so it belongs to the
+  // request/response slot and never competes for the lineage slot #39 reserves
+  // for Flows whose story is the lineage itself.
+  const mixedTopology = (id: string, score: number): ScoredNode => ({
+    score,
+    node: {
+      type: "flow",
+      id,
+      title: "Route reads two repositories",
+      evidence: [],
+      confidence: "verified",
+      interview_value: 0,
+      steps: [
+        { id: "route", node: "POST /submissions", kind: "request" },
+        { id: "learned", node: "Learned state", kind: "response" },
+        { id: "due", node: "Due state", kind: "response" },
+      ],
+      links: [
+        { id: "route-learned", from: "route", to: "learned", relation: "read", evidence: [] },
+        { id: "route-due", from: "route", to: "due", relation: "read", evidence: [] },
+      ],
+    } as FlowNode,
+  });
+
+  it("classifies the mixed-topology Flow as request/response", () => {
+    expect(flowArchetype(mixedTopology("fl-mixed", 5).node)).toBe("request_response");
+  });
+
+  it("still reads the same fan-out as lineage once the request entry is removed", () => {
+    const flow = mixedTopology("fl-mixed", 5).node;
+    const lineageOnly: FlowNode = {
+      ...flow,
+      steps: flow.steps.map((step) => (step.id === "route" ? { ...step, kind: undefined } : step)),
+    };
+    expect(flowArchetype(lineageOnly)).toBe("shared_state_lineage");
+  });
+
+  it("takes the request/response slot without evicting a genuine lineage story", () => {
+    const lineageSignal = flowRanking.scored.find((entry) => entry.node.id === "fl-lineage-signal")!;
+    const routeWrapper = flowRanking.scored.find((entry) => entry.node.id === "fl-route-wrapper-a")!;
+    const result = rank([mixedTopology("fl-mixed", 5), lineageSignal, routeWrapper], INTERVIEW);
+    expect(result.nodes.map((node) => node.id)).toEqual(["fl-mixed", "fl-lineage-signal"]);
+    const cut = result.deletions.find((deletion) => deletion.id === "fl-route-wrapper-a")!;
+    expect(cut.reason).toContain("request/response slot capped at 1");
   });
 });
 

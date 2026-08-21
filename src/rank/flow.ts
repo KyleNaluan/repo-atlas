@@ -55,11 +55,13 @@ const rootsAndTerminals = (flow: FlowNode, links: TopologyLink[]) => {
 };
 
 /**
- * Classify only from graph structure. New shared-state Flows carry read fan-out;
- * the legacy bridge recognises the reference fixture's three-way fan-out when no
- * request signal exists. Every other currently-supported Flow belongs to the
- * request/response slot. Later adapter families can extend this closed mapping
- * when their own budget decision lands.
+ * Classify only from graph structure. A request signal takes precedence: a Flow
+ * with an HTTP/request entry is request/response even when it also fans out over
+ * shared state, so the lineage slot is reserved for Flows whose story is the
+ * lineage itself. Absent a request signal, a read fan-out (or the legacy bridge's
+ * three-way reference fan-out) marks shared-state lineage. Every other
+ * currently-supported Flow belongs to the request/response slot. Later adapter
+ * families can extend this closed mapping when their own budget decision lands.
  */
 export const flowArchetype = (flow: FlowNode): FlowArchetype => {
   const links = topologyLinks(flow);
@@ -68,9 +70,11 @@ export const flowArchetype = (flow: FlowNode): FlowArchetype => {
     links.some((link) => link.kind === "request" || link.relation === "transport");
   const fanOut = new Map<string, TopologyLink[]>();
   for (const link of links) fanOut.set(link.from, [...(fanOut.get(link.from) ?? []), link]);
-  const readFanOut = [...fanOut.values()].some(
-    (outgoing) => outgoing.length >= 2 && outgoing.every((link) => link.relation === "read"),
-  );
+  const readFanOut =
+    !requestSignal &&
+    [...fanOut.values()].some(
+      (outgoing) => outgoing.length >= 2 && outgoing.every((link) => link.relation === "read"),
+    );
   const legacyThreeWayFanOut =
     flow.links === undefined &&
     !requestSignal &&

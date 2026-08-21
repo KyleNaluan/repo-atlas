@@ -24,6 +24,7 @@
  */
 import type { AtlasNode, Deletion, InterviewerQuestion } from "../schema/types.js";
 import type { Profile } from "./profile.js";
+import { flowArchetype, type FlowArchetype } from "./flow.js";
 import {
   boostFor,
   clampScore,
@@ -54,7 +55,12 @@ export interface RankResult {
 
 /** Which budget, if any, governs a node type. */
 const sectionOf = (node: AtlasNode): string | null =>
-  node.type === "mechanism" ? "mechanisms" : null;
+  node.type === "mechanism" ? "mechanisms" : node.type === "flow" ? "flows" : null;
+
+const FLOW_ARCHETYPE_LABEL: Record<FlowArchetype, string> = {
+  request_response: "request/response",
+  shared_state_lineage: "shared-state/data-lineage",
+};
 
 /** value desc, then id, so equal scores never shuffle between runs. */
 const byValue = (a: ScoredNode, b: ScoredNode): number =>
@@ -182,6 +188,7 @@ export const rank = (
   // ranking rather than add to it.
   const kept: ScoredNode[] = [];
   const kept_in = new Map<string, number>();
+  const kept_flow_archetype = new Map<FlowArchetype, number>();
   // Rank position within the section, counting every candidate rather than only
   // the ones that fit. A counter that stops at the cap would report the seventh
   // cut as "ranked 6" alongside the sixth - a recorded reason stating something
@@ -189,7 +196,7 @@ export const rank = (
   const seen_in = new Map<string, number>();
   for (const s of [...survivors].sort(byValue)) {
     const section = sectionOf(s.node);
-    const budget = section === null ? undefined : p.budgets[section as "mechanisms"];
+    const budget = section === null ? undefined : p.budgets[section as "mechanisms" | "flows"];
     if (section === null || budget === undefined || pinnedBy(overrides, s.node)) {
       kept.push(s);
       continue;
@@ -197,11 +204,18 @@ export const rank = (
     const position = (seen_in.get(section) ?? 0) + 1;
     seen_in.set(section, position);
     const used = kept_in.get(section) ?? 0;
-    if (used >= budget) {
+    const archetype = s.node.type === "flow" ? flowArchetype(s.node) : null;
+    const archetypeBudget = archetype === null ? undefined : p.flow_archetype_budgets[archetype];
+    const archetypeUsed = archetype === null ? 0 : (kept_flow_archetype.get(archetype) ?? 0);
+    if (used >= budget || (archetypeBudget !== undefined && archetypeUsed >= archetypeBudget)) {
+      const archetypeReason =
+        archetype === null || archetypeBudget === undefined
+          ? ""
+          : `; ${FLOW_ARCHETYPE_LABEL[archetype]} slot capped at ${archetypeBudget}`;
       deletions.push({
         id: s.node.id,
         score: s.score,
-        reason: `section budget: ${section} capped at ${budget} by the ${p.name} profile; ranked ${position}`,
+        reason: `section budget: ${section} capped at ${budget} by the ${p.name} profile${archetypeReason}; ranked ${position}`,
         kind: "budget",
         section,
         unit: "node",
@@ -209,6 +223,7 @@ export const rank = (
       continue;
     }
     kept_in.set(section, used + 1);
+    if (archetype !== null) kept_flow_archetype.set(archetype, archetypeUsed + 1);
     kept.push(s);
   }
 

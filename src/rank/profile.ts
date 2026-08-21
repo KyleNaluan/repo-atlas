@@ -7,11 +7,12 @@
  * changes ranking and never extraction, made structural.
  *
  * The budgets are taken from the hand-made overview's actual shape: exactly five
- * ranked deep dives, about ten interviewer questions. They are not round numbers
- * chosen for tidiness - they are the shape a human arrived at when they had to
- * read the result under time pressure.
+ * ranked deep dives, two complementary Flows and about ten interviewer questions.
+ * They are not round numbers chosen for tidiness - they are the shape a human
+ * arrived at when they had to read the result under time pressure.
  */
 import { readFileSync } from "node:fs";
+import type { FlowArchetype } from "./flow.js";
 
 export interface Profile {
   name: string;
@@ -23,8 +24,12 @@ export interface Profile {
     interview_value_floor: number;
     /** Per-section caps, forcing ranked cuts even among decent nodes. */
     mechanisms: number;
+    /** One Flow section, capped after the floor (#39). */
+    flows: number;
     interviewer_questions: number;
   };
+  /** The two complementary slots inside the Flow section budget (#39). */
+  flow_archetype_budgets: Record<FlowArchetype, number>;
 }
 
 export const INTERVIEW: Profile = {
@@ -34,7 +39,12 @@ export const INTERVIEW: Profile = {
   budgets: {
     interview_value_floor: 3,
     mechanisms: 5,
+    flows: 2,
     interviewer_questions: 10,
+  },
+  flow_archetype_budgets: {
+    request_response: 1,
+    shared_state_lineage: 1,
   },
 };
 

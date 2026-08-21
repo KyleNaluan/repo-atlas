@@ -101,12 +101,14 @@ It changes by commit, never per run.
 A project may pin, boost or suppress specific nodes through config - that is data - but it cannot rewrite the rubric, so runs stay reproducible and the override file doubles as the record of where a human disagreed.
 
 Deletion uses two mechanisms, and needs both: a hard value floor, because budgets alone let weak nodes fill an under-subscribed section, and per-section budgets, because a floor alone caps nothing when everything scores mid-range.
+The interview profile caps Flow at two after the floor, with one request/response slot and one shared-state/data-lineage slot, so two near-duplicate routes cannot crowd out the complementary story ([#39](https://github.com/KyleNaluan/repo-atlas/issues/39)).
 **Every deletion is recorded** with its id, score and reason.
 That record is what makes the ruthlessness defensible rather than arbitrary, and the audit checks it, so the renderer cannot quietly resurrect something the rank stage cut.
 
 This is the only stage that deletes. The renderer renders everything it is handed, or it becomes a second authority over what survives.
 
 Scoring is the one place judgement enters the pipeline, and it is a single model call over the whole graph under the rubric - with no tools, so it can order what was established but never add to it.
+For a Flow, that evidence-free projection includes its step titles and details, typed and labelled links, inferred archetype and entry kind, roots, terminals and architectural-boundary count; evidence text remains withheld because evidence is a gate, not a score.
 Its output is pinned as a committed fixture, which is how the ranking is checked without a credential: on the reference subject the rubric reproduces the hand-made overview's five deep dives exactly, in the same order and at the same scores.
 Refreshing that fixture is an explicit, credentialed command, and a score set whose rubric has since been edited is refused rather than reused.
 

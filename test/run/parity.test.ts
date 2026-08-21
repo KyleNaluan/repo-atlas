@@ -99,6 +99,9 @@ describe("where the engine falls short, and by how much", () => {
     expect(countByType(produced)["flow"]).toBeUndefined();
     expect(countByType(reference)["flow"]).toBe(2);
     expect(produced.record.section_presence["flows"]).toBe("absent");
+    // PR 3 made rank ready for two complementary Flows, but did not mint one:
+    // budget readiness must not make section 04 imply extraction happened.
+    expect(produced.record.budgets["flows"]).toBe(2);
   });
 
   it("renders no boundaries, because the only probe that finds them finds test-file noise", () => {
@@ -111,10 +114,10 @@ describe("where the engine falls short, and by how much", () => {
     expect(countByType(reference)["boundary"]).toBe(4);
   });
 
-  it("produces about half the reference's nodes, and the number is the finding", () => {
-    // Recorded so it moves visibly. 18 against 33: the decisions, deep dives,
+  it("produces fewer than half the reference's nodes, and the number is the finding", () => {
+    // Recorded so it moves visibly. 15 against 33: the decisions, deep dives,
     // orientation figures and edges are there; the flows and boundaries are not.
-    expect(produced.nodes).toHaveLength(18);
+    expect(produced.nodes).toHaveLength(15);
     expect(reference.nodes).toHaveLength(33);
   });
 });

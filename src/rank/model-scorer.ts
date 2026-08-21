@@ -27,6 +27,7 @@ import { askModel, firstJsonObject } from "../model/ask.js";
 import type { AtlasNode } from "../schema/types.js";
 import type { ScoredNode } from "./rank.js";
 import type { ScoreRequest } from "./scorer.js";
+import { flowScoringProjection } from "./flow.js";
 
 /**
  * What the model is shown of each node.
@@ -68,7 +69,7 @@ const summarise = (node: AtlasNode): Record<string, unknown> => {
     case "fact":
       return { ...base, label: node.label, value: node.value };
     case "flow":
-      return { ...base, caption: node.caption ?? "", steps: node.steps.length };
+      return { ...base, ...flowScoringProjection(node) };
   }
 };
 

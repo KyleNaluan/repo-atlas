@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { rank, type ScoredNode } from "../../src/rank/rank.js";
+import { absentCutsOf } from "../../src/assemble/assemble.js";
 import { INTERVIEW, profile, rubricText, UnknownProfileError } from "../../src/rank/profile.js";
 import {
   MissingScoreError,
@@ -35,6 +36,10 @@ import type { Atlas, AtlasNode, FlowNode, MechanismNode } from "../../src/schema
 const atlas = JSON.parse(
   readFileSync(fileURLToPath(new URL("../fixtures/swe-prep.atlas.json", import.meta.url)), "utf8"),
 ) as Atlas;
+
+const flowRanking = JSON.parse(
+  readFileSync(fileURLToPath(new URL("../fixtures/flow-ranking.json", import.meta.url)), "utf8"),
+) as { scored: ScoredNode[] };
 
 /** The reference ranking: the hand-made overview's five deep dives, in order. */
 const REFERENCE_DIVES = [
@@ -102,6 +107,13 @@ describe("the rubric's ground-truth fixture", () => {
   it("reproduces the hand-made overview's five deep dives, in its order", () => {
     const dives = result.nodes.filter((n) => n.type === "mechanism").map((n) => n.id);
     expect(dives).toEqual(REFERENCE_DIVES);
+  });
+
+  it("retains both complementary reference Flows", () => {
+    expect(result.nodes.filter((node) => node.type === "flow").map((node) => node.id)).toEqual([
+      "fl-submission",
+      "fl-derivations",
+    ]);
   });
 
   it("cuts everything the human cut", () => {
@@ -229,6 +241,89 @@ describe("deletion uses two mechanisms, and needs both", () => {
     // Assemble records this in absent_cuts. It must stay distinct from a score
     // floor/budget deletion, rather than appearing in both ledgers.
     expect(result.deletions).toEqual([]);
+  });
+});
+
+/* ------------------------------------------------------ Flow calibration */
+
+describe("the Flow budget keeps two complementary interview stories", () => {
+  const calibrated = () => rank(flowRanking.scored, INTERVIEW);
+
+  it("keeps the request/response and shared-state signal flows", () => {
+    expect(calibrated().nodes.map((node) => node.id)).toEqual([
+      "fl-request-signal",
+      "fl-lineage-signal",
+    ]);
+  });
+
+  it("does not spend the lineage slot on near-duplicate routes", () => {
+    const cuts = calibrated().deletions.filter((deletion) => deletion.section === "flows");
+    expect(cuts.map((deletion) => deletion.id)).toEqual([
+      "fl-lineage-wrapper",
+      "fl-route-wrapper-a",
+      "fl-route-wrapper-b",
+    ]);
+    for (const cut of cuts.filter((deletion) => deletion.id.startsWith("fl-route"))) {
+      expect(cut).toMatchObject({ kind: "budget", section: "flows", unit: "node", score: 4 });
+      expect(cut.reason).toContain("flows capped at 2");
+      expect(cut.reason).toContain("request/response slot capped at 1");
+    }
+    expect(cuts.find((deletion) => deletion.id === "fl-lineage-wrapper")?.reason).toContain(
+      "shared-state/data-lineage slot capped at 1",
+    );
+    expect(
+      cuts
+        .filter((deletion) => deletion.id.startsWith("fl-route"))
+        .map((cut) => /ranked (\d+)/.exec(cut.reason)?.[1]),
+    ).toEqual(["3", "4"]);
+  });
+
+  it("applies the floor before either archetype slot", () => {
+    expect(calibrated().deletions.find((deletion) => deletion.id === "fl-under-floor")).toMatchObject({
+      score: 2,
+      kind: "floor",
+      unit: "node",
+    });
+  });
+
+  it("degrades honestly to one Flow instead of filling both slots with routes", () => {
+    const routes = flowRanking.scored.filter((entry) =>
+      ["fl-request-signal", "fl-route-wrapper-a", "fl-route-wrapper-b"].includes(entry.node.id),
+    );
+    const result = rank(routes, INTERVIEW);
+    expect(result.nodes.map((node) => node.id)).toEqual(["fl-request-signal"]);
+    expect(result.deletions.filter((deletion) => deletion.section === "flows")).toHaveLength(2);
+  });
+
+  it("degrades honestly to zero when no verified Flow clears the floor", () => {
+    const weakOrAbsent = flowRanking.scored.filter((entry) =>
+      ["fl-under-floor", "fl-absent"].includes(entry.node.id),
+    );
+    expect(rank(weakOrAbsent, INTERVIEW).nodes).toEqual([]);
+  });
+
+  it("keeps rank deletions distinct from the gate's absent-cut record", () => {
+    const result = calibrated();
+    expect(result.deletions.some((deletion) => deletion.id === "fl-under-floor")).toBe(true);
+    expect(result.deletions.some((deletion) => deletion.id === "fl-absent")).toBe(false);
+    const absent = flowRanking.scored.find((entry) => entry.node.id === "fl-absent")!.node;
+    expect(
+      absentCutsOf([
+        {
+          probe_id: "flow-fixture",
+          node: absent,
+          verdict: "unresolved",
+          finding: "one link could not be independently resolved",
+        },
+      ]),
+    ).toEqual([
+      {
+        id: "fl-absent",
+        candidate_type: "flow",
+        reason: "one link could not be independently resolved",
+        note: "no admissible evidence at this SHA (flow-fixture)",
+      },
+    ]);
   });
 });
 
@@ -421,8 +516,13 @@ describe("the profile is a named bundle of rubric and budgets", () => {
   it("v1 ships the interview profile with the seam concrete", () => {
     expect(profile("interview")).toBe(INTERVIEW);
     expect(INTERVIEW.budgets.mechanisms).toBe(5);
+    expect(INTERVIEW.budgets.flows).toBe(2);
     expect(INTERVIEW.budgets.interviewer_questions).toBe(10);
     expect(INTERVIEW.budgets.interview_value_floor).toBe(3);
+    expect(INTERVIEW.flow_archetype_budgets).toEqual({
+      request_response: 1,
+      shared_state_lineage: 1,
+    });
   });
 
   it("names the profiles it has rather than guessing at one it does not", () => {

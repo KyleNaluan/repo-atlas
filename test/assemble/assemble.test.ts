@@ -270,6 +270,42 @@ describe("the provenance record is written for every subject", () => {
     expect(cuts[0]!.reason).toBeTruthy();
   });
 
+  it("records one broken Flow as an absent cut while section 04 stays wholly absent", () => {
+    const lost: AtlasNode = {
+      type: "flow",
+      id: "fl-stale-link",
+      title: "a chain with one stale arrow",
+      evidence: [],
+      confidence: "absent",
+      interview_value: 5,
+      steps: [
+        { id: "a", node: "A" },
+        { id: "b", node: "B" },
+      ],
+      links: [{ id: "a-b", from: "a", to: "b", relation: "call", evidence: [] }],
+    };
+    const atlas = build([], {
+      gated: [
+        {
+          probe_id: "flow-test",
+          node: lost,
+          verdict: "overturned",
+          finding: "Flow fl-stale-link quarantined atomically: link a-b calls a different target",
+        },
+      ],
+      ranked: rankedFor([]),
+    });
+    expect(atlas.nodes).toEqual([]);
+    expect(atlas.record.section_presence["flows"]).toBe("absent");
+    expect(atlas.record.absent_cuts).toEqual([
+      expect.objectContaining({
+        id: "fl-stale-link",
+        candidate_type: "flow",
+        reason: expect.stringContaining("link a-b"),
+      }),
+    ]);
+  });
+
   it("records a declared private split, and omits the block when there is none", () => {
     const split = {
       declared: true,

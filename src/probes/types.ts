@@ -16,7 +16,7 @@
  * error. A probe that does not APPLY says so by name, which is a different
  * thing and part of the degradation story.
  */
-import type { AtlasNode } from "../schema/types.js";
+import type { AtlasNode, FileEvidence } from "../schema/types.js";
 import type { Harvest } from "../harvest/types.js";
 import type { SyntaxNode } from "./java.js";
 
@@ -54,6 +54,54 @@ export interface Candidate {
    * Empty means the candidate is already grounded in what the probe read.
    */
   claims?: ExistenceClaim[];
+  /**
+   * Atomic relationship claims for a Flow. These stay candidate-only: the
+   * final graph carries the independently checked links and their evidence,
+   * never the producer's proposed proof recipe.
+   */
+  flow_claims?: FlowClaim[];
+}
+
+/** A source symbol named precisely enough for the gate to locate it again. */
+export interface SymbolRef {
+  /** Subject-relative path at the candidate's pinned SHA. */
+  path: string;
+  /** Method, function, type, table, model, or other source-owned identifier. */
+  name: string;
+  /** Containing or receiver type, when a same-name symbol would be ambiguous. */
+  owner?: string;
+  /** Call/declaration arity, when overloads exist. */
+  arity?: number;
+  /** Exact endpoint contract for a transport claim. */
+  protocol?: {
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
+    path: string;
+  };
+}
+
+export type FlowMatcher =
+  | "direct_call"
+  | "spring_route"
+  | "closed_dispatch"
+  | "data_access"
+  | "reachability";
+
+/**
+ * What the gate must establish for one rendered Flow arrow (#35, report 6.1).
+ *
+ * `link_id` is omitted only for a caption-level closed negative claim. A
+ * rendered link always expects `present`; an absent link would contradict the
+ * arrow rather than support it. Evidence is file-only because this gate rereads
+ * the pinned tree independently. Command evidence may corroborate a final link,
+ * but cannot replace the source relationship the gate must resolve.
+ */
+export interface FlowClaim {
+  link_id?: string;
+  expect: "present" | "absent";
+  matcher: FlowMatcher;
+  from: SymbolRef;
+  to?: SymbolRef;
+  evidence: FileEvidence[];
 }
 
 /**

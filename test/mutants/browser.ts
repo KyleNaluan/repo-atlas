@@ -56,4 +56,10 @@ export const BROWSER_MUTANTS: BrowserMutant[] = [
         "<footer><p>This sentence was never traced to any evidence in the graph.</p>",
       ),
   },
+  {
+    check: "E1",
+    breaks: "a Flow diagram and its link labels lose their provenance owner stamp",
+    apply: (artifact) =>
+      artifact.replace('data-ev="fl-submission:steps"', ""),
+  },
 ];

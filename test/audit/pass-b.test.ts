@@ -215,6 +215,31 @@ describeBrowser("E1 traces a node's evidence through every slot the schema gives
     }
   }, 120_000);
 
+  it("passes when a flow is evidenced only through its links", async () => {
+    const loaded = await openArtifact(artifactPath);
+    try {
+      const atlas = structuredClone(ctx.atlas);
+      const f = atlas.nodes.find(
+        (n): n is FlowNode => n.type === "flow" && n.confidence !== "absent",
+      )!;
+      f.evidence = [];
+      f.steps = f.steps.map(({ evidence: _evidence, ...step }) => step);
+      f.links = [
+        {
+          id: "evidenced-link",
+          from: f.steps[0]!.id,
+          to: f.steps[1]!.id,
+          relation: "call",
+          evidence: [evidenced("link.ts", atlas.subject.sha)],
+        },
+      ];
+      const e1 = await provenanceWalk(loaded.page, atlas);
+      expect(e1.outcome, (e1.findings ?? []).join("; ")).toBe("passed");
+    } finally {
+      await loaded.close();
+    }
+  }, 120_000);
+
   it("still fails a node that carries no evidence in any slot", async () => {
     // The honesty case: the fix must not weaken part-3 into always passing.
     const loaded = await openArtifact(artifactPath);
@@ -281,7 +306,7 @@ describeBrowser("every pass B gate rejects its own mutant", () => {
     const gates = checksInPass("B")
       .filter((c) => c.class === "gate")
       .map((c) => c.id);
-    expect(BROWSER_MUTANTS.map((m) => m.check).sort()).toEqual([...gates].sort());
+    expect([...new Set(BROWSER_MUTANTS.map((m) => m.check))].sort()).toEqual([...gates].sort());
   });
 
   for (const mutant of BROWSER_MUTANTS) {

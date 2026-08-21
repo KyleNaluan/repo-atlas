@@ -37,6 +37,7 @@ import { GATES } from "../../src/audit/register.js";
 import type { AuditContext, CheckResult } from "../../src/audit/types.js";
 import type { Atlas, AtlasNode, EdgeNode } from "../../src/schema/types.js";
 import type { HarvestedIssue } from "../../src/harvest/types.js";
+import { STALE_FLOW_LINK } from "../mutants/model.js";
 
 const atlas = JSON.parse(
   readFileSync(fileURLToPath(new URL("../fixtures/swe-prep.atlas.json", import.meta.url)), "utf8"),
@@ -318,6 +319,32 @@ describe("pass D judges each node alone", () => {
     const prose = proseOf(decision);
     expect(prose.length).toBeGreaterThan(2);
     expect(prose.join(" ")).not.toContain("http");
+  });
+
+  it("weighs a Flow's boxes, details, and edge labels rather than only its caption", async () => {
+    const flow = structuredClone(STALE_FLOW_LINK);
+    expect(proseOf(flow)).toEqual(
+      expect.arrayContaining(["Caller.run", "starts the operation", "Target.execute", "execute()"]),
+    );
+
+    let weighed: string[] = [];
+    let citations = 0;
+    const result = await proseSupport([flow], {
+      resolve: (e) => (e.kind === "command" ? e.output_excerpt : undefined),
+      judge: async (request) => {
+        weighed = request.prose;
+        citations = request.evidence.length;
+        return {
+          supported: !request.prose.includes("execute()"),
+          note: "the execute() arrow is supported only by a cancel() call",
+        };
+      },
+    });
+    expect(weighed).toContain("execute()");
+    expect(citations).toBe(3);
+    expect(result.outcome).toBe("failed");
+    expect(result.class).toBe("warning");
+    expect(result.findings?.[0]).toContain("execute() arrow");
   });
 
   it("resolves issue evidence to text from the harvest cache, comment id first", () => {

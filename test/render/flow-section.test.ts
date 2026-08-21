@@ -51,4 +51,21 @@ describe("section 04's FlowLink bridge", () => {
       "Traced flows - nothing surfaced. No flow survived the confidence gate.",
     );
   });
+
+  it("discloses Flow budget cuts from the deletion record without making one", async () => {
+    const fanOut = read<FlowNode>("flow-fan-out.json");
+    const withCut = structuredClone(atlas);
+    withCut.record.deletions.push({
+      id: "fl-cut-by-budget",
+      score: 4,
+      reason: "section budget: flows capped at 2",
+      kind: "budget",
+      section: "flows",
+      unit: "node",
+    });
+    const rendered = (await sectionFlows(withCut, [fanOut], memoryDiagramCache())).toString();
+    expect(rendered.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ")).toContain(
+      "1 further flow scored above the value floor and was still cut by the rank stage",
+    );
+  });
 });

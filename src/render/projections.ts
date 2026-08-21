@@ -146,7 +146,10 @@ export const sourceIndex = (
     for (const e of n.evidence) add(e, n);
     if (n.type === "decision") for (const e of n.implemented_by) add(e, n);
     if (n.type === "mechanism" && n.code_excerpt) add(n.code_excerpt.evidence, n);
-    if (n.type === "flow") for (const s of n.steps) if (s.evidence) add(s.evidence, n);
+    if (n.type === "flow") {
+      for (const s of n.steps) if (s.evidence) add(s.evidence, n);
+      for (const link of n.links ?? []) for (const e of link.evidence) add(e, n);
+    }
   }
   const grouped = new Map<Evidence["kind"], IndexedSource[]>();
   for (const s of seen.values()) {
@@ -188,7 +191,10 @@ export const ranked = <T extends AtlasNode>(nodes: T[]): T[] =>
 export const evidenceCount = (n: AtlasNode): number => {
   let count = n.evidence.length;
   if (n.type === "decision") count += n.implemented_by.length;
-  if (n.type === "flow") count += n.steps.filter((s) => s.evidence).length;
+  if (n.type === "flow") {
+    count += n.steps.filter((s) => s.evidence).length;
+    count += (n.links ?? []).reduce((sum, link) => sum + link.evidence.length, 0);
+  }
   return count;
 };
 

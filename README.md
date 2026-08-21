@@ -71,6 +71,10 @@ On the reference subject the gate overturns an open ticket for a "second languag
 A confirmed contradiction becomes a `divergence` edge rather than being dropped - the record and the build disagreeing is the finding, not noise to filter.
 A claim nothing in the tree can settle is demoted rather than admitted, because a claim nobody checked must never arrive looking checked.
 
+Links-based Flow candidates take the deliberately stricter path defined for [#35](https://github.com/KyleNaluan/repo-atlas/issues/35): every step and arrow must be evidenced, endpoints and topology must resolve, and every arrow carries one typed candidate-only claim that the gate checks again for a direct call, exact Spring route, or data access.
+One missing, stale, ambiguous, or contradicted arrow quarantines the **complete** Flow as `absent`; it never becomes an attested or partial diagram, and rank excludes it independently of its score or any pin.
+Legacy `calls_next` artifacts remain readable through the schema 1.1 renderer bridge, but cannot be admitted as newly verified Flow candidates because they have no link-owned evidence or atomic claims.
+
 ## Writing the decision record
 
 A resolution comment carries the richest input the engine has - the decision, its reasons, and the alternative that lost - and no deterministic probe can read it, because probes are pure functions over the tree and [#5](https://github.com/KyleNaluan/repo-atlas/issues/5) forecloses model-assisted probes.
@@ -166,6 +170,7 @@ The rendered page is one view of it, which is what keeps a downstream consumer (
 Schema 1.1 adds edge-level Flow links ([#37](https://github.com/KyleNaluan/repo-atlas/issues/37)).
 Each `FlowLink` owns its endpoints, typed relation, optional label/kind, and evidence, so a fan-out can preserve a distinct meaning and citation for every arrow.
 The renderer prefers `links` while continuing to accept the legacy `FlowStep.calls_next` and `edge_label` fields for 1.x inputs.
+Audit E2 checks links-based Flow topology and substantive step/link evidence, M1 weighs the boxes, details, and arrow labels rather than only the caption, and G3 confirms each rendered Flow carries its `atlas.json` value attribution and that any cut-to-budget flows are disclosed against the deletion record.
 
 The published JSON Schema lives at [`schema/atlas.schema.json`](schema/atlas.schema.json) and is **generated** from [`src/schema/types.ts`](src/schema/types.ts) by `npm run schema:gen`.
 CI runs `npm run schema:check`, so the types and the contract cannot drift.

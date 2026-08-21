@@ -57,6 +57,8 @@ Probes emit **candidates**, never final nodes. The gate confirms, the rank stage
 
 The existence gate runs in **both directions** (#7 point 7), and the single-direction version is the one already found wrong on the reference subject: a stated decision is not evidence of implementation, and an open ticket is not evidence of absence. A confirmed contradiction becomes a `divergence` edge rather than being dropped. A claim nothing in the tree can settle is **demoted, never admitted as checked**.
 
+Flow is the atomic exception to that generic outcome path (#35): every links-based candidate needs one `flow_claims` entry per arrow, and one unresolved, stale, or contradicted arrow quarantines the **whole** Flow as `absent` - never attested, partial, or converted to a subject divergence. Direct-call, exact Spring-route, and data-access matchers resolve now; `closed_dispatch` and `reachability` deliberately fail closed until their producer phases add the required closed-set knowledge. Legacy `calls_next` remains a render input only and cannot enter as a newly verified candidate.
+
 `assets/tree-sitter-java.wasm` is vendored deliberately. The only npm package shipping a prebuilt Java grammar bundles ~40 of them at 50 MB for one 430 KB file, which is not a defensible npx footprint. `web-tree-sitter` is pinned to the ABI that grammar was built against - **the two move together or not at all**.
 
 ## Write

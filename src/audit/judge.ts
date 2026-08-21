@@ -29,7 +29,7 @@ evidence does not show. If true, "note" is one line saying what the evidence
 establishes.
 
 --- NODE PROSE ---
-${JSON.stringify(request.node, null, 1)}
+${JSON.stringify(request.prose, null, 1)}
 --- END NODE ---
 
 --- ITS OWN CITED EVIDENCE ---

@@ -302,6 +302,23 @@ describe("the Flow budget keeps two complementary interview stories", () => {
     expect(rank(weakOrAbsent, INTERVIEW).nodes).toEqual([]);
   });
 
+  it("a section-only cap does not claim an unused archetype slot is full", () => {
+    // Lower the section budget so it binds while a different archetype's slot is
+    // still empty. The kept request/response flow fills only its own slot, so the
+    // cut lineage flow is bound by the section cap alone - its reason must not
+    // claim the lineage slot is capped, since that record is #8's G2 evidence.
+    const oneFlow = { ...INTERVIEW, budgets: { ...INTERVIEW.budgets, flows: 1 } };
+    const pair = flowRanking.scored.filter((entry) =>
+      ["fl-request-signal", "fl-lineage-signal"].includes(entry.node.id),
+    );
+    const result = rank(pair, oneFlow);
+    expect(result.nodes.map((node) => node.id)).toEqual(["fl-request-signal"]);
+    const cut = result.deletions.find((deletion) => deletion.id === "fl-lineage-signal")!;
+    expect(cut).toMatchObject({ kind: "budget", section: "flows" });
+    expect(cut.reason).toContain("flows capped at 1");
+    expect(cut.reason).not.toContain("slot capped");
+  });
+
   it("keeps rank deletions distinct from the gate's absent-cut record", () => {
     const result = calibrated();
     expect(result.deletions.some((deletion) => deletion.id === "fl-under-floor")).toBe(true);

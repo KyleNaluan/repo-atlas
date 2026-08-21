@@ -209,7 +209,7 @@ export const rank = (
     const archetypeUsed = archetype === null ? 0 : (kept_flow_archetype.get(archetype) ?? 0);
     if (used >= budget || (archetypeBudget !== undefined && archetypeUsed >= archetypeBudget)) {
       const archetypeReason =
-        archetype === null || archetypeBudget === undefined
+        archetype === null || archetypeBudget === undefined || archetypeUsed < archetypeBudget
           ? ""
           : `; ${FLOW_ARCHETYPE_LABEL[archetype]} slot capped at ${archetypeBudget}`;
       deletions.push({

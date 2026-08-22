@@ -360,6 +360,89 @@ describe("a Spring message subscription, claimed without claiming its publisher"
     expect(flowArchetype(result.node as FlowNode)).toBe("unknown");
   }, 60_000);
 
+  it("reads a listener whose header parameter carries its own parenthesized comma", async () => {
+    // The gate re-resolves the method's arity by rereading the blob; a parameter
+    // annotation with an internal comma (`@Header(name = "trace", ...)`) must be
+    // read whole, or the gate miscounts and quarantines a Flow the producer drew.
+    const { candidate, result } = await gated(
+      {
+        "src/main/java/app/batch/CueRepository.java": REPOSITORY,
+        "src/main/java/app/batch/CueListener.java": `package app.batch;
+
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.stereotype.Service;
+
+@Service
+public class CueListener {
+  private final CueRepository cues;
+
+  CueListener(CueRepository cues) {
+    this.cues = cues;
+  }
+
+  @KafkaListener(topics = "cue.raised")
+  public void onCue(@Header(name = "trace", required = false) String trace, String payload) {
+    cues.saveCue("today");
+  }
+}
+`,
+      },
+      "flow-java-spring-message",
+    );
+    const claim = only((candidate.flow_claims ?? []).filter((c) => c.matcher === "message_listener"));
+    expect(claim.trigger).toEqual({
+      annotation: "KafkaListener",
+      attribute: "topics",
+      expression: "cue.raised",
+    });
+    expect(result.node.confidence).toBe("verified");
+  }, 60_000);
+
+  it("types an @EventListener whose event parameter carries its own parenthesized comma", async () => {
+    // The producer reads the event off the structured parameter type; the gate
+    // rereads it off the span. A parameter annotation with an internal comma must
+    // not truncate the gate's read, or the two derivations disagree on the event.
+    const { candidate, result } = await gated(
+      {
+        "src/main/java/app/batch/CueRepository.java": REPOSITORY,
+        "src/main/java/app/batch/CueRaised.java": `package app.batch;
+
+public record CueRaised(String day) {
+}
+`,
+        "src/main/java/app/batch/CueListener.java": `package app.batch;
+
+import org.springframework.context.event.EventListener;
+import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.stereotype.Service;
+
+@Service
+public class CueListener {
+  private final CueRepository cues;
+
+  CueListener(CueRepository cues) {
+    this.cues = cues;
+  }
+
+  @EventListener
+  public void onCue(@Header(name = "trace", required = false) CueRaised event) {
+    cues.saveCue("today");
+  }
+}
+`,
+      },
+      "flow-java-spring-message",
+    );
+    const claim = only((candidate.flow_claims ?? []).filter((c) => c.matcher === "message_listener"));
+    expect(claim.trigger).toEqual({
+      annotation: "EventListener",
+      attribute: "parameter",
+      expression: "CueRaised",
+    });
+    expect(result.node.confidence).toBe("verified");
+  }, 60_000);
+
   it("types an @EventListener from the parameter it subscribes through", async () => {
     // The event is the method's parameter type, which is the only place the tree
     // writes it down. A listener whose event cannot be named is cut instead.

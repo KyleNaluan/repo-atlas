@@ -1407,16 +1407,42 @@ const declaredArity = (params: string): number => {
 /** The parameter list of a method this span declares, or null. */
 const declaredParams = (span: string, ref: SymbolRef): string | null => {
   const name = simpleName(ref.name);
-  for (const match of span.matchAll(new RegExp(`\\b${escaped(name)}\\s*\\(([^)]*)\\)`, "g"))) {
-    const params = match[1] ?? "";
+  for (const open of span.matchAll(new RegExp(`\\b${escaped(name)}\\s*\\(`, "g"))) {
+    const start = open.index + open[0].length;
+    let depth = 1;
+    let end = -1;
+    for (let j = start; j < span.length; j += 1) {
+      if (span[j] === "(") depth += 1;
+      else if (span[j] === ")") {
+        depth -= 1;
+        if (depth === 0) {
+          end = j;
+          break;
+        }
+      }
+    }
+    if (end === -1) continue;
+    const params = span.slice(start, end);
     if (ref.arity === undefined || declaredArity(params) === ref.arity) return params;
   }
   return null;
 };
 
+/** The span up to the first top-level comma, so an annotation's own comma is not a separator. */
+const firstTopLevelParam = (params: string): string => {
+  let depth = 0;
+  for (let j = 0; j < params.length; j += 1) {
+    const ch = params[j];
+    if (ch === "<" || ch === "(") depth += 1;
+    else if (ch === ">" || ch === ")") depth -= 1;
+    else if (ch === "," && depth === 0) return params.slice(0, j);
+  }
+  return params;
+};
+
 /** The first parameter's declared type, which is what an `@EventListener` subscribes to. */
 const firstParameterType = (params: string): string | null => {
-  const first = params.split(",")[0]?.trim().replace(/^(?:final\s+|@\w+(?:\([^)]*\))?\s+)+/, "") ?? "";
+  const first = firstTopLevelParam(params).trim().replace(/^(?:final\s+|@\w+(?:\([^)]*\))?\s+)+/, "");
   const type = first.split(/\s+/)[0];
   return type === undefined || type === "" ? null : simpleTypeName(type);
 };

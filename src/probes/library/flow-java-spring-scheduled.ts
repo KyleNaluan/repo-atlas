@@ -83,7 +83,7 @@ export const flowJavaSpringScheduled: Probe = {
         out.push(
           absentCandidate(
             input,
-            `unresolved_trigger: ${entry.type.qualified}.${entry.method.name} carries @${SCHEDULED_ANNOTATION}${entry.args} , which declares none of cron, fixedDelay or fixedRate, so this reader cannot state when it runs`,
+            `unresolved_trigger: ${entry.type.qualified}.${entry.method.name} carries @${SCHEDULED_ANNOTATION}${entry.args}, which declares none of cron, fixedDelay or fixedRate, so this reader cannot state when it runs`,
           ),
         );
         continue;

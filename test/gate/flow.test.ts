@@ -178,13 +178,27 @@ describe("the atomic Flow gate", () => {
     expect(result.finding).toContain("legacy calls_next");
   });
 
-  it("fails closed on dispatch and reachability until their closed-set adapters land", () => {
+  it("fails closed on reachability until its closed negative adapter lands", () => {
+    // A reachability claim is caption-level by construction: it states something
+    // about the whole graph, so it names no link.
+    const flow = directFlow({ caption: "Nothing else reads this record." });
+    const claim = { ...directClaim({ matcher: "reachability" }), link_id: undefined, expect: "absent" as const };
+    const result = gateCandidate(contextFor(directFiles), candidate(flow, [directClaim(), claim]));
+    expect(result.verdict).toBe("unresolved");
+    expect(result.node.confidence).toBe("absent");
+    expect(result.finding).toContain("fails closed");
+  });
+
+  it("refuses a closed_dispatch claim that carries no set to re-resolve", () => {
+    // PR 5 gives `closed_dispatch` a resolver, and the resolver's whole job is the
+    // SET rather than the target: a claim with no declared type and no member
+    // count states nothing the gate could re-enumerate, so it resolves nothing.
     const flow = directFlow({ links: [directLink({ relation: "dispatch" })] });
     const claim = directClaim({ matcher: "closed_dispatch" });
     const result = gateCandidate(contextFor(directFiles), candidate(flow, [claim]));
     expect(result.verdict).toBe("unresolved");
     expect(result.node.confidence).toBe("absent");
-    expect(result.finding).toContain("fails closed");
+    expect(result.finding).toContain("implementation count");
   });
 
   it("requires a closed absent claim for a negative caption", () => {

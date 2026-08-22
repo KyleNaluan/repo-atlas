@@ -81,6 +81,16 @@ export interface SymbolRef {
   name: string;
   /** Containing or receiver type, when a same-name symbol would be ambiguous. */
   owner?: string;
+  /**
+   * The type the call is written ON, when that is not where the target is
+   * declared - an inherited call, or a nested type calling its enclosing one.
+   *
+   * `owner` says where the gate will find the declaration; this says what the
+   * caller's source actually names. They differ exactly when inheritance is
+   * load-bearing, and the gate re-derives the relation between them from the
+   * blob rather than taking the producer's word for it.
+   */
+  receiver?: string;
   /** Call/declaration arity, when overloads exist. */
   arity?: number;
   /** Exact endpoint contract for a transport claim. */
@@ -113,6 +123,24 @@ export interface FlowClaim {
   from: SymbolRef;
   to?: SymbolRef;
   evidence: FileEvidence[];
+  /**
+   * What a `closed_dispatch` claim asserts BEYOND the target existing (#35, PR 5).
+   *
+   * A dispatch arrow's claim is not "this call reaches that method". It is "the
+   * declared type's implementation set is closed at this size, and this branch is
+   * the one the tree names" - so the gate has to re-derive the whole set from the
+   * blob, not just find the target. Proving `TestCaseGrader.grade` exists says
+   * nothing about whether it is the only thing the call can reach.
+   */
+  dispatch?: {
+    /** The declared type the call is written through. */
+    base: { path: string; name: string };
+    via: "sole_implementation" | "sealed_guard" | "keyed_registry" | "closed_set";
+    /** How many subject implementations the producer closed the set at. */
+    member_count: number;
+    /** How the tree names the branches this one arrow carries. */
+    labels: string[];
+  };
 }
 
 /**

@@ -37,7 +37,13 @@ interface FlowProducerAdapter {
 /** What #35's producer yields on the same subject, measured against a real clone. */
 const measured = read<{
   subject_sha: string;
-  reference_narrative: { route: string; outcome: string; reason: string };
+  reference_narrative: {
+    route: string;
+    outcome: string;
+    steps: number;
+    links: number;
+    components: string[];
+  };
   adapters: FlowProducerAdapter[];
 }>("swe-prep.flow-producer.json");
 
@@ -141,23 +147,48 @@ describe("where the engine falls short, and by how much", () => {
     expect(http.entries).toBe(23);
     expect(cli.entries).toBe(2);
 
-    // Three thin route stories survive independent re-resolution; the rest are
-    // cut, and fifteen of them at exactly the seam section 9 predicted.
-    expect(http.verified_by_the_gate).toHaveLength(3);
-    expect(http.cut_by_reason!["unresolved_dispatch"]).toBe(15);
+    // PR 5 closes the dispatch seam, and the measurement moves: twenty of the
+    // twenty-three routes now survive independent re-resolution, and NOT ONE
+    // candidate is cut at a dispatch any more. What still cuts is a different
+    // limit, named as itself.
+    expect(http.verified_by_the_gate!.length).toBe(20);
+    expect(http.cut_by_reason!["unresolved_dispatch"]).toBeUndefined();
+    expect(Object.keys(http.cut_by_reason!)).toEqual(["unresolved_receiver_type"]);
 
-    // The one that matters most is a cut: the submission walkthrough #35 exists
-    // to recover stops at a registry interface, and this phase closes no
-    // implementation set. It is recorded as absent rather than forced through.
-    expect(measured.reference_narrative.outcome).toBe("absent");
-    // The headline names the load-bearing cut, not whichever gap the walk reached
-    // first: the record's leading reason is what a reader uses to decide whether a
-    // later phase closes this story, so the dispatch seam PR 5 resolves must lead.
-    expect(measured.reference_narrative.reason).toMatch(/^unresolved_dispatch:/);
-    expect(
-      http.verified_by_the_gate!.some((f) => f.title.includes("submissions")),
-      "the submission narrative must not be asserted before its dispatch resolves",
-    ).toBe(false);
+    // THE ONE THAT MATTERS. The submission walkthrough #35 exists to recover is
+    // verified through the gate, not forced: every one of its forty-nine arrows
+    // was independently re-resolved against the pinned tree, and a single
+    // unresolvable arrow anywhere the entry reaches would have quarantined the
+    // whole thing.
+    const submission = http.verified_by_the_gate!.find((f) => f.title.includes("submissions"));
+    expect(submission, "the submission narrative must survive the gate").toBeDefined();
+    expect(measured.reference_narrative.outcome).toBe("verified");
+    expect(measured.reference_narrative.links).toBe(submission!.links);
+    expect(measured.reference_narrative.steps).toBe(submission!.steps);
+
+    // And it is the SAME story the hand-made overview tells. The reference's own
+    // `fl-submission` names these components; the engine reached each of them by
+    // resolving calls rather than by being told.
+    for (const component of [
+      "AttemptService",
+      "FileExerciseCatalog",
+      "GraderRegistry",
+      "TestCaseGrader",
+      "JavaLanguageAdapter",
+      "LocalJavaRunner",
+      "Comparison",
+      "Verdict",
+      "SubmissionRepository",
+      "AttemptRepository",
+      "SolutionCommitService",
+      "RunResponse",
+    ]) {
+      expect(measured.reference_narrative.components, component).toContain(component);
+    }
+    // Branch honesty: the non-coding graders are drawn as their own boxes rather
+    // than spliced into the coding path, so nothing claims they run a runner.
+    expect(measured.reference_narrative.components).toContain("AnswerKeyGrader");
+    expect(measured.reference_narrative.components).toContain("SelfCheckGrader");
   });
 
   it("renders no boundaries, because the only probe that finds them finds test-file noise", () => {

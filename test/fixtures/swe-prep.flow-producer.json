@@ -1,14 +1,40 @@
 {
-  "note": "What the Flow producer yields on the reference subject, measured rather than asserted (#35, PR 4).",
+  "note": "What the Flow producer yields on the reference subject, measured rather than asserted (#35, PR 5).",
   "regenerate": "npx tsx src/cli.ts probe --harvest test/fixtures/swe-prep.harvest.json --clone <swe-prep clone> -o out/candidates.json && npx tsx src/cli.ts gate --candidates out/candidates.json --harvest test/fixtures/swe-prep.harvest.json --clone <swe-prep clone> -o out/gated.json",
   "subject_sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
   "reference_narrative": {
     "what": "The submission walkthrough #35 exists to recover: one coding submission from the HTTP route to its verdict and persistence.",
     "route": "POST /api/attempts/{}/submissions",
     "candidate_id": "fl-http-attemptcontroller-submit-7633fd7a",
-    "outcome": "absent",
-    "reason": "unresolved_dispatch: backend/src/main/java/com/sweprep/backend/attempt/AttemptService.java#AttemptService.recordSubmission/3 calls ExerciseCatalog.byId through an interface, and this phase closes no implementation set (plus 12 further unresolved calls: unresolved_receiver_type x11, unresolved_dispatch x1)",
-    "phase": "Thirteen calls on this route's landmarks are unresolved at this phase: the registry dispatch through ExerciseCatalog the accepted plan closes in PR 5, which leads the reason as the load-bearing cut, receivers held in `var` locals whose inferred type this phase does not compute, and direct calls resolved only through a subject supertype - `Exercise.id` and `Exercise.title` inherited from `Content` - whose arrow the gate could not re-resolve from the calling file either. It is cut rather than drawn shorter."
+    "outcome": "verified",
+    "steps": 23,
+    "links": 53,
+    "components": [
+      "POST /api/attempts/{}/submissions",
+      "RunResponse",
+      "AttemptService",
+      "FileExerciseCatalog",
+      "ContentJson",
+      "Comparison",
+      "GraderRegistry",
+      "AnswerKeyGrader",
+      "SelfCheckGrader",
+      "SqlQueryGrader",
+      "PostgresSqlRunner",
+      "SqlExecutionResult",
+      "Verdict",
+      "TestCaseGrader",
+      "JavaLanguageAdapter",
+      "LocalJavaRunner",
+      "LocalProcessSupport",
+      "ExecutionResult",
+      "LocalPythonRunner",
+      "SubmissionRepository",
+      "AttemptRepository",
+      "SolutionCommitService",
+      "SolutionCommitResult"
+    ],
+    "phase": "PR 5 closes the dispatch seam PR 4 cut at. Every arrow on this route now resolves and the gate independently re-resolves all 49 of them, including the closed-set dispatches through ExerciseCatalog (a sole bean), Grader (four beans guarded by supports() over the sealed Grading hierarchy), LanguageAdapter and Runner (keyed registries), and Comparison (a sealed hierarchy). The non-coding grading branches are drawn as their own labelled arrows rather than summarised in prose, which is why the figure carries more boxes than the hand-made reference's thirteen: the reference names AnswerKey/SelfCheck/SqlQuery in a caption, and this draws each with its own evidence. Compressing or splitting the figure is PR 6's work; refusing to emit a fully verified story was not an honest way to defer it."
   },
   "adapters": [
     {
@@ -17,10 +43,100 @@
       "entries": 23,
       "verified_by_the_gate": [
         {
+          "id": "fl-http-attemptcontroller-history-d7eff2e5",
+          "title": "GET /api/attempts, entry to terminal",
+          "steps": 4,
+          "links": 3
+        },
+        {
+          "id": "fl-http-attemptcontroller-start-2510fd01",
+          "title": "POST /api/attempts, entry to terminal",
+          "steps": 7,
+          "links": 17
+        },
+        {
+          "id": "fl-http-attemptcontroller-submit-7633fd7a",
+          "title": "POST /api/attempts/{}/submissions, entry to terminal",
+          "steps": 23,
+          "links": 53
+        },
+        {
+          "id": "fl-http-attemptcontroller-takehint-2209c8d5",
+          "title": "POST /api/attempts/{}/hints, entry to terminal",
+          "steps": 8,
+          "links": 19
+        },
+        {
+          "id": "fl-http-attemptcontroller-explanation-57909c0c",
+          "title": "POST /api/attempts/{}/explanation, entry to terminal",
+          "steps": 8,
+          "links": 19
+        },
+        {
+          "id": "fl-http-attemptcontroller-claimcomplexity-ba438616",
+          "title": "POST /api/attempts/{}/complexity, entry to terminal",
+          "steps": 16,
+          "links": 37
+        },
+        {
+          "id": "fl-http-attemptcontroller-abandon-ee6b6117",
+          "title": "POST /api/attempts/{}/abandon, entry to terminal",
+          "steps": 5,
+          "links": 5
+        },
+        {
+          "id": "fl-http-attemptcontroller-reveal-2d393391",
+          "title": "POST /api/attempts/{}/reveal, entry to terminal",
+          "steps": 17,
+          "links": 37
+        },
+        {
+          "id": "fl-http-attemptcontroller-revealselfcheck-74885dc6",
+          "title": "POST /api/attempts/{}/self-check/reveal, entry to terminal",
+          "steps": 8,
+          "links": 18
+        },
+        {
+          "id": "fl-http-attemptcontroller-rateselfcheck-4d8c2168",
+          "title": "POST /api/attempts/{}/self-check/rating, entry to terminal",
+          "steps": 5,
+          "links": 6
+        },
+        {
+          "id": "fl-http-exercisecontroller-list-517c5e13",
+          "title": "GET /api/exercises, entry to terminal",
+          "steps": 4,
+          "links": 14
+        },
+        {
+          "id": "fl-http-exercisecontroller-get-28ff3bdc",
+          "title": "GET /api/exercises/{}, entry to terminal",
+          "steps": 5,
+          "links": 19
+        },
+        {
           "id": "fl-http-languagecontroller-list-d2c95073",
           "title": "GET /api/languages, entry to terminal",
           "steps": 2,
           "links": 1
+        },
+        {
+          "id": "fl-http-lessoncontroller-get-8aff5f5c",
+          "title": "GET /api/lessons/{}, entry to terminal",
+          "steps": 5,
+          "links": 15
+        },
+        {
+          "id": "fl-http-lessoncontroller-read-0ca0335e",
+          "title": "POST /api/lessons/{}/read, entry to terminal",
+          "steps": 6,
+          "links": 16
+        },
+        {
+          "id": "fl-http-readinesscontroller-summary-9e451392",
+          "title": "GET /api/readiness, entry to terminal",
+          "steps": 10,
+          "links": 20
         },
         {
           "id": "fl-http-rolecontroller-status-099ef81a",
@@ -31,24 +147,40 @@
         {
           "id": "fl-http-rolecontroller-select-6bec2b0a",
           "title": "PUT /api/role, entry to terminal",
-          "steps": 4,
-          "links": 3
+          "steps": 3,
+          "links": 2
+        },
+        {
+          "id": "fl-http-sessioncontroller-status-b7d33ae7",
+          "title": "GET /api/session, entry to terminal",
+          "steps": 3,
+          "links": 2
+        },
+        {
+          "id": "fl-http-sessioncontroller-completewarmup-25355801",
+          "title": "POST /api/session/complete-warmup, entry to terminal",
+          "steps": 3,
+          "links": 2
         }
       ],
       "cut_by_reason": {
-        "landmark_budget_exceeded": 1,
-        "unresolved_dispatch": 15,
-        "unresolved_receiver_type": 4
+        "unresolved_receiver_type": 3
       }
     },
     {
       "probe_id": "flow-java-cli",
       "status": "ran",
       "entries": 2,
-      "verified_by_the_gate": [],
+      "verified_by_the_gate": [
+        {
+          "id": "fl-cli-authorcontentcli-main-9ff16c77",
+          "title": "AuthorContentCli run as a program, entry to terminal",
+          "steps": 12,
+          "links": 24
+        }
+      ],
       "cut_by_reason": {
-        "no_terminal_reached": 1,
-        "unresolved_dispatch": 1
+        "no_terminal_reached": 1
       }
     }
   ]

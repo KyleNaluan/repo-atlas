@@ -7,6 +7,7 @@
  * returns a shortened path and never turns extractor uncertainty into a subject
  * divergence.
  */
+import { isSourceFile } from "../harvest/tree.js";
 import { normalizedRoute } from "../probes/flow/route.js";
 import type { Candidate, FlowClaim, ProbeContext, SymbolRef } from "../probes/types.js";
 import type {
@@ -217,7 +218,17 @@ const parenEnd = (text: string, open: number): number => {
   return -1;
 };
 
-const argumentCount = (text: string, open: number): number | null => {
+/**
+ * How many arguments or parameters sit between one pair of parentheses.
+ *
+ * `generics` is what separates a CALL from a DECLARATION. `Map<String, String>`
+ * is one parameter written with a comma in it, and counting that comma turns a
+ * five-parameter factory into a six-parameter one the gate then says the file no
+ * longer declares - a real chain returning as a false contradiction. A call site
+ * has no such spans, and `<` there is a comparison, so the two readings are
+ * offered separately and the caller accepts either.
+ */
+const argumentCount = (text: string, open: number, generics = false): number | null => {
   const end = parenEnd(text, open);
   if (end < 0) return null;
   const body = text.slice(open + 1, end).trim();
@@ -225,6 +236,7 @@ const argumentCount = (text: string, open: number): number | null => {
   let round = 0;
   let square = 0;
   let curly = 0;
+  let angle = 0;
   let quote = "";
   let escapedChar = false;
   let commas = 0;
@@ -242,9 +254,21 @@ const argumentCount = (text: string, open: number): number | null => {
     else if (ch === "]") square -= 1;
     else if (ch === "{") curly += 1;
     else if (ch === "}") curly -= 1;
-    else if (ch === "," && round === 0 && square === 0 && curly === 0) commas += 1;
+    else if (generics && ch === "<") angle += 1;
+    else if (generics && ch === ">" && angle > 0) angle -= 1;
+    else if (ch === "," && round === 0 && square === 0 && curly === 0 && angle === 0) commas += 1;
   }
   return commas + 1;
+};
+
+/** The two readings of one parenthesised list: as a call, and as a declaration. */
+const argumentCounts = (text: string, open: number): Set<number> => {
+  const counts = new Set<number>();
+  for (const generics of [false, true]) {
+    const count = argumentCount(text, open, generics);
+    if (count !== null) counts.add(count);
+  }
+  return counts;
 };
 
 const symbolExists = (source: string, ref: SymbolRef): boolean => {
@@ -256,9 +280,27 @@ const symbolExists = (source: string, ref: SymbolRef): boolean => {
   for (const match of source.matchAll(calls)) {
     if (ref.arity === undefined) return true;
     const open = source.indexOf("(", match.index);
-    if (open >= 0 && argumentCount(source, open) === ref.arity) return true;
+    if (open >= 0 && argumentCounts(source, open).has(ref.arity)) return true;
   }
   return false;
+};
+
+/**
+ * Whether the blob says `sub` is a `base` - by inheritance or by nesting.
+ *
+ * The producer draws an arrow whose target is declared on a supertype of the
+ * type the call was written on (`Exercise.id()` declared on the sealed `Content`,
+ * a nested record calling its enclosing interface's helper). PR 4 refused those
+ * arrows because this gate could not check them; PR 5 lets it check them, by
+ * re-deriving the relation from the source rather than trusting the claim. The
+ * derivation stays independent: the producer read a parse tree, this reads text.
+ */
+const declaresSubtype = (ctx: ProbeContext, sub: string, base: string): boolean => {
+  // A nested type IS its enclosing type's member: `Comparison.SetEquality` may
+  // call what `Comparison` declares, and the qualified name states the nesting.
+  if (sub.includes(".") && sub.split(".").includes(simpleName(base))) return true;
+  if (simpleName(sub) === simpleName(base)) return true;
+  return implementationsInTree(ctx, base).some((impl) => impl.name === simpleName(sub));
 };
 
 const typedReceivers = (source: string, owner: string): Set<string> => {
@@ -278,36 +320,88 @@ const looksLikeDeclaration = (text: string, index: number): boolean => {
     /(?:^|\s)(?:void|[A-Z][\w$]*(?:<[^>]+>)?|[a-z][\w$]*\[\])\s+$/.test(line);
 };
 
+/**
+ * Whether one of the cited spans in the caller's file resolves a call to `to`.
+ *
+ * `to.receiver` is the type the call was WRITTEN on when that differs from where
+ * the target is declared, and it is checked rather than believed: the relation
+ * between the two is re-derived from the caller's own source, and a claim whose
+ * inheritance the blob does not state resolves nothing.
+ *
+ * `throughType` accepts a chained receiver of the form `accessor(...).name(...)`
+ * where the calling file declares `accessor` returning that type - the one chained
+ * receiver this gate can re-read, because the return type is written in the file
+ * it is re-reading.
+ */
 const hasTypedCall = (
   fromSource: string,
   callSpans: string[],
   from: SymbolRef,
   to: SymbolRef,
+  isSubtype: (sub: string, base: string) => boolean,
+  throughType?: string,
 ): boolean => {
   const name = simpleName(to.name);
-  const receivers = to.owner ? typedReceivers(fromSource, to.owner) : undefined;
+  const writtenOn = to.receiver ?? to.owner;
+  const receivers = writtenOn ? typedReceivers(fromSource, writtenOn) : undefined;
+  const accessors = throughType ? accessorsReturning(fromSource, throughType) : new Set<string>();
+  // A receiver constructed on the spot - `new RepDeriver().derive(spec)` - names
+  // its own type at the call site, so it is re-readable here even though it is
+  // not a declared name the file binds.
+  if (writtenOn !== undefined) {
+    const constructed = new RegExp(
+      `\\bnew\\s+(?:[\\w$]+\\s*\\.\\s*)*${escaped(simpleName(writtenOn))}\\s*(?:<[^;{}()]*>)?\\s*\\([^()]{0,200}\\)\\s*\\.\\s*${escaped(name)}\\s*\\(`,
+      "g",
+    );
+    for (const span of callSpans) {
+      for (const match of span.matchAll(constructed)) {
+        const callOpen = match.index + match[0].length - 1;
+        if (to.arity === undefined || argumentCounts(span, callOpen).has(to.arity)) return true;
+      }
+    }
+  }
   const occurrence = new RegExp(
-    `(?:(?<receiver>[A-Za-z_$][\\w$]*)\\s*\\.\\s*)?\\b${escaped(name)}\\s*\\(`,
+    `(?:(?<receiver>[A-Za-z_$][\\w$]*)\\s*(?<call>\\([^()]{0,200}\\))?\\s*\\.\\s*)?\\b${escaped(name)}\\s*\\(`,
     "g",
   );
   for (const span of callSpans) {
     for (const match of span.matchAll(occurrence)) {
       const receiver = match.groups?.["receiver"];
+      const chained = match.groups?.["call"] !== undefined;
       if (!receiver && looksLikeDeclaration(span, match.index)) continue;
-      if (
-        receivers &&
-        !receiver &&
-        simpleName(from.owner ?? "") !== simpleName(to.owner ?? "")
-      ) {
+      if (chained) {
+        if (!receiver || !accessors.has(receiver)) continue;
+      } else if (receivers && !receiver) {
+        // A bare call resolves inside the caller's own type, or inside a type it
+        // inherits from - which the caller's source has to say.
+        const owner = simpleName(from.owner ?? "");
+        if (owner !== simpleName(writtenOn ?? "") && !isSubtype(from.owner ?? "", writtenOn ?? "")) {
+          continue;
+        }
+      } else if (receivers && receiver && !receivers.has(receiver)) {
         continue;
       }
-      if (receivers && receiver && !receivers.has(receiver)) continue;
-      const open = span.indexOf("(", match.index);
-      if (to.arity !== undefined && (open < 0 || argumentCount(span, open) !== to.arity)) continue;
+      // The pattern ends at the call's own `(`, so its position is exact. Finding
+      // it by searching for the method name would land inside a receiver that
+      // merely starts with it - `graderFor(x).grade(...)` counting `graderFor`'s
+      // arguments as `grade`'s, and a real dispatch coming back contradicted.
+      const callOpen = match.index + match[0].length - 1;
+      if (to.arity !== undefined && !argumentCounts(span, callOpen).has(to.arity)) continue;
       return true;
     }
   }
   return false;
+};
+
+/** Methods the calling file declares as returning `type` - a re-readable accessor. */
+const accessorsReturning = (source: string, type: string): Set<string> => {
+  const names = new Set<string>();
+  const declarations = new RegExp(
+    `\\b${escaped(simpleName(type))}(?:\\s*<[^;=(){}]+>)?\\s+([A-Za-z_$][\\w$]*)\\s*\\(`,
+    "g",
+  );
+  for (const match of source.matchAll(declarations)) if (match[1]) names.add(match[1]);
+  return names;
 };
 
 const resolveDirectCall = (
@@ -338,7 +432,23 @@ const resolveDirectCall = (
       finding: `no cited span in ${claim.from.path} can establish the call`,
     };
   }
-  const found = hasTypedCall(fromSource, spans, claim.from, to);
+  // An arrow whose target is declared on a supertype of the type the call was
+  // written on is checked, not believed: the gate re-enumerates that inheritance
+  // from the tree, so a claim whose relation the source no longer states resolves
+  // nothing rather than being taken at its word.
+  const isSubtype = (sub: string, base: string): boolean => declaresSubtype(ctx, sub, base);
+  if (
+    to.receiver !== undefined &&
+    to.owner !== undefined &&
+    simpleName(to.receiver) !== simpleName(to.owner) &&
+    !isSubtype(to.receiver, to.owner)
+  ) {
+    return {
+      verdict: "contradicted",
+      finding: `the tree does not declare ${simpleName(to.receiver)} as a ${simpleName(to.owner)}`,
+    };
+  }
+  const found = hasTypedCall(fromSource, spans, claim.from, to, isSubtype);
   if (claim.expect === "absent") {
     return found
       ? { verdict: "contradicted", finding: `${claim.from.name} still calls ${to.name}` }
@@ -472,6 +582,204 @@ const resolveSpringRoute = (
       };
 };
 
+/**
+ * Every subject type the BLOB says implements or extends `base`, transitively.
+ *
+ * This is the whole point of the `closed_dispatch` check and the reason it cannot
+ * be reduced to "does the target exist". A dispatch arrow claims the call reaches
+ * one of a CLOSED set; proving one member exists says nothing about whether a
+ * fifth implementation was added since. So the gate re-enumerates the set from
+ * the tree, by its own textual derivation, and refuses a claim whose count no
+ * longer matches - the producer read a parse tree, this reads source.
+ */
+const implementationsInTree = (ctx: ProbeContext, base: string): { path: string; name: string }[] => {
+  const found: { path: string; name: string }[] = [];
+  const named = new Set<string>([simpleName(base)]);
+  const sources = ctx.paths
+    .filter((path) => path.endsWith(".java") && isSourceFile(path))
+    .map((path) => ({ path, source: ctx.read(path) }))
+    .filter((entry): entry is { path: string; source: string } => entry.source !== null);
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const supertype of [...named]) {
+      const declaration = new RegExp(
+        `\\b(?<abstract>abstract\\s+)?(?<kind>class|interface|record|enum)\\s+(?<name>[A-Za-z_$][\\w$]*)\\b(?:\\s*<[^{;]*?>)?\\s*(?<params>\\([^)]*\\))?[^{;]*?\\b(?:extends|implements)\\b[^{;]*?\\b${escaped(supertype)}\\b`,
+        "g",
+      );
+      for (const entry of sources) {
+        for (const match of entry.source.matchAll(declaration)) {
+          const name = match.groups?.["name"];
+          if (!name || named.has(name)) continue;
+          named.add(name);
+          changed = true;
+          // Interfaces and abstract classes are waypoints in the hierarchy, not
+          // members of the dispatch set, exactly as the producer counts them.
+          if (match.groups?.["kind"] === "interface" || match.groups?.["abstract"]) continue;
+          found.push({ path: entry.path, name });
+        }
+      }
+    }
+  }
+  return found;
+};
+
+/** Whether the tree declares `type` as sealed - a set the compiler itself closes. */
+const declaredSealed = (source: string, type: string): boolean =>
+  new RegExp(`\\bsealed\\s+(?:abstract\\s+)?(?:class|interface|record)\\s+${escaped(simpleName(type))}\\b`).test(
+    source,
+  );
+
+const resolveClosedDispatch = (
+  ctx: ProbeContext,
+  claim: FlowClaim,
+  texts: Map<string, string[]>,
+): FlowClaimResolution => {
+  const to = claim.to;
+  const dispatch = claim.dispatch;
+  if (!to) return { verdict: "unresolved", finding: "a closed_dispatch claim names no target" };
+  if (!dispatch) {
+    return {
+      verdict: "unresolved",
+      finding: "a closed_dispatch claim carries no declared type and implementation count to re-resolve",
+    };
+  }
+  if (claim.expect === "absent") {
+    return {
+      verdict: "unresolved",
+      finding: "a dispatch arrow cannot express absence; a closed negative claim is a reachability check",
+    };
+  }
+  const baseSource = ctx.read(dispatch.base.path);
+  const fromSource = ctx.read(claim.from.path);
+  const toSource = ctx.read(to.path);
+  if (baseSource === null || fromSource === null || toSource === null) {
+    return { verdict: "unresolved", finding: "the declared type, caller or target source could not be read" };
+  }
+  const baseName = simpleName(dispatch.base.name);
+  if (!new RegExp(`\\b(?:interface|class|record|enum)\\s+${escaped(baseName)}\\b`).test(baseSource)) {
+    return { verdict: "contradicted", finding: `${dispatch.base.path} no longer declares ${baseName}` };
+  }
+  const implementations = implementationsInTree(ctx, baseName);
+  if (implementations.length !== dispatch.member_count) {
+    return {
+      verdict: "contradicted",
+      finding: `${baseName} now has ${implementations.length} subject implementations, not the ${dispatch.member_count} this arrow closed the set at`,
+    };
+  }
+  // The target may be the declared type's OWN default method - what every
+  // implementation that does not override it inherits - which is a member of the
+  // set without being one of its implementations.
+  const inheritedDefault =
+    to.path === dispatch.base.path &&
+    new RegExp(`\\bdefault\\b[^;{]*\\b${escaped(simpleName(to.name))}\\s*\\(`).test(baseSource);
+  if (!inheritedDefault && !implementations.some((impl) => impl.path === to.path)) {
+    return {
+      verdict: "contradicted",
+      finding: `${to.path} is not among the ${implementations.length} subject implementations of ${baseName}`,
+    };
+  }
+  if (!symbolExists(toSource, to)) {
+    return { verdict: "contradicted", finding: `${to.path} no longer declares ${to.name}` };
+  }
+  if (inheritedDefault) {
+    // A branch that resolves to the shared default is named by the guards of the
+    // implementations that inherit it, and those live in their own files; the set
+    // count above is what this arrow's completeness rests on.
+    const spansForDefault = texts.get(claim.from.path) ?? [];
+    if (spansForDefault.length === 0) {
+      return { verdict: "unresolved", finding: `no cited span in ${claim.from.path} can establish the dispatch` };
+    }
+    return hasTypedCall(
+      fromSource,
+      spansForDefault,
+      claim.from,
+      { ...to, owner: dispatch.base.name, receiver: undefined },
+      (sub, base) => declaresSubtype(ctx, sub, base),
+      baseName,
+    )
+      ? {
+          verdict: "confirmed",
+          finding: `${claim.from.name} dispatches ${baseName}.${simpleName(to.name)} into the declared type's own default (${dispatch.member_count} implementations inherit it)`,
+        }
+      : {
+          verdict: "contradicted",
+          finding: `the cited caller span does not dispatch ${baseName}.${simpleName(to.name)}`,
+        };
+  }
+  const branchProblem = dispatchBranchProblem(ctx, dispatch, baseSource, toSource, implementations.length);
+  if (branchProblem) return { verdict: "contradicted", finding: branchProblem };
+
+  const spans = texts.get(claim.from.path) ?? [];
+  if (spans.length === 0) {
+    return { verdict: "unresolved", finding: `no cited span in ${claim.from.path} can establish the dispatch` };
+  }
+  // The call is written on the DECLARED type, never on the implementation - that
+  // is what makes it a dispatch - so the receiver is re-typed against the base.
+  const throughBase: SymbolRef = { ...to, owner: dispatch.base.name, receiver: undefined };
+  if (
+    !hasTypedCall(
+      fromSource,
+      spans,
+      claim.from,
+      throughBase,
+      (sub, base) => declaresSubtype(ctx, sub, base),
+      baseName,
+    )
+  ) {
+    return {
+      verdict: "contradicted",
+      finding: `the cited caller span does not dispatch ${baseName}.${simpleName(to.name)}`,
+    };
+  }
+  return {
+    verdict: "confirmed",
+    finding: `${claim.from.name} dispatches ${baseName}.${simpleName(to.name)} into ${to.owner ?? to.path} (${dispatch.via}, ${dispatch.member_count} implementations)`,
+  };
+};
+
+/** Whether the tree still names this branch the way the arrow's label says. */
+const dispatchBranchProblem = (
+  ctx: ProbeContext,
+  dispatch: NonNullable<FlowClaim["dispatch"]>,
+  baseSource: string,
+  toSource: string,
+  memberCount: number,
+): string | null => {
+  const baseName = simpleName(dispatch.base.name);
+  switch (dispatch.via) {
+    case "sole_implementation":
+      return memberCount === 1
+        ? null
+        : `${baseName} is claimed to have a sole implementation but the tree holds ${memberCount}`;
+    case "sealed_guard": {
+      const missing = dispatch.labels.filter(
+        (label) => !new RegExp(`instanceof\\s+${escaped(label).replace(/\\\./g, "\\.")}\\b`).test(toSource),
+      );
+      return missing.length === 0
+        ? null
+        : `${dispatch.base.path}'s implementation no longer guards on ${missing.join(", ")}`;
+    }
+    case "keyed_registry": {
+      const missing = dispatch.labels.filter((label) => !toSource.includes(`return ${label};`));
+      return missing.length === 0 ? null : `the implementation no longer returns the key ${missing.join(", ")}`;
+    }
+    case "closed_set": {
+      if (declaredSealed(baseSource, baseName)) return null;
+      // Not sealed, so the container is what closes it: every implementation has
+      // to be a bean, or the set is one this gate cannot call complete.
+      const unmanaged = implementationsInTree(ctx, baseName).filter((impl) => {
+        const source = ctx.read(impl.path);
+        return source === null || !STEREOTYPE.test(source);
+      });
+      return unmanaged.length === 0
+        ? null
+        : `${baseName} is neither sealed nor closed by the container: ${unmanaged.map((i) => i.name).join(", ")} carries no Spring stereotype`;
+    }
+  }
+};
+
+const STEREOTYPE = /@(?:Component|Service|Repository|Controller|RestController|Configuration)\b/;
+
 const READ_METHOD = /^(?:find|get|read|load|select|exists|count|query|fetch|lookup|search)/i;
 const WRITE_METHOD = /^(?:save|write|insert|update|delete|remove|persist|store|upsert|merge)/i;
 
@@ -503,7 +811,10 @@ const resolveDataAccess = (
   }
   const method = simpleName(to.name);
   const conventionMatches = relation === "read" ? READ_METHOD.test(method) : WRITE_METHOD.test(method);
-  const typed = conventionMatches && symbolExists(toSource, to) && hasTypedCall(fromSource, spans, claim.from, to);
+  const typed =
+    conventionMatches &&
+    symbolExists(toSource, to) &&
+    hasTypedCall(fromSource, spans, claim.from, to, (sub, base) => declaresSubtype(ctx, sub, base));
   const sql = sqlAccess(spans, to.name, relation);
   const found = typed || sql;
   if (claim.expect === "absent") {
@@ -556,10 +867,11 @@ export const resolveFlowClaim = (
       }
       return resolveDataAccess(ctx, claim, checked.texts!, link.relation);
     case "closed_dispatch":
+      return resolveClosedDispatch(ctx, claim, checked.texts!);
     case "reachability":
-      // Their closed-set semantics are introduced with the producer adapters in
-      // PRs 5 and 7. Accepting a lexical approximation here would pre-authorize
-      // the very ambiguous dispatch/negative claims those phases must prove.
+      // A closed negative reachability proof arrives with the shared-state
+      // fan-out in PR 7. Accepting a lexical approximation here would pre-authorize
+      // exactly the negative claims that phase has to prove.
       return {
         verdict: "unresolved",
         finding: `matcher ${claim.matcher} has no closed-set resolver in this phase and therefore fails closed`,

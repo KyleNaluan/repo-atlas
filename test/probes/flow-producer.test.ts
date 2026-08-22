@@ -403,7 +403,11 @@ public class ContentRepository {
     const candidate = only(await runAdapter("flow-java-cli", ctx));
     const flow = candidate.node as FlowNode;
     expect(flow.confidence).toBe("verified");
-    expect(flow.links!.map((l) => l.relation)).toEqual(["call", "write"]);
+    // `main` and `load` are two methods of ONE component, so they are one box and
+    // the arrow between them is not drawn (#35, PR 5's landmark compression). The
+    // arrow that crosses into the repository is the story.
+    expect(flow.steps.map((s) => s.id)).toEqual(["importer-main", "contentrepository-savecontent"]);
+    expect(flow.links!.map((l) => l.relation)).toEqual(["write"]);
     // A program is not an HTTP request, and #39 reserves the request/response
     // slot for a verified request signal, so this entry claims no kind.
     expect(flow.steps[0]!.kind).toBeUndefined();
@@ -620,7 +624,7 @@ describe("what the resolver cannot prove stays absent", () => {
     return candidate.absent_reason ?? "";
   };
 
-  it("cuts a story at a polymorphic dispatch instead of picking an implementation", async () => {
+  it("cuts a story at an OPEN implementation set instead of picking one", async () => {
     const ctx = contextFor({
       "src/main/java/app/web/GradeController.java": `package app.web;
 
@@ -663,8 +667,21 @@ public interface Grader {
 `,
       "src/main/java/app/web/TestCaseGrader.java": `package app.web;
 
+import org.springframework.stereotype.Component;
+
+@Component
 public class TestCaseGrader implements Grader {
   public String grade(String exercise) { return "PASSED"; }
+}
+`,
+      // A second implementation the container does NOT manage: no stereotype, no
+      // sealed base, no shared guard or key. Nothing in the tree closes the set,
+      // so PR 5's closed-set resolution declines it exactly as PR 4 declined every
+      // interface - a set that might be missing a member is worse than an open one.
+      "src/main/java/app/web/AnswerKeyGrader.java": `package app.web;
+
+public class AnswerKeyGrader implements Grader {
+  public String grade(String exercise) { return "FAILED"; }
 }
 `,
       "src/main/java/app/web/AttemptRepository.java": `package app.web;
@@ -913,17 +930,17 @@ public class PickRepository {
     expect(reason).toContain("PickService.pick");
   }, 60_000);
 
-  it("names a direct call inherited from a subject supertype, but traces it when the receiver's own type declares it", async () => {
+  it("traces a direct call inherited from a subject supertype, and the gate re-resolves the inheritance itself", async () => {
     // The base-service pattern: a controller calls, through a field typed as the
     // subtype, a method the subtype INHERITS from a subject-owned base class.
-    // `declaredMethod` follows subject-owned supertypes, so the producer CAN
-    // resolve the call - and before the fix it drew the edge and traced on into a
-    // durable write, emitting a verified Flow. But the gate re-types a receiver
-    // only from the declarations in the calling file: it searches for a
-    // `BaseReportService` variable, the field is a `ReportService`, and the arrow
-    // to the supertype-owned method never re-resolves. The verified Flow came back
-    // OVERTURNED - a real chain as a confusing quarantine - which is the exact
-    // divergence the "resolve no further than the gate can re-resolve" rule names.
+    // PR 4 named this as a limit and drew no arrow, because the gate re-typed a
+    // receiver only from the declarations in the calling file: it searched for a
+    // `BaseReportService` variable, found a `ReportService` field, and overturned
+    // a real chain. PR 5 makes the gate subtype-aware instead - the claim says
+    // which type the call was WRITTEN on beside the type that declares the target,
+    // and the gate re-derives the `extends` relation from the blob rather than
+    // believing it. The reference subject needs exactly this (`Exercise.id()`
+    // declared on the sealed `Content` it implements), so it is in scope here.
     const inherited = contextFor({
       "src/main/java/app/web/ReportController.java": `package app.web;
 
@@ -973,17 +990,19 @@ public class ReportRepository {
 }
 `,
     });
-    const reason = absentReason(only(await runAdapter("flow-java-spring-http", inherited)));
-    expect(reason).toMatch(/^unresolved_receiver_type:/);
-    expect(reason).toContain("record");
-    expect(reason).toContain("ReportService");
-    expect(reason).toContain("BaseReportService");
+    const viaBase = only(await runAdapter("flow-java-spring-http", inherited));
+    expect((viaBase.node as FlowNode).confidence).toBe("verified");
+    // The claim names both types: where the target is declared, and what the
+    // caller's source actually writes. The gate needs the second to re-type the
+    // receiver and the first to find the declaration.
+    const inheritedClaim = viaBase.flow_claims!.find((c) => c.to?.name === "record")!;
+    expect(inheritedClaim.to!.owner).toContain("BaseReportService");
+    expect(inheritedClaim.to!.receiver).toContain("ReportService");
+    expect(gateCandidate(inherited, viaBase).verdict).toBe("confirmed");
 
-    // The honest counterpart pins the limit rather than merely pinning a failure:
-    // move `record()` onto ReportService's OWN type and the same call site is a
-    // traced edge the gate confirms. Nothing about the receiver or the terminal
-    // changed - only whether the declaration the producer resolved is one the gate
-    // can independently re-resolve from the calling file.
+    // The counterpart: move `record()` onto ReportService's OWN type and the same
+    // call site is the same traced edge. Nothing about the receiver or the
+    // terminal changed, and neither does the outcome.
     const owned = contextFor({
       "src/main/java/app/web/ReportController.java": `package app.web;
 
@@ -1339,5 +1358,591 @@ describe("a produced Flow satisfies the audit's static evidence gates", () => {
     expect(l2.outcome, JSON.stringify(l2.findings)).toBe("passed");
     const e2 = presentTenseClaims(auditCtx);
     expect(e2.outcome, JSON.stringify(e2.findings)).toBe("passed");
+  }, 60_000);
+});
+
+/* ------------------------------- closed-set dispatch (#35, PR 5) */
+
+describe("dispatch through an interface the subject's own wiring closes", () => {
+  const SPRING_CONTROLLER = `package app.web;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class CatalogController {
+  private final CatalogService service;
+
+  CatalogController(CatalogService service) {
+    this.service = service;
+  }
+
+  @GetMapping("/api/items/{id}")
+  public String get(@PathVariable String id) {
+    return service.title(id);
+  }
+}
+`;
+
+  const SERVICE = `package app.web;
+
+import org.springframework.stereotype.Service;
+
+@Service
+public class CatalogService {
+  private final Catalog catalog;
+
+  CatalogService(Catalog catalog) {
+    this.catalog = catalog;
+  }
+
+  public String title(String id) {
+    return catalog.byId(id);
+  }
+}
+`;
+
+  const CATALOG = `package app.web;
+
+public interface Catalog {
+  String byId(String id);
+}
+`;
+
+  const REPOSITORY = `package app.web;
+
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class ItemRepository {
+  public String findTitle(String id) { return id; }
+}
+`;
+
+  it("resolves a sole implementation, because Spring has nothing to choose between", async () => {
+    const ctx = contextFor({
+      "src/main/java/app/web/CatalogController.java": SPRING_CONTROLLER,
+      "src/main/java/app/web/CatalogService.java": SERVICE,
+      "src/main/java/app/web/Catalog.java": CATALOG,
+      "src/main/java/app/web/FileCatalog.java": `package app.web;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class FileCatalog implements Catalog {
+  private final ItemRepository items;
+
+  FileCatalog(ItemRepository items) {
+    this.items = items;
+  }
+
+  public String byId(String id) {
+    return items.findTitle(id);
+  }
+}
+`,
+      "src/main/java/app/web/ItemRepository.java": REPOSITORY,
+    });
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    const flow = candidate.node as FlowNode;
+    expect(flow.confidence).toBe("verified");
+    // The arrow is a dispatch, not a call: what it asserts is that the set the
+    // call can reach is closed at one, which is a claim about the whole tree.
+    const dispatch = flow.links!.find((l) => l.relation === "dispatch")!;
+    expect(dispatch.label).toContain("byId");
+    expect(dispatch.evidence).toHaveLength(2);
+    const claim = candidate.flow_claims!.find((c) => c.link_id === dispatch.id)!;
+    expect(claim.matcher).toBe("closed_dispatch");
+    expect(claim.dispatch!.via).toBe("sole_implementation");
+    expect(claim.dispatch!.member_count).toBe(1);
+    expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
+  }, 60_000);
+
+  it("keeps a multi-implementation set with no guard OPEN when nothing closes it", async () => {
+    const ctx = contextFor({
+      "src/main/java/app/web/CatalogController.java": SPRING_CONTROLLER,
+      "src/main/java/app/web/CatalogService.java": SERVICE,
+      "src/main/java/app/web/Catalog.java": CATALOG,
+      // One bean and one plain class: the container manages only half the set, so
+      // the tree does not say what a call through `Catalog` can reach.
+      "src/main/java/app/web/FileCatalog.java": `package app.web;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class FileCatalog implements Catalog {
+  public String byId(String id) { return id; }
+}
+`,
+      "src/main/java/app/web/MemoryCatalog.java": `package app.web;
+
+public class MemoryCatalog implements Catalog {
+  public String byId(String id) { return id; }
+}
+`,
+      "src/main/java/app/web/ItemRepository.java": REPOSITORY,
+    });
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    expect(candidate.node.confidence).toBe("absent");
+    expect(candidate.absent_reason).toMatch(/^unresolved_dispatch:/);
+    expect(candidate.absent_reason).toContain("no Spring stereotype");
+    expect(gateCandidate(ctx, candidate).node.confidence).toBe("absent");
+  }, 60_000);
+
+  it("picks each branch of a supports()-guarded registry over a sealed hierarchy", async () => {
+    const ctx = contextFor({
+      "src/main/java/app/web/GradeController.java": `package app.web;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class GradeController {
+  private final GraderRegistry graders;
+
+  GradeController(GraderRegistry graders) {
+    this.graders = graders;
+  }
+
+  @PostMapping("/api/grade")
+  public String grade(@RequestBody String body) {
+    return graders.grade(new Exercise(new Grading.TestCases()), body);
+  }
+}
+`,
+      "src/main/java/app/web/GraderRegistry.java": `package app.web;
+
+import java.util.List;
+import org.springframework.stereotype.Component;
+
+@Component
+public class GraderRegistry {
+  private final List<Grader> graders;
+
+  GraderRegistry(List<Grader> graders) {
+    this.graders = List.copyOf(graders);
+  }
+
+  public String grade(Exercise exercise, String submission) {
+    return graderFor(exercise).grade(exercise, submission);
+  }
+
+  private Grader graderFor(Exercise exercise) {
+    return graders.stream().filter(grader -> grader.supports(exercise)).findFirst().orElseThrow();
+  }
+}
+`,
+      "src/main/java/app/web/Grading.java": `package app.web;
+
+public sealed interface Grading permits Grading.TestCases, Grading.AnswerKey {
+  record TestCases() implements Grading {}
+  record AnswerKey() implements Grading {}
+}
+`,
+      "src/main/java/app/web/Exercise.java": `package app.web;
+
+public record Exercise(Grading grading) {}
+`,
+      "src/main/java/app/web/Grader.java": `package app.web;
+
+public interface Grader {
+  boolean supports(Exercise exercise);
+  String grade(Exercise exercise, String submission);
+}
+`,
+      "src/main/java/app/web/TestCaseGrader.java": `package app.web;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class TestCaseGrader implements Grader {
+  private final ResultRepository results;
+
+  TestCaseGrader(ResultRepository results) {
+    this.results = results;
+  }
+
+  public boolean supports(Exercise exercise) {
+    return exercise.grading() instanceof Grading.TestCases;
+  }
+
+  public String grade(Exercise exercise, String submission) {
+    return results.saveResult(submission);
+  }
+}
+`,
+      "src/main/java/app/web/AnswerKeyGrader.java": `package app.web;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class AnswerKeyGrader implements Grader {
+  private final ResultRepository results;
+
+  AnswerKeyGrader(ResultRepository results) {
+    this.results = results;
+  }
+
+  public boolean supports(Exercise exercise) {
+    return exercise.grading() instanceof Grading.AnswerKey;
+  }
+
+  public String grade(Exercise exercise, String submission) {
+    return results.saveResult(submission);
+  }
+}
+`,
+      "src/main/java/app/web/ResultRepository.java": `package app.web;
+
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class ResultRepository {
+  public String saveResult(String value) { return value; }
+}
+`,
+    });
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    const flow = candidate.node as FlowNode;
+    expect(flow.confidence).toBe("verified");
+    // Both branches are drawn, each labelled by the permitted record its own
+    // `supports()` tests for. Picking the "obvious" one would assert an execution
+    // the tree never states; drawing neither would lose the seam entirely.
+    const dispatches = flow.links!.filter((l) => l.relation === "dispatch");
+    expect(dispatches).toHaveLength(2);
+    expect(dispatches.map((l) => l.label).sort().join(" ")).toContain("Grading.AnswerKey");
+    expect(dispatches.map((l) => l.label).sort().join(" ")).toContain("Grading.TestCases");
+    for (const link of dispatches) {
+      const claim = candidate.flow_claims!.find((c) => c.link_id === link.id)!;
+      expect(claim.dispatch!.via).toBe("sealed_guard");
+      expect(claim.dispatch!.member_count).toBe(2);
+    }
+    // The guard call itself is dispatch machinery, not a step of the story: the
+    // figure shows what the registry routes to, not how it decided.
+    expect(flow.steps.map((s) => s.node)).not.toContain("supports");
+    expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
+  }, 60_000);
+
+  it("names each branch of a keyed registry by the literal key its bean declares", async () => {
+    const ctx = contextFor({
+      "src/main/java/app/web/RunController.java": `package app.web;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class RunController {
+  private final RunnerRegistry runners;
+
+  RunController(RunnerRegistry runners) {
+    this.runners = runners;
+  }
+
+  @PostMapping("/api/run")
+  public String run(@RequestBody String body) {
+    Runner runner = runners.forLanguage("java");
+    return runner.execute(body);
+  }
+}
+`,
+      "src/main/java/app/web/RunnerRegistry.java": `package app.web;
+
+import java.util.List;
+import org.springframework.stereotype.Component;
+
+@Component
+public class RunnerRegistry {
+  private final List<Runner> runners;
+
+  RunnerRegistry(List<Runner> runners) {
+    this.runners = List.copyOf(runners);
+  }
+
+  public Runner forLanguage(String id) {
+    return runners.get(0);
+  }
+}
+`,
+      "src/main/java/app/web/Runner.java": `package app.web;
+
+public interface Runner {
+  String languageId();
+  String execute(String submission);
+}
+`,
+      "src/main/java/app/web/JavaRunner.java": `package app.web;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class JavaRunner implements Runner {
+  private final RunRepository runs;
+
+  JavaRunner(RunRepository runs) {
+    this.runs = runs;
+  }
+
+  public String languageId() { return "java"; }
+
+  public String execute(String submission) {
+    return runs.saveRun(submission);
+  }
+}
+`,
+      "src/main/java/app/web/PythonRunner.java": `package app.web;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class PythonRunner implements Runner {
+  private final RunRepository runs;
+
+  PythonRunner(RunRepository runs) {
+    this.runs = runs;
+  }
+
+  public String languageId() { return "python"; }
+
+  public String execute(String submission) {
+    return runs.saveRun(submission);
+  }
+}
+`,
+      "src/main/java/app/web/RunRepository.java": `package app.web;
+
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class RunRepository {
+  public String saveRun(String value) { return value; }
+}
+`,
+    });
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    const flow = candidate.node as FlowNode;
+    expect(flow.confidence).toBe("verified");
+    const dispatches = flow.links!.filter((l) => l.relation === "dispatch");
+    expect(dispatches).toHaveLength(2);
+    const labels = dispatches.map((l) => l.label).join(" ");
+    expect(labels).toContain('"java"');
+    expect(labels).toContain('"python"');
+    for (const link of dispatches) {
+      expect(candidate.flow_claims!.find((c) => c.link_id === link.id)!.dispatch!.via).toBe("keyed_registry");
+    }
+    expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
+  }, 60_000);
+
+  it("MUTANT: an implementation added since the trace contradicts the closed set", async () => {
+    const ctx = contextFor({
+      "src/main/java/app/web/CatalogController.java": SPRING_CONTROLLER,
+      "src/main/java/app/web/CatalogService.java": SERVICE,
+      "src/main/java/app/web/Catalog.java": CATALOG,
+      "src/main/java/app/web/FileCatalog.java": `package app.web;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class FileCatalog implements Catalog {
+  private final ItemRepository items;
+
+  FileCatalog(ItemRepository items) {
+    this.items = items;
+  }
+
+  public String byId(String id) {
+    return items.findTitle(id);
+  }
+}
+`,
+      "src/main/java/app/web/ItemRepository.java": REPOSITORY,
+    });
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
+
+    // The mutant is the whole point of a closed-set claim: nothing about the
+    // drawn arrow's own two endpoints changed, and the target still exists. A
+    // gate that only re-found the target would confirm a picture that is now
+    // false, because the call can reach a second implementation.
+    const grown = contextFor({
+      "src/main/java/app/web/CatalogController.java": SPRING_CONTROLLER,
+      "src/main/java/app/web/CatalogService.java": SERVICE,
+      "src/main/java/app/web/Catalog.java": CATALOG,
+      "src/main/java/app/web/FileCatalog.java": `package app.web;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class FileCatalog implements Catalog {
+  private final ItemRepository items;
+
+  FileCatalog(ItemRepository items) {
+    this.items = items;
+  }
+
+  public String byId(String id) {
+    return items.findTitle(id);
+  }
+}
+`,
+      "src/main/java/app/web/MemoryCatalog.java": `package app.web;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class MemoryCatalog implements Catalog {
+  public String byId(String id) { return id; }
+}
+`,
+      "src/main/java/app/web/ItemRepository.java": REPOSITORY,
+    });
+    const repinned = JSON.parse(
+      JSON.stringify(candidate).replaceAll(ctx.sha, grown.sha),
+    ) as Candidate;
+    const gated = gateCandidate(grown, repinned);
+    expect(gated.node.confidence).toBe("absent");
+    expect(gated.finding).toContain("not the 1 this arrow closed the set at");
+  }, 60_000);
+});
+
+/* ---------------------- boundary link kinds and compression (#35, PR 5) */
+
+describe("the boundaries a story crosses, and the boxes it draws", () => {
+  const ctxFor = () =>
+    contextFor({
+      "src/main/java/app/web/OrderController.java": `package app.web;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class OrderController {
+  private final OrderService orders;
+
+  OrderController(OrderService orders) {
+    this.orders = orders;
+  }
+
+  @PostMapping("/api/orders")
+  public String place(@RequestBody String body) {
+    return orders.place(body);
+  }
+}
+`,
+      "src/main/java/app/web/OrderService.java": `package app.web;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class OrderService {
+  private final OrderRepository orders;
+  private final Archiver archiver;
+
+  OrderService(OrderRepository orders, Archiver archiver) {
+    this.orders = orders;
+    this.archiver = archiver;
+  }
+
+  @Transactional
+  public String place(String body) {
+    String id = Ids.next(body);
+    orders.insert(id);
+    archiver.archive(id);
+    return id;
+  }
+}
+`,
+      // A static helper the service uses: an implementation detail of the service,
+      // not a component beside it, so it belongs inside the service's box.
+      "src/main/java/app/web/Ids.java": `package app.web;
+
+public final class Ids {
+  private Ids() {}
+
+  static String next(String seed) {
+    return seed.trim();
+  }
+}
+`,
+      "src/main/java/app/web/Archiver.java": `package app.web;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import org.springframework.stereotype.Component;
+
+@Component
+public class Archiver {
+  public void archive(String id) {
+    try {
+      Files.writeString(Path.of("/tmp", id), id);
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
+}
+`,
+      "src/main/java/app/web/OrderRepository.java": `package app.web;
+
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class OrderRepository {
+  public void insert(String id) {}
+}
+`,
+    });
+
+  it("names the transaction, the persistence write and the side effect beside the path", async () => {
+    const ctx = ctxFor();
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    const flow = candidate.node as FlowNode;
+    expect(flow.confidence).toBe("verified");
+
+    // The static id helper is not a box of its own: it is an implementation
+    // detail of the component that calls it, and the subject's own wiring is what
+    // says so - nothing holds it and nothing injects it. (It reaches no terminal
+    // either, so pruning removes it from the story before compression sees it -
+    // the two rules agree here rather than either one carrying the case alone.)
+    expect(flow.steps.map((s) => s.node)).toEqual([
+      "POST /api/orders",
+      "OrderService",
+      "OrderRepository",
+      "Archiver",
+    ]);
+    const service = flow.steps.find((s) => s.node === "OrderService")!;
+    // Spring's own declaration that this runs in a transaction, read rather than
+    // inferred from the method's name.
+    expect(service.detail).toContain("@Transactional");
+
+    const byRelation = new Map(flow.links!.map((l) => [l.relation, l]));
+    expect(byRelation.get("write")!.to).toBe("orderrepository-insert");
+    // Writing the filesystem leaves the program, so it is a side effect drawn as
+    // an aside - the same distinction the hand-made reference draws between the
+    // graded path and the best-effort commit beside it.
+    expect(byRelation.get("side_effect")!.to).toBe("archiver-archive");
+    expect(byRelation.get("side_effect")!.kind).toBe("aside");
+    expect(flow.steps.find((s) => s.node === "Archiver")!.kind).toBe("aside");
+    expect(flow.steps.find((s) => s.node === "Archiver")!.detail).toContain("leaves the process");
+
+    expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
+  }, 60_000);
+
+  it("MUTANT: a compressed box that stops naming an arrow's endpoint is refused", async () => {
+    // Compression is only honest while the gate can still match each claim to the
+    // box it points at. `stepNamesSymbol` is that check, and it is why a box lists
+    // the methods arrows actually touch rather than the first three it reached.
+    const ctx = ctxFor();
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    const flow = candidate.node as FlowNode;
+    expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
+
+    const blinded = {
+      ...candidate,
+      node: {
+        ...flow,
+        steps: flow.steps.map((step) =>
+          step.node === "OrderService" ? { ...step, node: "Box", detail: "does things" } : step,
+        ),
+      },
+    } as Candidate;
+    const gated = gateCandidate(ctx, blinded);
+    expect(gated.node.confidence).toBe("absent");
+    expect(gated.finding).toContain("do not agree with the rendered endpoint steps");
   }, 60_000);
 });

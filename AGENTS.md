@@ -57,18 +57,37 @@ Probes emit **candidates**, never final nodes. The gate confirms, the rank stage
 
 The existence gate runs in **both directions** (#7 point 7), and the single-direction version is the one already found wrong on the reference subject: a stated decision is not evidence of implementation, and an open ticket is not evidence of absence. A confirmed contradiction becomes a `divergence` edge rather than being dropped. A claim nothing in the tree can settle is **demoted, never admitted as checked**.
 
-Flow is the atomic exception to that generic outcome path (#35): every links-based candidate needs one `flow_claims` entry per arrow, and one unresolved, stale, or contradicted arrow quarantines the **whole** Flow as `absent` - never attested, partial, or converted to a subject divergence. Direct-call, exact Spring-route, and data-access matchers resolve now; `closed_dispatch` and `reachability` deliberately fail closed until their producer phases add the required closed-set knowledge. Legacy `calls_next` remains a render input only and cannot enter as a newly verified candidate.
+Flow is the atomic exception to that generic outcome path (#35): every links-based candidate needs one `flow_claims` entry per arrow, and one unresolved, stale, or contradicted arrow quarantines the **whole** Flow as `absent` - never attested, partial, or converted to a subject divergence. Direct-call, exact Spring-route, data-access and closed-dispatch matchers resolve now; `reachability` deliberately fails closed until PR 7's shared-state fan-out adds the closed negative proof it needs. Legacy `calls_next` remains a render input only and cannot enter as a newly verified candidate.
 
 ## The Flow producer
 
-`src/probes/flow/` is the shared machinery and `src/probes/library/flow-java-*.ts` are the registered adapters (#35, PR 4). One entry family per adapter, deliberately: "no Spring here" and "no runnable main here" are different findings, which is what the `Probe.applies` hook exists for - a framework-level applicability answer the toolchain test cannot give.
+`src/probes/flow/` is the shared machinery and `src/probes/library/flow-java-*.ts` are the registered adapters (#35, PRs 4-5). One entry family per adapter, deliberately: "no Spring here" and "no runnable main here" are different findings, which is what the `Probe.applies` hook exists for - a framework-level applicability answer the toolchain test cannot give.
 
-Two rules make it more than a call-graph walker, and both are easy to erase by accident:
+Three rules make it more than a call-graph walker, and each is easy to erase by accident:
 
-- **A gap anywhere the entry reaches quarantines the whole candidate**, not merely a gap on a path that survived pruning. Scoping it to survivors turns pruning into a way to walk around an unresolved dispatch and still draw a confident picture, which is the "path that stops when resolution becomes difficult" the design forbids. Every stop is an `absent` candidate whose `absent_reason` starts with a kind token (`unresolved_dispatch:`, `landmark_budget_exceeded:`, ...) so the record can count failures without string-matching a sentence.
-- **The producer resolves no further than the gate can re-resolve.** They are independent derivations - a parse tree against a blob reread - so they must fail closed on the same line, or a real chain returns as a confusing quarantine. That is why a receiver held in ANOTHER type's field, a `var` local, a chained call, and a direct call that resolves only through a subject supertype are all named limits rather than traced edges - the last one recovers only once the gate's receiver resolution becomes subtype-aware, which is a later phase's work - and why `normalizedRoute` (`src/probes/flow/route.ts`) is shared by both while the resolution stays split, exactly as `manifests.ts` shares one definition of "declared".
+- **A gap anywhere the entry reaches quarantines the whole candidate**, not merely a gap on a path that survived pruning.
+Scoping it to survivors turns pruning into a way to walk around an unresolved dispatch and still draw a confident picture, which is the "path that stops when resolution becomes difficult" the design forbids.
+Every stop is an `absent` candidate whose `absent_reason` starts with a kind token (`unresolved_dispatch:`, `no_terminal_reached:`, ...) so the record can count failures without string-matching a sentence.
+- **The producer resolves no further than the gate can re-resolve.**
+They are independent derivations - a parse tree against a blob reread - so they must fail closed on the same line, or a real chain returns as a confusing quarantine.
+That is why a receiver held in ANOTHER type's field and a chained call other than a bare accessor declared in the calling file are named limits rather than traced edges, and why `normalizedRoute` (`src/probes/flow/route.ts`) is shared by both while the resolution stays split, exactly as `manifests.ts` shares one definition of "declared".
+A `var` local is typed from its initialiser so an implicit accessor is not reported as a hole, but it is marked gate-blind and never used to draw an arrow.
+- **The producer has no budget expressed in rendered boxes.** `BOUNDS` holds two mechanical explosion guards (16 path edges, 200 symbols) and nothing else.
+A box count is a readability judgement, and readability lives in the renderer (which warns above eight steps) and selection lives in rank (#9, and #39's Flow budget of two).
+PR 4 carried an eight-landmark quarantine; it deleted a fully verified 23-box story on the reference subject, which is the "second authority over what survives" the whole pipeline forbids.
 
-What the reference subject yields is measured, not predicted: `test/fixtures/swe-prep.flow-producer.json` pins it, carries the command that regenerates it against a swe-prep clone, and is asserted by `test/run/parity.test.ts`. At `086c999` the submission narrative #35 exists to recover is still cut, at `ExerciseCatalog.byId` through an interface.
+**Closed-set dispatch** (`src/probes/flow/dispatch.ts`, #35 PR 5) is what lets a call through an interface be traced at all.
+A set is closed only when the subject's own wiring closes it: a sole implementation, a `sealed` base, or every implementation carrying a Spring stereotype.
+A closed set of several members FANS OUT into one labelled, separately evidenced arrow per member - never a chosen "obvious" implementation - and the branch label comes from the tree: a `supports()` predicate over a sealed hierarchy, a keyed registry's literal, otherwise the implementation's own name.
+A call to the guard method itself is dispatch machinery, not a step, so the figure shows what the registry routes to rather than how it decided.
+The gate re-enumerates the whole set textually from the blob and refuses a claim whose member count moved - proving the target exists says nothing about whether it is the only thing the call can reach.
+
+**Landmark compression** draws one box per component, where a component is what the subject declares itself to have: a Spring bean, a durable-storage boundary, a terminal, the entry, or a collaborator the caller HOLDS.
+A static helper or a `new`-ed value builder is an implementation detail of the component that called it and belongs inside its box.
+One box per TYPE, never per method, and every method an arrow touches is named in the box it touches - otherwise the gate's `stepNamesSymbol` check rightly refuses to match the claim to the rendered endpoint.
+
+What the reference subject yields is measured, not predicted: `test/fixtures/swe-prep.flow-producer.json` pins it, carries the command that regenerates it against a swe-prep clone, and is asserted by `test/run/parity.test.ts`.
+At `086c999` twenty of twenty-three routes verify, no candidate is cut at a dispatch, and the submission walkthrough #35 exists to recover is verified through the gate at 23 components and 49 independently re-resolved links.
 
 `assets/tree-sitter-java.wasm` is vendored deliberately. The only npm package shipping a prebuilt Java grammar bundles ~40 of them at 50 MB for one 430 KB file, which is not a defensible npx footprint. `web-tree-sitter` is pinned to the ABI that grammar was built against - **the two move together or not at all**.
 

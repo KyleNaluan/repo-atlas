@@ -12,7 +12,8 @@ On a repository with no decision record, the artifact says so - it never reconst
 **Status: under construction.** The complete v1 design is closed on this tracker: issues [#1](https://github.com/KyleNaluan/repo-atlas/issues/1)-[#10](https://github.com/KyleNaluan/repo-atlas/issues/10), each with a binding `## Resolution:` comment recording the decision, the why, and the rejected alternatives.
 This build ships the `atlas.json` contract, the harvest stage, the probe library, the write stage that reads each decision record into a candidate, the existence gate over both, the model scorer and the rank stage's deterministic half, the assemble stage that joins a run into the `atlas.json` contract, the render stage, the full audit - its deterministic passes and the advisory model pass - with its stamp, and the `run` orchestrator that drives all nine stages over one SHA-keyed work directory that acts as the cache.
 Every registered stage is now built.
-What remains is not a missing stage but a shortfall in what the pipeline surfaces: the one-flow-end-to-end section still has no producer, so the artifact does not yet reach the reference overview's node count - a gap pinned by `test/run/parity.test.ts` so it cannot silently close or widen.
+What remains is not a missing stage but a shortfall in what the pipeline surfaces: the one-flow-end-to-end section has its first producer - Java/Spring entry inventory and simple typed traces - but the reference subject's own submission narrative still cuts at a registry interface, so the artifact does not yet reach the reference overview's node count.
+Both halves are pinned by `test/run/parity.test.ts`, against a measurement of what the producer actually yields at the pinned SHA, so neither can silently close or widen.
 
 ```
 npx repo-atlas run --clone ../subject -o overview.html
@@ -61,7 +62,13 @@ A declared-private side is never read. That it exists is recorded, because the a
 
 Eight discovery probes, each encoding one piece of human judgement about what is worth finding - a sealed hierarchy's closed enumeration, a method that refuses where its siblings return, a predicate repeated across queries until it is an invariant, a CI step that guards policy rather than testing code.
 Two further probes fill node types nothing else in the pipeline mints: one restates the harvest's already-measured figures as the stat tiles the overview opens with, each citing the command that reproduces it at the pinned SHA, and one turns a source citation the record never explains into a `coverage_gap` edge rather than inventing a rationale for it ([#6](https://github.com/KyleNaluan/repo-atlas/issues/6) point 3).
+Two Flow entry adapters trace an execution story from where the outside world reaches the subject ([#35](https://github.com/KyleNaluan/repo-atlas/issues/35)): Spring HTTP routes, class-level prefix composed with each method mapping, and real `public static void main(String[])` declarations.
+They are registered separately, because "this subject runs no Spring" and "this subject ships no runnable main" are different findings and one adapter may not answer for the other; an adapter whose framework is absent reports `not_applicable` with its reason rather than running empty.
 They are pure deterministic functions: no network, no model calls, cheap enough to be cacheable and small enough to be unit-tested against fixtures.
+
+The Flow tracer resolves receivers from declarations - fields, constructor injection, locals, parameters, static type names - picks overloads by arity and then by argument type, follows subject-owned supertypes, and treats a repository read or write and the value an entry returns as terminals.
+It stops, by name, wherever the tree stops establishing the next step: an interface dispatch this phase closes no implementation set for, a same-arity overload it cannot pick, a receiver it declines to type, a cycle, or a bound reached before a terminal.
+Every stop is an `absent` candidate carrying its reason rather than a shorter diagram, because a path that stops when resolution becomes difficult is not a flow.
 
 Probes propose; they never decide. Every candidate goes to the existence gate, which resolves it against the tree at the pinned SHA and can **overturn the record in either direction**:
 
@@ -188,7 +195,7 @@ The tool is distributed for `npx`, so the footprint is a design constraint rathe
 | `ajv` | validates `atlas.json` against the generated schema | contract |
 | `@anthropic-ai/claude-agent-sdk` | the tool-free model calls, reached through one call site: reading decisions, scoring `interview_value`, the audit's judge | write, score, audit |
 | `puppeteer-core` | drives an already-installed browser for the audit's pass B | audit |
-| `web-tree-sitter` | structural parsing for the three probes that need a parse tree | probes |
+| `web-tree-sitter` | structural parsing for the probes that need a parse tree, and for the Flow symbol index | probes |
 | `@hpcc-js/wasm-graphviz` | diagram layout as WebAssembly - no native binary, no system package | render |
 | `shiki` | build-time syntax highlighting, emitted as static HTML | render |
 

@@ -1,0 +1,55 @@
+{
+  "note": "What the Flow producer yields on the reference subject, measured rather than asserted (#35, PR 4).",
+  "regenerate": "npx tsx src/cli.ts probe --harvest test/fixtures/swe-prep.harvest.json --clone <swe-prep clone> -o out/candidates.json && npx tsx src/cli.ts gate --candidates out/candidates.json --harvest test/fixtures/swe-prep.harvest.json --clone <swe-prep clone> -o out/gated.json",
+  "subject_sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+  "reference_narrative": {
+    "what": "The submission walkthrough #35 exists to recover: one coding submission from the HTTP route to its verdict and persistence.",
+    "route": "POST /api/attempts/{}/submissions",
+    "candidate_id": "fl-http-attemptcontroller-submit-7633fd7a",
+    "outcome": "absent",
+    "reason": "unresolved_dispatch: backend/src/main/java/com/sweprep/backend/attempt/AttemptService.java#AttemptService.recordSubmission/3 calls ExerciseCatalog.byId through an interface, and this phase closes no implementation set (plus 12 further unresolved calls: unresolved_receiver_type x11, unresolved_dispatch x1)",
+    "phase": "Thirteen calls on this route's landmarks are unresolved at this phase: the registry dispatch through ExerciseCatalog the accepted plan closes in PR 5, which leads the reason as the load-bearing cut, receivers held in `var` locals whose inferred type this phase does not compute, and direct calls resolved only through a subject supertype - `Exercise.id` and `Exercise.title` inherited from `Content` - whose arrow the gate could not re-resolve from the calling file either. It is cut rather than drawn shorter."
+  },
+  "adapters": [
+    {
+      "probe_id": "flow-java-spring-http",
+      "status": "ran",
+      "entries": 23,
+      "verified_by_the_gate": [
+        {
+          "id": "fl-http-languagecontroller-list-d2c95073",
+          "title": "GET /api/languages, entry to terminal",
+          "steps": 2,
+          "links": 1
+        },
+        {
+          "id": "fl-http-rolecontroller-status-099ef81a",
+          "title": "GET /api/role, entry to terminal",
+          "steps": 3,
+          "links": 2
+        },
+        {
+          "id": "fl-http-rolecontroller-select-6bec2b0a",
+          "title": "PUT /api/role, entry to terminal",
+          "steps": 4,
+          "links": 3
+        }
+      ],
+      "cut_by_reason": {
+        "landmark_budget_exceeded": 1,
+        "unresolved_dispatch": 15,
+        "unresolved_receiver_type": 4
+      }
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "status": "ran",
+      "entries": 2,
+      "verified_by_the_gate": [],
+      "cut_by_reason": {
+        "no_terminal_reached": 1,
+        "unresolved_dispatch": 1
+      }
+    }
+  ]
+}

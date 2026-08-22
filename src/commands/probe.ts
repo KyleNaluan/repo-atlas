@@ -26,7 +26,9 @@ const PROBE_USAGE = `usage: repo-atlas probe --harvest <harvest.json> --clone <p
 Runs the probe library over a harvest and a local clone at the pinned SHA, and
 emits candidate nodes. Probes are pure deterministic functions: no network, no
 model calls. A probe that finds nothing emits nothing; a probe that does not
-apply to this subject's toolchain says so by name rather than passing silently.`;
+apply - its toolchain missing, or a framework adapter's framework (e.g. Spring)
+absent from a subject whose toolchain is present - says so by name rather than
+passing silently.`;
 
 const GATE_USAGE = `usage: repo-atlas gate --candidates <candidates.json> --harvest <harvest.json> --clone <path> [--written <written.json>] [-o <gated.json>]
 

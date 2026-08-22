@@ -121,10 +121,12 @@ const presenceOf = (
  * unresolved candidate that clears the floor ships and counts as attested; it is
  * not an absent cut.
  *
- * On probe-only input this list is legitimately empty: probes emit `verified`
- * and `attested` candidates and the gate never manufactures `absent`, so nothing
- * in the current pipeline is cut for want of evidence. The list is populated by a
- * source that produces record-shaped candidates whose evidence did not hold.
+ * Most probes cannot populate this list: they emit `verified` and `attested`
+ * candidates and the gate never manufactures `absent` from them. It is populated
+ * by a source that produces record-shaped candidates whose evidence did not hold,
+ * and by the Flow producer, whose failure mode IS an absent candidate - a chain
+ * it could not establish end to end is cut with its reason rather than drawn
+ * shorter (#35).
  *
  * The record reports the count, the type and why the evidence failed, and
  * deliberately withholds the claim text (#7's `absent-cut-disclosure` ruling) -

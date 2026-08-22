@@ -20,6 +20,8 @@ import { sealedHierarchies } from "./library/sealed-hierarchies.js";
 import { throwWhereSiblingsReturn } from "./library/throw-where-siblings-return.js";
 import { unresolvedReferences } from "./library/unresolved-references.js";
 import { measuredScale } from "./library/measured-scale.js";
+import { flowJavaCli } from "./library/flow-java-cli.js";
+import { flowJavaSpringHttp } from "./library/flow-java-spring-http.js";
 import { tunedConfigProperties } from "./library/tuned-config-properties.js";
 import { parseJava, type SyntaxNode } from "./java.js";
 import { detectToolchains, type Probe, type ProbeContext, type ProbeOutcome } from "./types.js";
@@ -27,8 +29,11 @@ import type { AtlasNode } from "../schema/types.js";
 import type { Harvest } from "../harvest/types.js";
 
 /**
- * #5's eight discovery probes, plus the two node producers nothing else mints:
- * `unresolved-references` (#6 point 3) and `measured-scale` (the stat tiles).
+ * #5's eight discovery probes, plus the node producers nothing else mints:
+ * `unresolved-references` (#6 point 3), `measured-scale` (the stat tiles) and
+ * the two Flow entry adapters (#35). Each Flow adapter is listed separately on
+ * purpose: one entry family being absent must not read as another one finding
+ * nothing.
  */
 export const PROBES: readonly Probe[] = [
   decidedButUnbuilt,
@@ -41,6 +46,8 @@ export const PROBES: readonly Probe[] = [
   tunedConfigProperties,
   unresolvedReferences,
   measuredScale,
+  flowJavaSpringHttp,
+  flowJavaCli,
 ] as const;
 
 const git = (repo: string, args: string[]): string =>
@@ -216,6 +223,15 @@ export const runProbes = async (
         status: "not_applicable",
         reason: `not applicable to this toolchain: the subject carries no ${probe.toolchain} source`,
       });
+      continue;
+    }
+    // A framework adapter can be inapplicable on a subject whose toolchain it
+    // understands. It says which, by name, for the same reason the toolchain
+    // test does: "the framework is absent here" and "the framework is here and
+    // declares nothing" are different findings (#5, #6).
+    const applies = probe.applies ? await probe.applies(ctx) : { ok: true as const };
+    if (!applies.ok) {
+      out.push({ probe_id: probe.id, status: "not_applicable", reason: applies.reason });
       continue;
     }
     out.push({ probe_id: probe.id, status: "ran", candidates: await probe.run(ctx) });

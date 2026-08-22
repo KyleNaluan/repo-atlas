@@ -7,6 +7,7 @@
  * returns a shortened path and never turns extractor uncertainty into a subject
  * divergence.
  */
+import { normalizedRoute } from "../probes/flow/route.js";
 import type { Candidate, FlowClaim, ProbeContext, SymbolRef } from "../probes/types.js";
 import type {
   Evidence,
@@ -137,16 +138,14 @@ const simpleName = (value: string): string => {
   return pieces[pieces.length - 1] ?? value;
 };
 
-const normalizedPath = (value: string): string => {
-  const withoutQuery = value.trim().split("?")[0] ?? value.trim();
-  const templated = withoutQuery
-    .replace(/\$\{[^}]+\}/g, "{}")
-    .replace(/:[A-Za-z_$][\w$]*/g, "{}")
-    .replace(/\{[^}]+\}/g, "{}");
-  const withSlash = templated.startsWith("/") ? templated : `/${templated}`;
-  const collapsed = withSlash.replace(/\/{2,}/g, "/");
-  return collapsed.length > 1 ? collapsed.replace(/\/$/, "") : collapsed;
-};
+/**
+ * The shared definition of "the same route" (`normalizedRoute`). The producer
+ * derives routes from a parse tree and this gate re-derives them from the blob;
+ * the two derivations stay independent, but they compare the results through one
+ * normalisation so a correct producer cannot look contradicted by a trailing
+ * slash.
+ */
+const normalizedPath = normalizedRoute;
 
 const lineSpan = (
   source: string,
@@ -604,7 +603,16 @@ const quarantined = (
 export const gateFlowCandidate = (ctx: ProbeContext, candidate: Candidate) => {
   const flow = candidate.node as FlowNode;
   if (flow.confidence === "absent") {
-    return quarantined(candidate, "the producer proposed it as absent; no partial chain may be promoted");
+    // The producer already established it could not establish the chain. The
+    // gate refuses to promote it either way, and carries the producer's own
+    // reason so the absent cut says which failure this was rather than being
+    // flattened into one generic refusal (#6).
+    return quarantined(
+      candidate,
+      candidate.absent_reason === undefined
+        ? "the producer proposed it as absent; no partial chain may be promoted"
+        : `the producer proposed it as absent (${candidate.absent_reason}); no partial chain may be promoted`,
+    );
   }
   if ((candidate.claims?.length ?? 0) > 0) {
     return quarantined(candidate, "Flow relationships must use atomic flow_claims, not generic existence claims");

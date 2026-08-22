@@ -6,8 +6,9 @@
  * they ask are about structure rather than text. The other five stay grep-class,
  * because #5 is explicit that no probe should be forced through a parse tree that
  * a scan answers: the discovery report's "trivial grep, valuable because someone
- * framed the question" finding stands. The Flow producer's two entry adapters
- * (#35) also read structure, and route through this same module.
+ * framed the question" finding stands. The Flow producer's two Java entry
+ * adapters (#35) also read structure, and route through this same module; its
+ * TypeScript client adapter reads lexically and never touches this parser.
  *
  * The grammar is a vendored WASM asset rather than a package dependency. The
  * only npm package shipping a prebuilt Java grammar bundles about forty of them

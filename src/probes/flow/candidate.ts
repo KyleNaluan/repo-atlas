@@ -2,8 +2,9 @@
  * A finished trace, turned into what the gate is allowed to check.
  *
  * The producer emits CANDIDATES (#5), so everything here is a proposal: the
- * boxes it drew, the arrows it drew, and one atomic claim per arrow naming the
- * symbols the gate must independently re-resolve at the pinned SHA. It assigns
+ * boxes it drew, the arrows it drew, and one atomic claim per call site an arrow
+ * cites naming the symbols the gate must independently re-resolve at the pinned
+ * SHA - so an arrow bundling several call sites carries one claim for each. It assigns
  * no interview value - the scorer owns that - and it never decides what renders.
  *
  * The other half of its job is the honest one: a trace that could not be

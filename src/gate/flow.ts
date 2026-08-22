@@ -2,7 +2,8 @@
  * Flow-specific existence gate (#35, accepted design section 6.1).
  *
  * A Flow is one atomic behavioural claim. The producer may propose a complete
- * graph and one claim per arrow; this module rereads the pinned tree and either
+ * graph and one claim per call site each arrow cites - several on an arrow that
+ * bundles several call sites; this module rereads the pinned tree and either
  * verifies the whole graph or quarantines the whole graph as `absent`. It never
  * returns a shortened path and never turns extractor uncertainty into a subject
  * divergence.

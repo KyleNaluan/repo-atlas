@@ -56,7 +56,8 @@ export const BOUNDS = {
  * mechanical explosion guards - they stop a walk, and the numbers are measured
  * rather than chosen. A budget expressed in RENDERED BOXES is not that: it is a
  * readability judgement, and this project puts readability judgements in the
- * renderer (which already warns above eight steps, #7) and selection in rank
+ * renderer (which warns above eight landmarks of narrative depth, the longest
+ * path a reader follows, #7) and selection in rank
  * (#9, and the Flow budget of two from #39). A producer that deleted a fully
  * verified story because the figure would be large would be exactly the second
  * authority over what survives that "mechanics propose, judgement deletes"

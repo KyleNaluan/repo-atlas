@@ -1406,14 +1406,19 @@ const declaredArity = (params: string): number => {
 
 /** The parameter list of a method this span declares, or null. */
 const declaredParams = (span: string, ref: SymbolRef): string | null => {
+  // Balance parens over a length-preserving mask so a `)` inside a string literal
+  // in a parameter annotation (`@Header("a)b")`) cannot end the list early; the
+  // returned text is sliced from the ORIGINAL span at the same offsets, because a
+  // caller reads a declared type name out of it.
+  const masked = maskedJava(span);
   const name = simpleName(ref.name);
-  for (const open of span.matchAll(new RegExp(`\\b${escaped(name)}\\s*\\(`, "g"))) {
+  for (const open of masked.matchAll(new RegExp(`\\b${escaped(name)}\\s*\\(`, "g"))) {
     const start = open.index + open[0].length;
     let depth = 1;
     let end = -1;
-    for (let j = start; j < span.length; j += 1) {
-      if (span[j] === "(") depth += 1;
-      else if (span[j] === ")") {
+    for (let j = start; j < masked.length; j += 1) {
+      if (masked[j] === "(") depth += 1;
+      else if (masked[j] === ")") {
         depth -= 1;
         if (depth === 0) {
           end = j;
@@ -1422,8 +1427,8 @@ const declaredParams = (span: string, ref: SymbolRef): string | null => {
       }
     }
     if (end === -1) continue;
-    const params = span.slice(start, end);
-    if (ref.arity === undefined || declaredArity(params) === ref.arity) return params;
+    if (ref.arity === undefined || declaredArity(masked.slice(start, end)) === ref.arity)
+      return span.slice(start, end);
   }
   return null;
 };
@@ -1442,7 +1447,11 @@ const firstTopLevelParam = (params: string): string => {
 
 /** The first parameter's declared type, which is what an `@EventListener` subscribes to. */
 const firstParameterType = (params: string): string | null => {
-  const first = firstTopLevelParam(params).trim().replace(/^(?:final\s+|@\w+(?:\([^)]*\))?\s+)+/, "");
+  // A declared type name is code, never inside a string literal, so reading it off
+  // a length-preserving mask cannot lose it - while the mask stops a `)` or `,`
+  // inside a parameter annotation's string from cutting the list at the wrong char.
+  const masked = maskedJava(params);
+  const first = firstTopLevelParam(masked).trim().replace(/^(?:final\s+|@\w+(?:\([^)]*\))?\s+)+/, "");
   const type = first.split(/\s+/)[0];
   return type === undefined || type === "" ? null : simpleTypeName(type);
 };

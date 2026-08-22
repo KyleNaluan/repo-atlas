@@ -399,6 +399,46 @@ public class CueListener {
     expect(result.node.confidence).toBe("verified");
   }, 60_000);
 
+  it("reads a listener whose header parameter annotation carries a bracket inside a string", async () => {
+    // The gate balances the parameter list over a length-preserving mask, so a `)`
+    // inside a string an annotation declares (`@Header("a)b")`) cannot end the list
+    // early. Reading the raw span would truncate at that quote, miscount the arity,
+    // and quarantine a Flow the producer drew off the parse tree.
+    const { candidate, result } = await gated(
+      {
+        "src/main/java/app/batch/CueRepository.java": REPOSITORY,
+        "src/main/java/app/batch/CueListener.java": `package app.batch;
+
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.stereotype.Service;
+
+@Service
+public class CueListener {
+  private final CueRepository cues;
+
+  CueListener(CueRepository cues) {
+    this.cues = cues;
+  }
+
+  @KafkaListener(topics = "cue.raised")
+  public void onCue(@Header("a)b") String trace, String payload) {
+    cues.saveCue("today");
+  }
+}
+`,
+      },
+      "flow-java-spring-message",
+    );
+    const claim = only((candidate.flow_claims ?? []).filter((c) => c.matcher === "message_listener"));
+    expect(claim.trigger).toEqual({
+      annotation: "KafkaListener",
+      attribute: "topics",
+      expression: "cue.raised",
+    });
+    expect(result.node.confidence).toBe("verified");
+  }, 60_000);
+
   it("types an @EventListener whose event parameter carries its own parenthesized comma", async () => {
     // The producer reads the event off the structured parameter type; the gate
     // rereads it off the span. A parameter annotation with an internal comma must

@@ -2,7 +2,8 @@
  * Flow-specific existence gate (#35, accepted design section 6.1).
  *
  * A Flow is one atomic behavioural claim. The producer may propose a complete
- * graph and one claim per arrow; this module rereads the pinned tree and either
+ * graph and one claim per call site each arrow cites - several on an arrow that
+ * bundles several call sites; this module rereads the pinned tree and either
  * verifies the whole graph or quarantines the whole graph as `absent`. It never
  * returns a shortened path and never turns extractor uncertainty into a subject
  * divergence.
@@ -186,12 +187,27 @@ const checkedEvidence = (
 const evidenceKey = (e: FileEvidence): string =>
   JSON.stringify([e.path, e.line_start ?? null, e.line_end ?? null, e.sha]);
 
-const linkEvidenceMatchesClaim = (link: FlowLink, claim: FlowClaim): boolean => {
-  const proposed = new Set(claim.evidence.map(evidenceKey));
+/**
+ * Whether the claims on one arrow account for exactly the evidence it renders.
+ *
+ * An arrow may carry SEVERAL atomic claims - one component calling into another
+ * at ten call sites is one relationship drawn once, not ten arrows (#35, PR 6) -
+ * but the guarantee is unchanged and is checked here rather than assumed: every
+ * line the arrow cites belongs to a claim this gate independently resolves, and
+ * no claim resolves a line the arrow does not cite. An arrow that cited an
+ * eleventh site no claim covered would be asserting a call nothing re-resolved.
+ */
+const linkEvidenceMatchesClaims = (link: FlowLink, claims: FlowClaim[]): boolean => {
+  const proposed = new Set(claims.flatMap((claim) => claim.evidence.map(evidenceKey)));
   const rendered = (Array.isArray(link.evidence) ? link.evidence : []).filter(
     (e): e is FileEvidence => e.kind === "file",
   );
-  return rendered.length === proposed.size && rendered.every((e) => proposed.has(evidenceKey(e)));
+  const renderedKeys = new Set(rendered.map(evidenceKey));
+  return (
+    rendered.length === renderedKeys.size &&
+    renderedKeys.size === proposed.size &&
+    [...proposed].every((key) => renderedKeys.has(key))
+  );
 };
 
 const parenEnd = (text: string, open: number): number => {
@@ -564,23 +580,131 @@ const springEndpoint = (
   return null;
 };
 
+/* ----------------------------------------- the client half of a transport */
+
+/*
+ * A transport claim is a claim that two files agree on one contract, and this is
+ * the half of it written in TypeScript (#35, PR 6).
+ *
+ * It is deliberately NOT the producer's scanner. The producer masks a whole
+ * module and walks it structurally; this re-derives the endpoint from the CITED
+ * SPAN and nothing else, with its own reading, so a citation that points at the
+ * wrong lines fails here even though the module elsewhere contains a matching
+ * call. The two share exactly one thing - `normalizedRoute`, the definition of
+ * "the same route" - for the same reason `manifests.ts` shares one definition of
+ * "declared" while leaving both resolutions independent.
+ *
+ * Every reading below fails closed. A URL that is not one literal, an options
+ * argument that is not an object literal, or a `method` that is not a string
+ * literal all mean "this span does not establish an endpoint", which quarantines
+ * the Flow rather than admitting an arrow drawn on a probable contract.
+ */
+
+/** `fetch` with no options is a GET, by specification; both halves know only that. */
+const IMPLIED_CLIENT_VERB = "GET";
+
+const clientCallsIn = (span: string): { name: string; open: number }[] => {
+  const out: { name: string; open: number }[] = [];
+  for (const match of span.matchAll(/(^|[^\w$.])([A-Za-z_$][\w$]*)\s*\(/g)) {
+    out.push({ name: match[2]!, open: match.index + match[0].length - 1 });
+  }
+  return out;
+};
+
+/** The endpoint one client call writes down, or null when it writes none down. */
+const clientEndpointAt = (
+  span: string,
+  open: number,
+): { method: string; path: string } | null => {
+  const close = parenEnd(span, open);
+  if (close < 0) return null;
+  const args = span.slice(open + 1, close);
+  const offset = args.length - args.trimStart().length;
+  const literal = /^(['"`])([^'"`\\]*)\1/.exec(args.trimStart());
+  if (!literal) return null;
+  // Test the captured literal, not the normalized route: normalizedPath prepends
+  // a slash so its output always starts with "/". A relative fetch resolves against
+  // the page URL and a cross-origin URL is not this subject's route, so the gate
+  // independently refuses both rather than echoing a producer that admitted one.
+  if (!literal[2]!.startsWith("/")) return null;
+  const path = normalizedPath(literal[2]!);
+
+  const rest = args.slice(offset + literal[0].length).trim();
+  if (rest.length === 0) return { method: IMPLIED_CLIENT_VERB, path };
+  if (!rest.startsWith(",")) return null;
+  const options = rest.slice(1).trim();
+  if (!options.startsWith("{") || !options.endsWith("}")) return null;
+  if (!/(?:^|[{,\s])method\s*:/.test(options)) return { method: IMPLIED_CLIENT_VERB, path };
+  const verb = /(?:^|[{,\s])method\s*:\s*(['"`])\s*([A-Za-z]+)\s*\1/.exec(options)?.[2];
+  return verb === undefined ? null : { method: verb.toUpperCase(), path };
+};
+
+/**
+ * Whether the cited evidence closes `name` as an HTTP client of this subject.
+ *
+ * `fetch` is one by definition. Anything else has to be a function the subject
+ * declares that hands its first parameter to `fetch` and adds no literal path
+ * text of its own - re-derived here from the span the claim cites, exactly as the
+ * dispatch resolver re-derives a guard rather than believing the producer's label.
+ * A helper that rewrote the path would make the call site's literal something
+ * other than the route, so refusing it is what keeps the arrow honest.
+ */
+const closesHttpClient = (name: string, texts: Map<string, string[]>): boolean => {
+  if (name === "fetch") return true;
+  const declaration = new RegExp(
+    `(?:function\\s+${escaped(name)}\\s*\\(|(?:const|let|var)\\s+${escaped(name)}\\s*(?::[^=]*?)?=\\s*(?:async\\s*)?\\()`,
+  );
+  for (const spans of texts.values()) {
+    for (const span of spans) {
+      const declared = declaration.exec(span);
+      if (!declared) continue;
+      const open = span.indexOf("(", declared.index + declared[0].length - 1);
+      const close = parenEnd(span, open);
+      if (close < 0) continue;
+      const param = /^\s*([A-Za-z_$][\w$]*)/.exec(span.slice(open + 1, close))?.[1];
+      if (!param) continue;
+      for (const call of clientCallsIn(span.slice(close))) {
+        if (call.name !== "fetch") continue;
+        const body = span.slice(close);
+        const end = parenEnd(body, call.open);
+        if (end < 0) continue;
+        const url = body.slice(call.open + 1, end).split(",")[0]!.trim();
+        if (url === param) return true;
+        const assigned = new RegExp(
+          `(?:const|let|var)\\s+${escaped(url)}\\s*=\\s*\`([^\`]*)\``,
+        ).exec(span);
+        if (!assigned) continue;
+        const template = assigned[1]!;
+        if (template.replace(/\$\{[^}]*\}/g, "").trim().length > 0) continue;
+        if (new RegExp(`\\$\\{[^}]*\\b${escaped(param)}\\b[^}]*\\}`).test(template)) return true;
+      }
+    }
+  }
+  return false;
+};
+
+/**
+ * Whether the CITED caller spans re-derive this claim's endpoint.
+ *
+ * A transport arrow carries one atomic claim PER call site (#35, PR 6), so the
+ * claim cites exactly one call span in the caller's own file - the loop is not a
+ * tolerance for several unrelated call sites riding in on one another, it iterates
+ * because a wrapper declared in the caller's OWN module cites a second span for
+ * this path, and that declaration span establishes no endpoint of its own.
+ */
 const clientEstablishes = (
-  spans: string[],
+  claim: FlowClaim,
+  texts: Map<string, string[]>,
   protocol: NonNullable<SymbolRef["protocol"]>,
 ): boolean => {
   const wantedPath = normalizedPath(protocol.path);
-  for (const span of spans) {
-    const paths = [...span.matchAll(/["'`]((?:\/|https?:\/\/)[^"'`]*)["'`]/g)].map((m) => {
-      const raw = m[1] ?? "";
-      try {
-        return normalizedPath(raw.startsWith("http") ? new URL(raw).pathname : raw);
-      } catch {
-        return normalizedPath(raw);
-      }
-    });
-    if (!paths.includes(wantedPath)) continue;
-    const explicit = /\bmethod\s*:\s*["'`](GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)["'`]/i.exec(span)?.[1];
-    if ((explicit ?? "GET").toUpperCase() === protocol.method) return true;
+  for (const span of texts.get(claim.from.path) ?? []) {
+    for (const call of clientCallsIn(span)) {
+      if (!closesHttpClient(call.name, texts)) continue;
+      const endpoint = clientEndpointAt(span, call.open);
+      if (endpoint === null) continue;
+      if (endpoint.path === wantedPath && endpoint.method === protocol.method) return true;
+    }
   }
   return false;
 };
@@ -622,7 +746,7 @@ const resolveSpringRoute = (
   }
   const fromMatches = claim.from.path.endsWith(".java")
     ? endpointEquals(springEndpoint(fromSource, claim.from), claim.from.protocol)
-    : clientEstablishes(texts.get(claim.from.path) ?? [], claim.from.protocol);
+    : clientEstablishes(claim, texts, claim.from.protocol);
   const toMatches = endpointEquals(springEndpoint(toSource, to), to.protocol);
   const found = fromMatches && toMatches;
   if (claim.expect === "absent") {
@@ -975,12 +1099,6 @@ export const resolveFlowClaim = (
 ): FlowClaimResolution => {
   const checked = checkedEvidence(ctx, claim.evidence);
   if (checked.problem) return { verdict: "unresolved", finding: checked.problem };
-  if (link && !linkEvidenceMatchesClaim(link, claim)) {
-    return {
-      verdict: "unresolved",
-      finding: "the link's file evidence differs from the evidence the gate was asked to resolve",
-    };
-  }
   const compatible = MATCHER_RELATIONS[claim.matcher];
   if (!compatible) {
     return { verdict: "unresolved", finding: `unknown Flow matcher ${String(claim.matcher)}` };
@@ -1103,33 +1221,37 @@ export const gateFlowCandidate = (ctx: ProbeContext, candidate: Candidate) => {
 
   for (const link of flow.links!) {
     const linkClaims = byLink.get(link.id) ?? [];
-    if (linkClaims.length !== 1) {
+    if (linkClaims.length === 0) {
+      return quarantined(candidate, `link ${link.id} has no atomic claim`);
+    }
+    if (!linkEvidenceMatchesClaims(link, linkClaims)) {
       return quarantined(
         candidate,
-        `link ${link.id} has ${linkClaims.length} atomic claims; exactly one is required`,
+        `link ${link.id}'s file evidence differs from the evidence the gate was asked to resolve`,
       );
     }
-    const claim = linkClaims[0]!;
-    if (claim.expect !== "present") {
-      return quarantined(candidate, `link ${link.id} is rendered but its claim expects it to be absent`);
-    }
-    if (!claim.to) {
-      return quarantined(candidate, `link ${link.id} has no target symbol to resolve`);
-    }
-    if (!stepNamesSymbol(flow, link.from, claim.from) || !stepNamesSymbol(flow, link.to, claim.to)) {
-      return quarantined(
-        candidate,
-        `link ${link.id}'s source symbols do not agree with the rendered endpoint steps`,
-        "overturned",
-      );
-    }
-    const result = resolveFlowClaim(ctx, link, claim);
-    if (result.verdict !== "confirmed") {
-      return quarantined(
-        candidate,
-        `link ${link.id}: ${result.finding}`,
-        result.verdict === "contradicted" ? "overturned" : "unresolved",
-      );
+    for (const claim of linkClaims) {
+      if (claim.expect !== "present") {
+        return quarantined(candidate, `link ${link.id} is rendered but its claim expects it to be absent`);
+      }
+      if (!claim.to) {
+        return quarantined(candidate, `link ${link.id} has no target symbol to resolve`);
+      }
+      if (!stepNamesSymbol(flow, link.from, claim.from) || !stepNamesSymbol(flow, link.to, claim.to)) {
+        return quarantined(
+          candidate,
+          `link ${link.id}'s source symbols do not agree with the rendered endpoint steps`,
+          "overturned",
+        );
+      }
+      const result = resolveFlowClaim(ctx, link, claim);
+      if (result.verdict !== "confirmed") {
+        return quarantined(
+          candidate,
+          `link ${link.id}: ${result.finding}`,
+          result.verdict === "contradicted" ? "overturned" : "unresolved",
+        );
+      }
     }
   }
 

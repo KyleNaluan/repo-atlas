@@ -89,13 +89,74 @@ const nodeAttrs = (step: FlowStep): string => {
 
 type FlowKind = NonNullable<FlowLink["kind"]>;
 
-const edgeAttrs = (kind: FlowKind, edgeLabel?: string): string => {
+/**
+ * Colour says where in the story an arrow is; STYLE says what it crosses.
+ *
+ * A `transport` arrow is the one edge in a Flow that leaves the process - the
+ * browser reaching the server - and drawing it like an in-process call would put
+ * the single most important boundary in the figure on the same footing as a
+ * method call. It stays request-coloured, because it is the request path, and is
+ * drawn dotted so the crossing is visible without a second colour competing with
+ * the response/aside distinction the legend already carries (#35, PR 6).
+ */
+const edgeAttrs = (
+  kind: FlowKind,
+  relation: FlowLink["relation"] | undefined,
+  edgeLabel?: string,
+): string => {
   const color =
     kind === "response" ? COLORS.response : kind === "aside" ? COLORS.aside : COLORS.request;
   const attrs = [`color=${quote(color)}`];
   if (edgeLabel) attrs.push(`label=${quote(edgeLabel)}`);
-  if (kind === "aside") attrs.push(`style=dashed`);
+  if (relation === "transport") attrs.push(`style=dotted`, `penwidth=1.8`);
+  else if (kind === "aside") attrs.push(`style=dashed`);
   return attrs.join(", ");
+};
+
+/**
+ * How many landmarks deep the longest narrative through this figure runs.
+ *
+ * This, not the box count, is what "the main narrative is compressed to at most
+ * eight architectural landmarks" measures (#35, report 5.4, and #7 point 9's
+ * warning). A reader follows ONE execution; a fan-out draws alternatives beside
+ * that path rather than extending it, and `rankdir=LR` lays the graph out along
+ * exactly this depth - so a figure that is wide is not the figure that reads as
+ * a strip. Counting boxes instead would push a producer to hide a branch to fit
+ * a budget, which is the failure the criterion names first.
+ *
+ * A cycle has no longest path, so a cyclic graph falls back to the box count:
+ * the warning is advisory and erring towards it costs nothing.
+ */
+export const narrativeDepth = (flow: FlowNode): number => {
+  const targets = new Map<string, string[]>();
+  if (flow.links !== undefined) {
+    for (const link of flow.links) targets.set(link.from, [...(targets.get(link.from) ?? []), link.to]);
+  } else {
+    for (const step of flow.steps) targets.set(step.id, [...(step.calls_next ?? [])]);
+  }
+  const known = new Set(flow.steps.map((step) => step.id));
+  const memo = new Map<string, number>();
+  const open = new Set<string>();
+  let cyclic = false;
+  const depth = (id: string): number => {
+    if (open.has(id)) {
+      cyclic = true;
+      return 0;
+    }
+    const cached = memo.get(id);
+    if (cached !== undefined) return cached;
+    open.add(id);
+    let best = 1;
+    for (const next of targets.get(id) ?? []) {
+      if (known.has(next)) best = Math.max(best, 1 + depth(next));
+    }
+    open.delete(id);
+    memo.set(id, best);
+    return best;
+  };
+  let deepest = 0;
+  for (const step of flow.steps) deepest = Math.max(deepest, depth(step.id));
+  return cyclic ? flow.steps.length : deepest;
 };
 
 export const toDot = (flow: FlowNode): string => {
@@ -125,7 +186,7 @@ export const toDot = (flow: FlowNode): string => {
       // preserves the legacy colour convention for link authors who omit it.
       const kind = link.kind ?? to.kind ?? from.kind ?? "request";
       lines.push(
-        `  ${quote(link.from)} -> ${quote(link.to)} [${edgeAttrs(kind, link.label)}];`,
+        `  ${quote(link.from)} -> ${quote(link.to)} [${edgeAttrs(kind, link.relation, link.label)}];`,
       );
     }
   } else {
@@ -135,7 +196,7 @@ export const toDot = (flow: FlowNode): string => {
         if (!to) throw new Error(`flow ${flow.id}: step ${step.id} points at unknown step ${target}`);
         // Legacy edge colour follows the target's kind, as it did before #37.
         const kind = to.kind ?? step.kind ?? "request";
-        lines.push(`  ${quote(step.id)} -> ${quote(target)} [${edgeAttrs(kind, step.edge_label)}];`);
+        lines.push(`  ${quote(step.id)} -> ${quote(target)} [${edgeAttrs(kind, undefined, step.edge_label)}];`);
       }
     }
   }
@@ -189,8 +250,10 @@ export interface RenderedFlow {
   svg: string;
   dot: string;
   key: string;
-  /** True when the flow is long enough that the layout will read as a strip (#7 point 9). */
+  /** True when the narrative is deep enough that the layout reads as a strip (#7 point 9). */
   long: boolean;
+  /** How many landmarks deep the longest narrative through the figure runs. */
+  depth: number;
 }
 
 export const renderFlow = async (flow: FlowNode, cache?: DiagramCache): Promise<RenderedFlow> => {
@@ -200,7 +263,8 @@ export const renderFlow = async (flow: FlowNode, cache?: DiagramCache): Promise<
   const cached = cache?.get(key);
   const svg = cached ?? clean(graphviz.layout(dot, "svg", "dot"), flow.title);
   if (!cached) cache?.set(key, svg);
-  return { svg, dot, key, long: flow.steps.length > LONG_FLOW_STEPS };
+  const depth = narrativeDepth(flow);
+  return { svg, dot, key, long: depth > LONG_FLOW_STEPS, depth };
 };
 
 export const graphvizVersion = async (): Promise<string> => (await load()).version();

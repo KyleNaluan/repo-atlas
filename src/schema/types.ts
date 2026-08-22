@@ -203,6 +203,7 @@ export interface FlowLink {
   relation: FlowRelation;
   /** Drives edge colour and dashed aside styling, never position. */
   kind?: "request" | "response" | "aside";
+  /** Edge label; `\l` separates Graphviz lines, as in `FlowStep.detail`. */
   label?: string;
   evidence: Evidence[];
 }

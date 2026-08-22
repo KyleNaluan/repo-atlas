@@ -30,7 +30,14 @@ interface FlowProducerAdapter {
   status: string;
   reason?: string;
   entries?: number;
-  verified_by_the_gate?: { id: string; title: string; steps: number; links: number }[];
+  verified_by_the_gate?: {
+    id: string;
+    title: string;
+    steps: number;
+    links: number;
+    narrative_depth: number;
+    transport_links: number;
+  }[];
   cut_by_reason?: Record<string, number>;
 }
 
@@ -42,7 +49,16 @@ const measured = read<{
     outcome: string;
     steps: number;
     links: number;
+    transport_links: number;
+    narrative_depth: number;
     components: string[];
+  };
+  typescript_client: {
+    modules_scanned: number;
+    fetch_clients_closed_by_the_subject: string[];
+    call_sites_resolved: number;
+    call_sites_cut: number;
+    routes_with_a_verified_caller: number;
   };
   adapters: FlowProducerAdapter[];
 }>("swe-prep.flow-producer.json");
@@ -135,8 +151,14 @@ describe("where the engine falls short, and by how much", () => {
     expect(measured.subject_sha).toBe(reference.subject.sha);
     const http = measured.adapters.find((a) => a.probe_id === "flow-java-spring-http")!;
     const cli = measured.adapters.find((a) => a.probe_id === "flow-java-cli")!;
+    const client = measured.adapters.find((a) => a.probe_id === "flow-typescript-http-client")!;
     expect(http.status).toBe("ran");
     expect(cli.status).toBe("ran");
+    // Three adapters, each reporting its own state. PR 6 adds the TypeScript one
+    // and it ran and emitted nothing - which here means every client call it
+    // resolved was stitched into a route's own Flow, not that it found nothing.
+    expect(client.status).toBe("ran");
+    expect(client.entries).toBe(0);
 
     // Every route the subject declares was inventoried, and every candidate ends
     // in exactly one of the two states this producer may report.
@@ -165,6 +187,41 @@ describe("where the engine falls short, and by how much", () => {
     expect(measured.reference_narrative.outcome).toBe("verified");
     expect(measured.reference_narrative.links).toBe(submission!.links);
     expect(measured.reference_narrative.steps).toBe(submission!.steps);
+
+    // PR 6: FULL UI-TO-RESPONSE PARITY. The hand-made overview starts in the
+    // editor, and until a real caller existed the route could only be claimed in
+    // a caption. Both frontend modules that POST this route are boxes of the
+    // story now, and each arrow across the process boundary was independently
+    // re-resolved at both ends.
+    expect(submission!.title).toContain("browser to terminal");
+    expect(submission!.transport_links).toBe(2);
+    expect(measured.reference_narrative.transport_links).toBe(2);
+    expect(measured.reference_narrative.components.slice(0, 2)).toEqual([
+      "Practice.tsx",
+      "Warmup.tsx",
+    ]);
+    // Every route that survives the gate has a caller in this subject; the three
+    // that do not survive are cut in the BACKEND trace, not for want of one.
+    expect(measured.typescript_client.routes_with_a_verified_caller).toBe(
+      http.verified_by_the_gate!.length,
+    );
+    // The narrow adapter read the whole frontend and cut nothing: `apiFetch` is
+    // the one function this subject's own wiring closes as a fetch client, and
+    // all 28 call sites through it resolve to an exact verb and path.
+    expect(measured.typescript_client.fetch_clients_closed_by_the_subject).toEqual([
+      "frontend/src/api.ts#apiFetch",
+    ]);
+    expect(measured.typescript_client.call_sites_resolved).toBe(28);
+    expect(measured.typescript_client.call_sites_cut).toBe(0);
+
+    // THE READABILITY CRITERION (report 5.4), measured rather than declared. The
+    // main narrative is what a reader follows - one execution - and it is eight
+    // architectural landmarks deep. The other seventeen boxes are the branches
+    // drawn BESIDE that path: not one of them was hidden to reach the number,
+    // which is the failure the criterion names first.
+    expect(measured.reference_narrative.narrative_depth).toBe(8);
+    expect(submission!.narrative_depth).toBeLessThanOrEqual(8);
+    expect(submission!.steps).toBeGreaterThan(submission!.narrative_depth);
 
     // And it is the SAME story the hand-made overview tells. The reference's own
     // `fl-submission` names these components; the engine reached each of them by

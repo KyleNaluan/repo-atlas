@@ -114,11 +114,12 @@ describe("the probe manifest", () => {
     // `unresolved-references` is #6 point 3. `measured-scale` restates figures the
     // harvest already measured as Fact nodes - the stat tiles the reference
     // overview opens with, which no stage produced at all.
-    // The eleventh and twelfth are #35's Flow entry adapters. They are two
+    // The eleventh, twelfth and thirteenth are #35's Flow adapters. They are three
     // entries rather than one for the same reason the list is enumerated at all:
-    // "this subject runs no Spring" and "this subject ships no runnable main"
-    // are different findings, and one adapter cannot report the other's absence.
-    expect(PROBES).toHaveLength(12);
+    // "this subject runs no Spring", "this subject ships no runnable main" and
+    // "this subject has no frontend calling it" are different findings, and no
+    // one adapter can report another's absence.
+    expect(PROBES).toHaveLength(13);
     expect(PROBES.map((p) => p.id).sort()).toEqual([
       "ci-policy-guards",
       "decided-but-unbuilt",
@@ -126,6 +127,7 @@ describe("the probe manifest", () => {
       "dependency-divergence",
       "flow-java-cli",
       "flow-java-spring-http",
+      "flow-typescript-http-client",
       "measured-scale",
       "repeated-sql-predicates",
       "sealed-hierarchies",
@@ -156,11 +158,20 @@ describe("the probe manifest", () => {
       "dependency-asymmetry",
       "flow-java-cli",
       "flow-java-spring-http",
+      "flow-typescript-http-client",
       "sealed-hierarchies",
       "throw-where-siblings-return",
     ]);
     for (const o of skipped) {
-      expect(o.status === "not_applicable" && o.reason).toMatch(/not applicable to this toolchain/);
+      // Two levels of the same rule. Five of these are absent TOOLCHAINS; the
+      // TypeScript client adapter has its toolchain and is still inapplicable,
+      // because this module calls nothing - a SUBJECT-level answer the toolchain
+      // test cannot give, which is what `Probe.applies` exists for.
+      expect(o.status === "not_applicable" && o.reason).toMatch(
+        o.probe_id === "flow-typescript-http-client"
+          ? /not applicable to this subject/
+          : /not applicable to this toolchain/,
+      );
     }
   }, 60_000);
 

@@ -158,6 +158,22 @@ const insideReturn = (invocation: SyntaxNode, body: SyntaxNode): boolean => {
 };
 
 /**
+ * Whether a call's receiver is itself a chained method result (`x().y()`).
+ *
+ * This phase can type such a receiver, but the gate cannot re-resolve it: the
+ * gate types a receiver only from the named declarations in the calling file, so
+ * a call whose receiver is a chained result is one it can never confirm. Naming
+ * it lets the call site fail closed on the same line the gate would - the
+ * alternative is a real chain returning as a confusing quarantine, or the
+ * chain's untypeable accessor otherwise dropping the branch in silence.
+ */
+const throughChainedCall = (node: SyntaxNode | null): boolean => {
+  let cur = node;
+  while (cur && cur.type === "parenthesized_expression") cur = cur.namedChild(0);
+  return cur?.type === "method_invocation";
+};
+
+/**
  * Every name a method body can use as a receiver, with the type it was declared
  * with: the enclosing type's fields, this method's parameters, and its locals.
  *
@@ -228,9 +244,11 @@ const FOREIGN: Resolved = { kind: "foreign" };
  * Handles exactly the receivers the design names as mechanically resolvable:
  * bare and `this` calls inside the enclosing type, fields (including
  * constructor-injected ones), locals, parameters, a named type for a static
- * call, `new X()`, and a chained call whose target's declared return type is
- * itself a subject type. Anything else is foreign, which means "not traced",
- * never "traced and empty".
+ * call, `new X()`, and a chained call whose accessor - declared on the receiver's
+ * type or an owned supertype - returns a subject type. A chained accessor rooted
+ * in a subject type but untypeable (ambiguous overload, or no reachable
+ * declaration) is `unestablished`, named rather than skipped. Anything else is
+ * foreign, which means "not traced", never "traced and empty".
  */
 const expressionType = (
   index: JavaIndex,
@@ -294,9 +312,40 @@ const expressionType = (
     if (owner.kind !== "subject") return owner;
     const name = expr.childForFieldName("name")?.text;
     if (name === undefined) return FOREIGN;
-    const arity = argumentCount(expr);
-    const targets = owner.type.methods.filter((m) => m.name === name && m.params.length === arity);
-    const returns = targets.length === 1 ? targets[0]!.returns : null;
+    // A chained receiver rooted in a subject type is typed exactly as a direct
+    // call to its accessor would be - following subject-owned supertypes, so an
+    // inherited accessor resolves the same as a declared one. A receiver this
+    // phase cannot type from here is NAMED (unestablished), not skipped as
+    // FOREIGN: FOREIGN means "somebody else's library" and skips silently, but a
+    // silently dropped subject branch could be a durable write, and the gate
+    // re-resolves emitted claims, never omitted edges. A genuinely foreign
+    // return type stays FOREIGN below and its calls are untraced, unchanged.
+    const args = Array.from(
+      { length: argumentCount(expr) },
+      (_, i) => expr.childForFieldName("arguments")!.namedChild(i)!,
+    ).filter((n): n is SyntaxNode => n !== null);
+    const accessor = declaredMethod(index, owner.type, name, args, (arg) =>
+      expressionType(index, type, method, receivers, arg, depth + 1),
+    );
+    if (accessor.kind === "ambiguous") {
+      return {
+        kind: "unestablished",
+        why: `the chained call to ${owner.type.name}.${name} has more than one declared overload taking ${args.length} arguments, so its return type is not established`,
+      };
+    }
+    if (accessor.kind === "missing") {
+      // Declared by the language (Object/enum/record accessor) or inherited from
+      // a supertype the subject does not own: a genuinely foreign value, so its
+      // calls are not this tree's behaviour to trace.
+      if (implicitlyDeclared(owner.type, name, args.length) || hasForeignSupertype(index, owner.type)) {
+        return FOREIGN;
+      }
+      return {
+        kind: "unestablished",
+        why: `the chained call to ${owner.type.name}.${name} resolves to no declaration in ${owner.type.path} or its subject supertypes`,
+      };
+    }
+    const returns = accessor.method.returns;
     return returns === null ? FOREIGN : named(index, returns);
   }
   if (expr.type === "parenthesized_expression") {
@@ -472,6 +521,18 @@ export const traceFrom = (
       if (name === undefined) continue;
       const receiverNode = invocation.childForFieldName("object");
       const receiver = expressionType(index, type, method, receivers, receiverNode);
+      // A receiver reached through a chained call is one this phase can type but
+      // the gate cannot: it re-types a receiver only from named declarations in
+      // the calling file. Such a call is named where a real edge would otherwise
+      // be drawn, below, rather than traced into an edge the gate would overturn
+      // or dropped in silence when the chain's accessor is inherited.
+      const chainedReceiver = throughChainedCall(receiverNode);
+      const chainGap = (): void =>
+        gap(
+          "unresolved_receiver_type",
+          key,
+          `${key} calls ${name} on \`${receiverNode!.text}\`, a chained call this phase types but the gate re-types a receiver only from the declarations in the calling file`,
+        );
       if (receiver.kind === "foreign") {
         if (
           receiverNode?.type === "identifier" &&
@@ -528,6 +589,10 @@ export const traceFrom = (
       if (dataRelation !== null) {
         const declared = target.methods.filter((m) => m.name === name && m.params.length === args.length);
         if (declared.length === 1) {
+          if (chainedReceiver) {
+            chainGap();
+            continue;
+          }
           const targetKey = methodKey(target, declared[0]!);
           if (!landmarks.has(targetKey)) {
             landmarks.set(targetKey, {
@@ -591,6 +656,10 @@ export const traceFrom = (
         continue;
       }
 
+      if (chainedReceiver) {
+        chainGap();
+        continue;
+      }
       const targetKey = methodKey(found.type, found.method);
       if (stack.includes(targetKey) || targetKey === key) {
         // A cycle is cut rather than followed. It is recorded, because a trace

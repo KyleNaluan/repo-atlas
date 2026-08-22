@@ -528,6 +528,7 @@ public class AttemptService {
     expect(service.detail).toBe("submit(UUID, RunRequest)");
     expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
   }, 60_000);
+
 });
 
 /* ------------------------------------------- what it refuses to draw */
@@ -707,6 +708,129 @@ public class ContentRepository {
     const reason = absentReason(only(await runAdapter("flow-java-cli", ctx)));
     expect(reason).toContain("unresolved_receiver_type");
     expect(reason).toContain("Holder.CONTENT");
+  }, 60_000);
+
+  it("names a chained receiver whose inherited accessor leads to a durable write", async () => {
+    const ctx = contextFor({
+      "src/main/java/app/web/WorkController.java": `package app.web;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class WorkController {
+  private final WorkService service;
+
+  WorkController(WorkService service) {
+    this.service = service;
+  }
+
+  @PostMapping("/work")
+  public String work() {
+    service.gateway().persist();
+    return service.report();
+  }
+}
+`,
+      "src/main/java/app/web/BaseService.java": `package app.web;
+
+public class BaseService {
+  protected final WorkRepository repository;
+
+  BaseService(WorkRepository repository) {
+    this.repository = repository;
+  }
+
+  WorkRepository gateway() {
+    return repository;
+  }
+}
+`,
+      "src/main/java/app/web/WorkService.java": `package app.web;
+
+public class WorkService extends BaseService {
+  WorkService(WorkRepository repository) {
+    super(repository);
+  }
+
+  String report() {
+    return "done";
+  }
+}
+`,
+      "src/main/java/app/web/WorkRepository.java": `package app.web;
+
+public class WorkRepository {
+  void persist() {}
+}
+`,
+    });
+    // `gateway()` is inherited from WorkService's supertype, so the chain DOES
+    // type to WorkRepository and the `.persist()` branch reaches a durable write.
+    // Before the fix the accessor typed only against WorkService's own methods,
+    // found nothing, and the write was dropped SILENTLY while `report()` still
+    // reached a terminal - a verified Flow missing a durable write the gate never
+    // re-resolves, because it re-resolves emitted claims, not omitted edges. The
+    // chained receiver is now named rather than traced: the gate types a receiver
+    // only from named declarations in the calling file, so tracing it would only
+    // return the whole chain as a confusing quarantine at the gate.
+    const reason = absentReason(only(await runAdapter("flow-java-spring-http", ctx)));
+    expect(reason).toMatch(/^unresolved_receiver_type:/);
+    expect(reason).toContain("gateway");
+  }, 60_000);
+
+  it("names a chained accessor it cannot type, rather than dropping its branch", async () => {
+    const ctx = contextFor({
+      "src/main/java/app/web/PickController.java": `package app.web;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class PickController {
+  private final PickService service;
+
+  PickController(PickService service) {
+    this.service = service;
+  }
+
+  @PostMapping("/pick")
+  public String pick(@RequestBody String key) {
+    service.pick(key).persist();
+    return service.report();
+  }
+}
+`,
+      "src/main/java/app/web/PickService.java": `package app.web;
+
+public class PickService {
+  PickRepository pick(String key) {
+    return null;
+  }
+
+  PickRepository pick(Long key) {
+    return null;
+  }
+
+  String report() {
+    return "done";
+  }
+}
+`,
+      "src/main/java/app/web/PickRepository.java": `package app.web;
+
+public class PickRepository {
+  void persist() {}
+}
+`,
+    });
+    // Two same-arity `pick` overloads, and the argument's type resolves to
+    // neither, so the accessor's return type is not established. The `report()`
+    // branch independently reaches a terminal, so before the fix this receiver
+    // fell through as foreign and the candidate came back VERIFIED with the
+    // `.persist()` write missing. It is now named and the whole Flow quarantined:
+    // an untypeable subject-owned receiver is a gap, not a silent skip.
+    const reason = absentReason(only(await runAdapter("flow-java-spring-http", ctx)));
+    expect(reason).toMatch(/^unresolved_receiver_type:/);
+    expect(reason).toContain("PickService.pick");
   }, 60_000);
 
   it("cuts a cycle rather than following it, and says the recursion is why", async () => {

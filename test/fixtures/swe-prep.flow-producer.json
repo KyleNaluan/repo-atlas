@@ -1,5 +1,5 @@
 {
-  "note": "What the Flow producer yields on the reference subject, measured rather than asserted (#35, PR 6).",
+  "note": "What the Flow producer yields on the reference subject, measured rather than asserted (#35, PR 7).",
   "regenerate": "npx tsx src/cli.ts probe --harvest test/fixtures/swe-prep.harvest.json --clone <swe-prep clone> -o out/candidates.json && npx tsx src/cli.ts gate --candidates out/candidates.json --harvest test/fixtures/swe-prep.harvest.json --clone <swe-prep clone> -o out/gated.json",
   "subject_sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
   "reference_narrative": {
@@ -38,7 +38,43 @@
       "SolutionCommitService",
       "SolutionCommitResult"
     ],
-    "phase": "PR 6 closes the transport seam PR 4 deferred: the two frontend modules that POST this route are now boxes of the story, and each arrow across the process boundary is a `transport` link the gate re-resolves independently at both ends - the client call site (by exact verb and normalized path), the declaration that closes `apiFetch` as a fetch client, and the Spring mapping. Landmark compression draws ONE arrow per relationship rather than one per call, which is why the link count falls while no call site is lost: each is still its own atomic claim on the arrow it was drawn into. The readability criterion (report 5.4) is met without hiding a boundary - the longest narrative a reader follows through this figure is eight landmarks deep, and the fan-out is drawn beside that path rather than folded into it."
+    "phase": "PR 6 closes the transport seam PR 4 deferred: the two frontend modules that POST this route are now boxes of the story, and each arrow across the process boundary is a `transport` link the gate re-resolves independently at both ends - the client call site (by exact verb and normalized path), the declaration that closes `apiFetch` as a fetch client, and the Spring mapping. Landmark compression draws ONE arrow per relationship rather than one per call, which is why the link count falls while no call site is lost: each is still its own atomic claim on the arrow it was drawn into. The readability criterion (report 5.4) is met without hiding a boundary - the longest narrative a reader follows through this figure is eight landmarks deep, and the fan-out is drawn beside that path rather than folded into it.",
+    "archetype": "request_response"
+  },
+  "lineage_narrative": {
+    "what": "The second reference Flow #35 exists to recover: one durable record, and the derivations the subject draws from it independently.",
+    "record": "SubmissionRepository",
+    "candidate_id": "fl-record-submissionrepository-countsforattempts-c6f6f0b5",
+    "outcome": "verified",
+    "archetype": "shared_state_lineage",
+    "steps": 14,
+    "links": 14,
+    "narrative_depth": 5,
+    "branches": [
+      {
+        "to": "ChallengeService",
+        "label": "countsForAttempts(...)",
+        "cited_spans": 2
+      },
+      {
+        "to": "LearnedService",
+        "label": "cleanPassInstants(...) where s.outcome = 'PASSED'\\lcleanPassInstantsByExercise(...) where s.outcome = 'PASSED'",
+        "cited_spans": 4
+      },
+      {
+        "to": "ConfusionPairService",
+        "label": "failedResponses(...) where s.outcome = 'FAILED'",
+        "cited_spans": 2
+      }
+    ],
+    "derivations": [
+      "ConfusionPairs",
+      "LearnedCriterion",
+      "ChallengeQuality"
+    ],
+    "closed_negative_claims": 12,
+    "caption": "Traced from the SubmissionRepository record to ConfusionPairs.derive, FileExerciseCatalog.all, ContentParser.parse and 8 further terminals: 14 landmarks and 14 independently resolved links. No derivation drawn here reaches another: the closed symbol graph over this subject takes none of them to any of the others.",
+    "phase": "PR 7 adds the second trace mode. It starts at a record rather than at an entry, so the arrows run the way the DATA travels and each carries a `data_lineage` claim the gate re-resolves in the reverse direction - the reader's cited call site, and the read's own declaration, whose SELECT is what makes it durable. Branch labels are the tree's own words: the read's identifier and the literal SQL predicate its query writes. The closed negative sentence is admitted only because a conservative reachability closure over the subject's symbol graph takes no branch to another's derivation; the AttemptRepository record's own story omits that sentence entirely, because there one branch can reach another's read model."
   },
   "typescript_client": {
     "what": "What the narrow TS/TSX adapter read, so a stitched route and an unresolvable one cannot read alike.",
@@ -62,6 +98,7 @@
           "steps": 5,
           "links": 4,
           "narrative_depth": 4,
+          "archetype": "request_response",
           "transport_links": 1
         },
         {
@@ -70,6 +107,7 @@
           "steps": 9,
           "links": 9,
           "narrative_depth": 5,
+          "archetype": "request_response",
           "transport_links": 2
         },
         {
@@ -78,6 +116,7 @@
           "steps": 25,
           "links": 32,
           "narrative_depth": 8,
+          "archetype": "request_response",
           "transport_links": 2
         },
         {
@@ -86,6 +125,7 @@
           "steps": 9,
           "links": 10,
           "narrative_depth": 5,
+          "archetype": "request_response",
           "transport_links": 1
         },
         {
@@ -94,6 +134,7 @@
           "steps": 10,
           "links": 11,
           "narrative_depth": 5,
+          "archetype": "request_response",
           "transport_links": 2
         },
         {
@@ -102,6 +143,7 @@
           "steps": 17,
           "links": 21,
           "narrative_depth": 7,
+          "archetype": "request_response",
           "transport_links": 1
         },
         {
@@ -110,6 +152,7 @@
           "steps": 7,
           "links": 7,
           "narrative_depth": 4,
+          "archetype": "request_response",
           "transport_links": 2
         },
         {
@@ -118,6 +161,7 @@
           "steps": 18,
           "links": 23,
           "narrative_depth": 9,
+          "archetype": "request_response",
           "transport_links": 1
         },
         {
@@ -126,6 +170,7 @@
           "steps": 9,
           "links": 9,
           "narrative_depth": 5,
+          "archetype": "request_response",
           "transport_links": 1
         },
         {
@@ -134,6 +179,7 @@
           "steps": 6,
           "links": 6,
           "narrative_depth": 4,
+          "archetype": "request_response",
           "transport_links": 1
         },
         {
@@ -142,6 +188,7 @@
           "steps": 5,
           "links": 5,
           "narrative_depth": 4,
+          "archetype": "request_response",
           "transport_links": 1
         },
         {
@@ -150,6 +197,7 @@
           "steps": 7,
           "links": 7,
           "narrative_depth": 4,
+          "archetype": "request_response",
           "transport_links": 2
         },
         {
@@ -158,6 +206,7 @@
           "steps": 3,
           "links": 2,
           "narrative_depth": 3,
+          "archetype": "request_response",
           "transport_links": 1
         },
         {
@@ -166,6 +215,7 @@
           "steps": 6,
           "links": 6,
           "narrative_depth": 4,
+          "archetype": "request_response",
           "transport_links": 1
         },
         {
@@ -174,6 +224,7 @@
           "steps": 7,
           "links": 7,
           "narrative_depth": 5,
+          "archetype": "request_response",
           "transport_links": 1
         },
         {
@@ -182,6 +233,7 @@
           "steps": 11,
           "links": 11,
           "narrative_depth": 5,
+          "archetype": "request_response",
           "transport_links": 1
         },
         {
@@ -190,6 +242,7 @@
           "steps": 4,
           "links": 3,
           "narrative_depth": 4,
+          "archetype": "request_response",
           "transport_links": 1
         },
         {
@@ -198,6 +251,7 @@
           "steps": 4,
           "links": 3,
           "narrative_depth": 4,
+          "archetype": "request_response",
           "transport_links": 1
         },
         {
@@ -206,6 +260,7 @@
           "steps": 4,
           "links": 3,
           "narrative_depth": 4,
+          "archetype": "request_response",
           "transport_links": 1
         },
         {
@@ -214,6 +269,7 @@
           "steps": 4,
           "links": 3,
           "narrative_depth": 4,
+          "archetype": "request_response",
           "transport_links": 1
         }
       ],
@@ -232,7 +288,7 @@
           "steps": 12,
           "links": 16,
           "narrative_depth": 6,
-          "transport_links": 0
+          "archetype": "unknown"
         }
       ],
       "cut_by_reason": {
@@ -246,6 +302,34 @@
       "verified_by_the_gate": [],
       "cut_by_reason": {},
       "note": "Every client call it resolved matched a Spring route by exact verb and path, so each became a transport arrow inside that route's own Flow rather than a candidate of its own. It emits candidates only for calls it could NOT stitch."
+    },
+    {
+      "probe_id": "flow-java-shared-state",
+      "status": "ran",
+      "entries": 6,
+      "verified_by_the_gate": [
+        {
+          "id": "fl-record-attemptrepository-attemptedexerciseids-a78e82a7",
+          "title": "AttemptRepository: 3 independent derivations over one record",
+          "steps": 18,
+          "links": 21,
+          "narrative_depth": 5,
+          "archetype": "shared_state_lineage"
+        },
+        {
+          "id": "fl-record-submissionrepository-countsforattempts-c6f6f0b5",
+          "title": "SubmissionRepository: 3 independent derivations over one record",
+          "steps": 14,
+          "links": 14,
+          "narrative_depth": 5,
+          "archetype": "shared_state_lineage"
+        }
+      ],
+      "cut_by_reason": {
+        "unresolved_receiver_type": 2,
+        "too_few_derivations": 2
+      },
+      "note": "Six durable records were inventoried; two carry three independent derivations each, two are read by a service the producer could not resolve, and two are read by nothing but their own author. Every one of the four cuts names itself."
     }
   ]
 }

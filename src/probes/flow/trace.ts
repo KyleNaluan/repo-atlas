@@ -23,6 +23,7 @@
  * and both fail closed on the rest.
  */
 import { findAll, walk, type SyntaxNode } from "../java.js";
+import { readVerbName, writeVerbName } from "./sql.js";
 import { closedDispatch, type DispatchVia } from "./dispatch.js";
 import {
   importedForeign,
@@ -136,6 +137,25 @@ export interface TraceEdge {
   /** Present exactly when `relation` is `dispatch`. */
   dispatch?: DispatchFacts;
   /**
+   * Extra spans this arrow's claim needs beyond the call site, in the role a
+   * dispatch guard plays: without them the claim cannot be re-derived from the
+   * blob. A lineage arrow cites the durable read's own declaration, because the
+   * SQL in that body is half of what the arrow asserts.
+   */
+  cites?: { path: string; line_start: number; line_end: number }[];
+  /**
+   * Set on a DATA-LINEAGE arrow: one drawn from the durable record TO the
+   * derivation that reads it, which is the direction the data travels and the
+   * opposite of the call that establishes it (#35, PR 7, report 5.5).
+   *
+   * The producer marks it here rather than leaving the gate to infer an
+   * orientation from `relation`, because a `read` arrow means two different
+   * things in the two Flow archetypes: a request story draws the caller reaching
+   * storage, a lineage story draws storage reaching its readers. The claim's
+   * matcher declares which, and the gate checks endpoint agreement accordingly.
+   */
+  lineage?: true;
+  /**
    * The type the call was written on, when the declaration lives on a supertype
    * or an enclosing type of it. The gate re-derives that relation itself.
    */
@@ -169,8 +189,6 @@ export interface TraceResult {
 }
 
 const REPOSITORY_NAMED = /(?:Repository|Dao|DAO)$/;
-const READ_METHOD = /^(?:find|get|read|load|select|exists|count|query|fetch|lookup|search)/i;
-const WRITE_METHOD = /^(?:save|write|insert|update|delete|remove|persist|store|upsert|merge)/i;
 
 export const methodKey = (type: TypeSymbol, method: MethodSymbol): string =>
   `${type.path}#${type.qualified}.${method.name}/${method.params.length}`;
@@ -861,6 +879,23 @@ const inheritedDeclaration = (owner: TypeSymbol, receiver: TypeSymbol): boolean 
   owner.qualified !== receiver.qualified || owner.path !== receiver.path;
 
 /**
+ * A durable-storage boundary the CALLER has already established, consulted after
+ * the name convention above and never instead of it.
+ *
+ * The shared-state adapter chooses one record and tells the whole story about
+ * IT (#35, PR 7, report 5.5), so that record's reads are terminals of every
+ * branch by construction rather than by how the subject happened to name them -
+ * `cleanPassInstants` is a durable read because its body is a SELECT, and no
+ * naming convention establishes that. Leaving the hook opt-in keeps the request
+ * adapters' classification, and therefore PR 6's measured yield, exactly where
+ * it was: a subject-wide change to what counts as a data boundary is a different
+ * decision from this one, and would move stories this phase is not about.
+ */
+export interface TraceOptions {
+  boundary?: (type: TypeSymbol, method: MethodSymbol) => "read" | "write" | undefined;
+}
+
+/**
  * Trace one entry method to its terminals under the bounds above.
  *
  * The traversal is deliberately whole-graph rather than single-path: a real
@@ -871,6 +906,7 @@ export const traceFrom = (
   index: JavaIndex,
   entryType: TypeSymbol,
   entryMethod: MethodSymbol,
+  options: TraceOptions = {},
 ): TraceResult => {
   const entry = methodKey(entryType, entryMethod);
   const landmarks = new Map<string, TraceLandmark>();
@@ -1159,15 +1195,22 @@ export const traceFrom = (
       // repository that names neither is an ordinary call and falls through to
       // the resolution below, because a private helper on a repository class is
       // not a data boundary and calling it one would type the arrow wrongly.
-      const dataRelation = isRepositoryType(target)
-        ? READ_METHOD.test(name)
+      const declaredHere = target.methods.filter(
+        (m) => m.name === name && m.params.length === args.length,
+      );
+      const dataRelation = !isRepositoryType(target)
+        ? null
+        : readVerbName(name)
           ? ("read" as const)
-          : WRITE_METHOD.test(name)
+          : writeVerbName(name)
             ? ("write" as const)
-            : null
-        : null;
+            : // The caller's own established boundary, consulted only where the
+              // tree declares exactly one method by this name and arity - the
+              // same condition the branch below requires before drawing the
+              // arrow, so an ambiguous overload stays ambiguous.
+              (declaredHere.length === 1 ? options.boundary?.(target, declaredHere[0]!) ?? null : null);
       if (dataRelation !== null) {
-        const declared = target.methods.filter((m) => m.name === name && m.params.length === args.length);
+        const declared = declaredHere;
         if (declared.length === 1) {
           if (blindReason !== undefined) {
             blindGap(blindReason);

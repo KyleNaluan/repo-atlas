@@ -9,7 +9,14 @@
  * divergence.
  */
 import { isSourceFile } from "../harvest/tree.js";
+import { maskedJava, mentions } from "../probes/flow/reachability.js";
 import { normalizedRoute } from "../probes/flow/route.js";
+import {
+  literalPredicates,
+  readVerbName,
+  readsDurably,
+  writeVerbName,
+} from "../probes/flow/sql.js";
 import { SPRING_STEREOTYPES } from "../probes/flow/stereotype.js";
 import type { Candidate, FlowClaim, ProbeContext, SymbolRef } from "../probes/types.js";
 import type {
@@ -42,8 +49,20 @@ const MATCHER_RELATIONS: Record<FlowClaim["matcher"], ReadonlySet<FlowRelation>>
   spring_route: new Set(["transport"]),
   closed_dispatch: new Set(["dispatch"]),
   data_access: new Set(["read", "write"]),
+  data_lineage: new Set(["read"]),
   reachability: new Set(),
 };
+
+/**
+ * Which end of the arrow each matcher's `from` symbol belongs to.
+ *
+ * Every matcher but one names the arrow's own source; a `data_lineage` arrow is
+ * drawn the way the DATA travels and established by the call that runs the other
+ * way, so its claim names the reader as `from` and the record as `to` (#35,
+ * PR 7). The orientation is declared here rather than accepted in either order,
+ * because a check that accepted both would accept a swapped arrow.
+ */
+const REVERSED: ReadonlySet<FlowClaim["matcher"]> = new Set(["data_lineage"]);
 
 const observesBehaviour = (e: Evidence): boolean => e.kind === "file" || e.kind === "command";
 const ABSENCE_SHAPED = /\b(no|none|never|not|without|absent|nothing|only|cannot)\b/i;
@@ -1032,9 +1051,6 @@ const dispatchBranchProblem = (
 // `\b` falls after `Advice`, so a longer stereotype name needs its own alternative.
 const STEREOTYPE = new RegExp(`@(?:${SPRING_STEREOTYPES.map(escaped).join("|")})\\b`);
 
-const READ_METHOD = /^(?:find|get|read|load|select|exists|count|query|fetch|lookup|search)/i;
-const WRITE_METHOD = /^(?:save|write|insert|update|delete|remove|persist|store|upsert|merge)/i;
-
 const sqlAccess = (spans: string[], target: string, relation: FlowRelation): boolean => {
   const t = escaped(simpleName(target));
   const pattern =
@@ -1062,7 +1078,7 @@ const resolveDataAccess = (
     return { verdict: "unresolved", finding: "no cited caller span can establish the data access" };
   }
   const method = simpleName(to.name);
-  const conventionMatches = relation === "read" ? READ_METHOD.test(method) : WRITE_METHOD.test(method);
+  const conventionMatches = relation === "read" ? readVerbName(method) : writeVerbName(method);
   const typed =
     conventionMatches &&
     symbolExists(toSource, to) &&
@@ -1089,6 +1105,253 @@ const resolveDataAccess = (
     : {
         verdict: "contradicted",
         finding: `the cited source does not establish a ${relation} from ${claim.from.name} to ${to.name}`,
+      };
+};
+
+/**
+ * A DATA-LINEAGE arrow, re-derived from the two spans it cites (#35, PR 7).
+ *
+ * The arrow asserts two things at once and both are checked here, from the blob
+ * and never from the producer's word for it: that the derivation's own cited
+ * line calls this read on a receiver the file types as the record, and that the
+ * read the arrow names IS a durable read - its declaration writes a SELECT. A
+ * method name proves neither. `cleanPassInstants` matches no read-verb
+ * convention and is the most load-bearing read on the reference subject, while
+ * a helper called `findAll` on a repository might be a private list filter.
+ *
+ * The LABEL is checked too, which no other matcher needs to do. A lineage label
+ * carries literal SQL predicates - `outcome = 'PASSED'` - and a predicate is a
+ * claim about what the record's reader sees, so it has to appear in the read the
+ * arrow cites. A label naming a filter the SQL does not write would be the
+ * figure asserting something nothing established.
+ */
+const resolveDataLineage = (
+  ctx: ProbeContext,
+  claim: FlowClaim,
+  texts: Map<string, string[]>,
+): FlowClaimResolution => {
+  const to = claim.to;
+  if (!to) return { verdict: "unresolved", finding: "a data_lineage claim names no durable read" };
+  if (claim.expect !== "present") {
+    return { verdict: "unresolved", finding: "a data_lineage claim can only establish a rendered arrow" };
+  }
+  const readerSource = ctx.read(claim.from.path);
+  const recordSource = ctx.read(to.path);
+  if (readerSource === null || recordSource === null) {
+    return { verdict: "unresolved", finding: "the reader or the record source could not be read" };
+  }
+  const readSpans = texts.get(to.path) ?? [];
+  const callSpans = (texts.get(claim.from.path) ?? []).filter((span) => !readSpans.includes(span));
+  if (callSpans.length === 0) {
+    return { verdict: "unresolved", finding: "no cited reader span can establish the read" };
+  }
+  if (readSpans.length === 0) {
+    return { verdict: "unresolved", finding: `no cited span declares ${to.name}` };
+  }
+  const declaration = readSpans.find(
+    (span) => new RegExp(`\\b${escaped(simpleName(to.name))}\\s*\\(`).test(span),
+  );
+  if (declaration === undefined) {
+    return {
+      verdict: "contradicted",
+      finding: `the cited declaration span does not declare ${to.name}`,
+    };
+  }
+  if (!readsDurably(declaration)) {
+    return {
+      verdict: "contradicted",
+      finding: `${to.name} does not read durable storage: its declaration writes no SELECT`,
+    };
+  }
+  if (
+    !hasTypedCall(
+      readerSource,
+      callSpans,
+      claim.from,
+      to,
+      (sub, base) => declaresSubtype(ctx, sub, base),
+      to.receiver ?? to.owner,
+    )
+  ) {
+    return {
+      verdict: "contradicted",
+      finding: `the cited source does not establish ${claim.from.name} reading ${to.name}`,
+    };
+  }
+  return { verdict: "confirmed", finding: `${claim.from.name} reads ${to.name}` };
+};
+
+const normalizedSql = (value: string): string => value.replace(/\s+/g, " ").trim().toLowerCase();
+
+/**
+ * A lineage arrow's LABEL is a claim, and this is where it is checked.
+ *
+ * No other matcher needs this. A lineage label carries literal SQL predicates -
+ * `outcome = 'PASSED'` - and a predicate is a statement about what the record's
+ * reader can see, which is the whole insight the second reference Flow exists to
+ * carry. A label naming a filter the SQL does not write would be the figure
+ * asserting something nothing established.
+ *
+ * It is checked once per ARROW rather than once per claim, because one arrow
+ * bundles every call site between two components (#35, PR 6) and its label is
+ * therefore the union of what those reads write. Checking a merged label against
+ * one claim's span alone rejects a correct arrow - which is how this check was
+ * found wrong the first time it ran on the reference subject.
+ */
+const lineageLabelProblem = (
+  ctx: ProbeContext,
+  link: FlowLink,
+  claims: FlowClaim[],
+): string | null => {
+  const spans: string[] = [];
+  for (const claim of claims) {
+    const recordPath = claim.to?.path;
+    if (recordPath === undefined) continue;
+    const source = ctx.read(recordPath);
+    if (source === null) continue;
+    for (const evidence of claim.evidence) {
+      if (evidence.path !== recordPath) continue;
+      const span = lineSpan(source, evidence);
+      if (span.text !== undefined) spans.push(span.text);
+    }
+  }
+  for (const predicate of literalPredicates(link.label ?? "")) {
+    if (!spans.some((span) => normalizedSql(span).includes(normalizedSql(predicate)))) {
+      return `the arrow is labelled \`${predicate}\`, which the SQL it cites does not write`;
+    }
+  }
+  return null;
+};
+
+/**
+ * The CLOSED negative: nothing reachable from one type is the other (#35, PR 7,
+ * report 5.5).
+ *
+ * A negative claim is admissible only if a closed check over the subject-owned
+ * symbol graph establishes it, so this is the one resolver that has to be sound
+ * rather than merely exact: it over-approximates reachability and confirms only
+ * when even the over-approximation misses. A type is reachable if any file in
+ * the closure names it in CODE, or if its own declaration header names something
+ * already in the closure - the second rule is what stops an implementation
+ * behind an interface from hiding, because the caller's file names only the
+ * interface.
+ *
+ * The inventory and the traversal are this gate's own: it finds declarations by
+ * scanning the blob, where the producer read a parse tree. What the two share is
+ * one definition of what "names a type in code" means - the same arrangement
+ * `normalizedRoute` and `manifests.ts` use.
+ *
+ * Failing to close it is `unresolved`, not `contradicted`: an over-approximation
+ * that reaches something has not proved a read exists, only that it cannot rule
+ * one out, and a Flow whose caption says otherwise is quarantined rather than
+ * relabelled.
+ */
+const DECLARATION = /\b(?:class|interface|record|enum)\s+([A-Z][\w$]*)/g;
+
+interface SubjectGraph {
+  /** Type name -> every type name its declaring file writes in code. */
+  names: Map<string, Set<string>>;
+  /** Type name -> every type whose declaration header names it. */
+  subtypes: Map<string, Set<string>>;
+  declared: Set<string>;
+}
+
+const graphCache = new WeakMap<ProbeContext, SubjectGraph>();
+
+/**
+ * The gate's OWN inventory and its own graph, built by scanning the blob for
+ * declarations where the producer read a parse tree. The two share exactly one
+ * thing - what `mentions` means - for the same reason `normalizedRoute` is
+ * shared while both route derivations stay independent.
+ */
+const subjectGraph = (ctx: ProbeContext): SubjectGraph => {
+  const cached = graphCache.get(ctx);
+  if (cached) return cached;
+  const files = ctx.paths.filter((path) => path.endsWith(".java") && isSourceFile(path));
+  const masked = new Map<string, string>();
+  for (const path of files) masked.set(path, maskedJava(ctx.read(path) ?? ""));
+  const declaredIn = new Map<string, string[]>();
+  const headers = new Map<string, string[]>();
+  for (const [path, text] of masked) {
+    for (const match of text.matchAll(DECLARATION)) {
+      const name = match[1]!;
+      const brace = text.indexOf("{", match.index);
+      declaredIn.set(name, [...(declaredIn.get(name) ?? []), path]);
+      headers.set(name, [
+        ...(headers.get(name) ?? []),
+        text.slice(match.index, brace === -1 ? match.index + 200 : brace),
+      ]);
+    }
+  }
+  const declared = new Set(declaredIn.keys());
+  const every = [...declared];
+  const perFile = new Map<string, Set<string>>();
+  for (const [path, text] of masked) {
+    perFile.set(path, new Set(every.filter((name) => mentions(text, name))));
+  }
+  const names = new Map<string, Set<string>>();
+  const subtypes = new Map<string, Set<string>>();
+  for (const [name, paths] of declaredIn) {
+    const named = new Set<string>();
+    for (const path of paths) for (const other of perFile.get(path) ?? []) named.add(other);
+    names.set(name, named);
+  }
+  for (const [name, spans] of headers) {
+    for (const base of every) {
+      if (base === name || !spans.some((span) => mentions(span, base))) continue;
+      subtypes.set(base, (subtypes.get(base) ?? new Set()).add(name));
+    }
+  }
+  const graph = { names, subtypes, declared };
+  graphCache.set(ctx, graph);
+  return graph;
+};
+
+const reachableFrom = (graph: SubjectGraph, start: string): Set<string> => {
+  const seen = new Set([start]);
+  const pending = [start];
+  while (pending.length > 0) {
+    const name = pending.pop()!;
+    for (const next of [...(graph.names.get(name) ?? []), ...(graph.subtypes.get(name) ?? [])]) {
+      if (seen.has(next)) continue;
+      seen.add(next);
+      pending.push(next);
+    }
+  }
+  return seen;
+};
+
+const resolveReachability = (ctx: ProbeContext, claim: FlowClaim): FlowClaimResolution => {
+  const to = claim.to;
+  if (!to) return { verdict: "unresolved", finding: "a reachability claim names no target" };
+  if (claim.expect !== "absent") {
+    // A POSITIVE reachability claim has no closed proof - finding one path says
+    // nothing about the path the story draws - so it fails closed rather than
+    // being answered by whatever the over-approximation happens to include.
+    return {
+      verdict: "unresolved",
+      finding: "reachability establishes absence only; a positive claim needs a resolved call",
+    };
+  }
+  const graph = subjectGraph(ctx);
+  const start = simpleName(claim.from.owner ?? claim.from.name);
+  const target = simpleName(to.owner ?? to.name);
+  if (!graph.declared.has(start) || !graph.declared.has(target)) {
+    const missing = graph.declared.has(start) ? target : start;
+    return {
+      verdict: "unresolved",
+      finding: `the tree declares no ${missing} to close a reachability check over`,
+    };
+  }
+  if (start === target) return { verdict: "contradicted", finding: `${start} reaches itself` };
+  return reachableFrom(graph, start).has(target)
+    ? {
+        verdict: "unresolved",
+        finding: `the closed symbol graph from ${start} reaches ${target}, so its absence is not established`,
+      }
+    : {
+        verdict: "confirmed",
+        finding: `no path in the subject-owned symbol graph takes ${start} to ${target}`,
       };
 };
 
@@ -1121,14 +1384,13 @@ export const resolveFlowClaim = (
       return resolveDataAccess(ctx, claim, checked.texts!, link.relation);
     case "closed_dispatch":
       return resolveClosedDispatch(ctx, claim, checked.texts!);
+    case "data_lineage":
+      if (!link || link.relation !== "read") {
+        return { verdict: "contradicted", finding: "data_lineage requires a typed read link" };
+      }
+      return resolveDataLineage(ctx, claim, checked.texts!);
     case "reachability":
-      // A closed negative reachability proof arrives with the shared-state
-      // fan-out in PR 7. Accepting a lexical approximation here would pre-authorize
-      // exactly the negative claims that phase has to prove.
-      return {
-        verdict: "unresolved",
-        finding: `matcher ${claim.matcher} has no closed-set resolver in this phase and therefore fails closed`,
-      };
+      return resolveReachability(ctx, claim);
   }
 };
 
@@ -1230,6 +1492,10 @@ export const gateFlowCandidate = (ctx: ProbeContext, candidate: Candidate) => {
         `link ${link.id}'s file evidence differs from the evidence the gate was asked to resolve`,
       );
     }
+    if (linkClaims.some((claim) => claim.matcher === "data_lineage")) {
+      const problem = lineageLabelProblem(ctx, link, linkClaims);
+      if (problem) return quarantined(candidate, `link ${link.id}: ${problem}`, "overturned");
+    }
     for (const claim of linkClaims) {
       if (claim.expect !== "present") {
         return quarantined(candidate, `link ${link.id} is rendered but its claim expects it to be absent`);
@@ -1237,7 +1503,10 @@ export const gateFlowCandidate = (ctx: ProbeContext, candidate: Candidate) => {
       if (!claim.to) {
         return quarantined(candidate, `link ${link.id} has no target symbol to resolve`);
       }
-      if (!stepNamesSymbol(flow, link.from, claim.from) || !stepNamesSymbol(flow, link.to, claim.to)) {
+      const [sourceStep, targetStep] = REVERSED.has(claim.matcher)
+        ? [link.to, link.from]
+        : [link.from, link.to];
+      if (!stepNamesSymbol(flow, sourceStep, claim.from) || !stepNamesSymbol(flow, targetStep, claim.to)) {
         return quarantined(
           candidate,
           `link ${link.id}'s source symbols do not agree with the rendered endpoint steps`,

@@ -21,6 +21,7 @@ import { throwWhereSiblingsReturn } from "./library/throw-where-siblings-return.
 import { unresolvedReferences } from "./library/unresolved-references.js";
 import { measuredScale } from "./library/measured-scale.js";
 import { flowJavaCli } from "./library/flow-java-cli.js";
+import { flowJavaSharedState } from "./library/flow-java-shared-state.js";
 import { flowJavaSpringHttp } from "./library/flow-java-spring-http.js";
 import { flowTypescriptHttpClient } from "./library/flow-typescript-http-client.js";
 import { tunedConfigProperties } from "./library/tuned-config-properties.js";
@@ -36,7 +37,9 @@ import type { Harvest } from "../harvest/types.js";
  * purpose: one entry family being absent must not read as another one finding
  * nothing - and the TypeScript client adapter is separate from the Spring one
  * for the same reason, because "no frontend here" and "the frontend calls
- * nothing this backend serves" are different findings.
+ * nothing this backend serves" are different findings. The shared-state adapter
+ * is the fourth, and it answers a question none of the other three ask: not what
+ * a request does, but what independently derives from the state one left behind.
  */
 export const PROBES: readonly Probe[] = [
   decidedButUnbuilt,
@@ -52,6 +55,7 @@ export const PROBES: readonly Probe[] = [
   flowJavaSpringHttp,
   flowJavaCli,
   flowTypescriptHttpClient,
+  flowJavaSharedState,
 ] as const;
 
 const git = (repo: string, args: string[]): string =>

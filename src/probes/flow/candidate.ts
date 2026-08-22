@@ -87,6 +87,26 @@ export interface CandidateInput {
    * reaches here: it is a named `absent` cut in its own adapter instead.
    */
   callers?: TransportCaller[];
+  /**
+   * What the caption says the story is traced FROM, when that is not the entry
+   * method. A lineage story starts at a record rather than at an execution, and
+   * "traced from SubmissionRepository.cleanPassInstants" would name one read
+   * where the figure draws several (#35, PR 7).
+   */
+  captionFrom?: string;
+  /**
+   * A sentence appended to the caption, admissible only alongside a closed
+   * `expect: absent` claim in `entryClaims` - the gate refuses an absence-shaped
+   * caption that carries none.
+   */
+  captionSuffix?: string;
+  /**
+   * A discriminator folded into the node id, for a producer that emits more than
+   * one candidate about the same entry symbol. The lineage adapter cuts one
+   * branch at a time and names each cut separately (#6), and two cuts on one
+   * record would otherwise mint the same element id.
+   */
+  idHint?: string;
   trace: TraceResult;
 }
 
@@ -108,8 +128,8 @@ const fileEvidence = (
 ): FileEvidence => ({ kind: "file", path, line_start, line_end, sha });
 
 const nodeId = (input: CandidateInput, entry: TypeSymbol, method: MethodSymbol): string =>
-  `${input.prefix}-${slug(entry.name)}-${slug(method.name)}-${shortHash(
-    `${entry.path}#${entry.qualified}.${method.name}/${method.params.length}`,
+  `${input.prefix}-${slug(entry.name)}-${slug(input.idHint ?? method.name)}-${shortHash(
+    `${entry.path}#${entry.qualified}.${method.name}/${method.params.length}${input.idHint ?? ""}`,
   )}`;
 
 /**
@@ -463,10 +483,13 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
     const from = ids.get(component.get(edge.from)!)!;
     const to = ids.get(component.get(edge.to)!)!;
     const relation = relationOf(edge);
+    // A LINEAGE arrow shares the `read` relation with an ordinary data access and
+    // means the opposite direction, so it is part of the key: two arrows that
+    // carry different claim orientations are never one relationship.
     const key =
       relation === "dispatch"
         ? `${from}|${to}|${relation}|${edge.label}`
-        : `${from}|${to}|${relation}`;
+        : `${from}|${to}|${relation}|${edge.lineage === true}`;
     groups.set(key, [...(groups.get(key) ?? []), edge]);
   }
 
@@ -493,7 +516,7 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
       // a set the tree closes, and this branch is the one the guard names". The
       // guard body is where that second half is written.
       add(fileEvidence(input.sha, edge.path, edge.line_start, edge.line_end));
-      for (const guard of edge.dispatch?.guards ?? []) {
+      for (const guard of [...(edge.dispatch?.guards ?? []), ...(edge.cites ?? [])]) {
         add(fileEvidence(input.sha, guard.path, guard.line_start, guard.line_end));
       }
     }
@@ -516,7 +539,11 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
       from,
       to,
       relation,
-      ...(relation === "return"
+      // Colour says WHERE IN THE STORY an arrow is (PR 6 decision 10). A LINEAGE
+      // arrow carries data out of the record to whatever derives from it, which
+      // is the same half of a story a response is, and the hand-made reference
+      // colours it exactly that way - so it needs no fifth legend entry.
+      ...(relation === "return" || edges[0]!.lineage === true
         ? { kind: "response" as const }
         : relation === "side_effect"
           ? { kind: "aside" as const }
@@ -533,20 +560,31 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
     // arrow ten independent re-resolutions have to agree with.
     for (const edge of edges) {
       const target = symbolRef(trace.landmarks.get(edge.to)!);
+      // A LINEAGE arrow is drawn the way the data travels and established by the
+      // call that runs the other way, so its claim names the reader as `from` and
+      // the record's read as `to` - the reverse of the arrow. The matcher says so
+      // rather than leaving the gate to infer a `read` arrow's orientation, and
+      // the gate checks endpoint agreement in that declared order.
+      const lineage = edge.lineage === true;
       claims.push({
         link_id: id,
         expect: "present",
-        matcher:
-          relation === "read" || relation === "write"
+        matcher: lineage
+          ? "data_lineage"
+          : relation === "read" || relation === "write"
             ? "data_access"
             : relation === "dispatch"
               ? "closed_dispatch"
               : "direct_call",
-        from: symbolRef(trace.landmarks.get(edge.from)!),
-        to: edge.receiver === undefined ? target : { ...target, receiver: edge.receiver.qualified },
+        from: lineage ? target : symbolRef(trace.landmarks.get(edge.from)!),
+        to: lineage
+          ? symbolRef(trace.landmarks.get(edge.from)!)
+          : edge.receiver === undefined
+            ? target
+            : { ...target, receiver: edge.receiver.qualified },
         evidence: [
           fileEvidence(input.sha, edge.path, edge.line_start, edge.line_end),
-          ...(edge.dispatch?.guards ?? []).map((guard) =>
+          ...[...(edge.dispatch?.guards ?? []), ...(edge.cites ?? [])].map((guard) =>
             fileEvidence(input.sha, guard.path, guard.line_start, guard.line_end),
           ),
         ],
@@ -638,16 +676,17 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
     id: nodeId(input, entryLandmark.type, entryLandmark.method),
     title: input.title,
     caption: caption(
-      clientSteps.length === 0
-        ? `${entryLandmark.type.name}.${entryLandmark.method.name}`
-        : `${clientSteps.map((step) => step.node).join(" and ")} across ${input.entryTitle}`,
+      input.captionFrom ??
+        (clientSteps.length === 0
+          ? `${entryLandmark.type.name}.${entryLandmark.method.name}`
+          : `${clientSteps.map((step) => step.node).join(" and ")} across ${input.entryTitle}`),
       terminalsInGraph.map((key) => {
         const landmark = trace.landmarks.get(key)!;
         return `${landmark.type.name}.${landmark.method.name}`;
       }),
       steps.length + clientSteps.length,
       links.length,
-    ),
+    ) + (input.captionSuffix === undefined ? "" : ` ${input.captionSuffix}`),
     orientation: "LR",
     evidence: [
       fileEvidence(

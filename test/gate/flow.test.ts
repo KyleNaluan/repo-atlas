@@ -67,6 +67,116 @@ const candidate = (
   flowClaims: FlowClaim[] = [directClaim()],
 ): Candidate => ({ probe_id: "flow-test", node, flow_claims: flowClaims });
 
+const lineageFiles: Record<string, string> = {
+  // Line 2-4 is the durable read; line 5-7 is the write. Every lineage claim
+  // cites the exact declaration, because "this file contains a SELECT somewhere"
+  // establishes nothing about the method the arrow names.
+  "Record.java": [
+    "class Record {",
+    "  List<Row> passed() {",
+    "    return jdbc.sql(\"SELECT * FROM submission WHERE outcome = 'PASSED'\").list();",
+    "  }",
+    "  void insert(Row row) {",
+    "    jdbc.sql(\"INSERT INTO submission (id) VALUES (:id)\").update();",
+    "  }",
+    "}",
+  ].join("\n"),
+  "Learned.java": [
+    "class Learned {",
+    "  private final Record record;",
+    "  State state() { return Criterion.evaluate(record.passed()); }",
+    "}",
+  ].join("\n"),
+  "Criterion.java": "class Criterion { static State evaluate(List<Row> rows) { return null; } }\n",
+  "Other.java": "class Other { static State derive() { return null; } }\n",
+};
+
+const span = (path: string, line_start: number, line_end: number): FileEvidence => ({
+  kind: "file",
+  path,
+  line_start,
+  line_end,
+  sha: SHA,
+});
+
+const CALL_SITE = span("Learned.java", 3, 3);
+const READ_DECL = span("Record.java", 2, 4);
+const WRITE_DECL = span("Record.java", 5, 7);
+
+const independenceClaim = (): FlowClaim => ({
+  expect: "absent",
+  matcher: "reachability",
+  from: { path: "Learned.java", owner: "Learned", name: "Learned" },
+  to: { path: "Other.java", owner: "Other", name: "Other" },
+  evidence: [span("Learned.java", 1, 1)],
+});
+
+const lineageCandidate = (
+  over: {
+    link?: Partial<FlowLink>;
+    claim?: Partial<FlowClaim>;
+    caption?: string;
+    extra?: FlowClaim[];
+  } = {},
+): Candidate => {
+  const link: FlowLink = {
+    id: "record-learned",
+    from: "record",
+    to: "learned",
+    relation: "read",
+    kind: "response",
+    label: "passed(...) where outcome = 'PASSED'",
+    evidence: [CALL_SITE, READ_DECL],
+    ...over.link,
+  };
+  const node: FlowNode = {
+    type: "flow",
+    id: "fl-record",
+    title: "One record, its derivations",
+    ...(over.caption === undefined ? {} : { caption: over.caption }),
+    evidence: [],
+    confidence: "attested",
+    interview_value: 0,
+    steps: [
+      { id: "record", node: "Record", detail: "passed()\\linsert(Row)", evidence: READ_DECL },
+      { id: "learned", node: "Learned", detail: "state()", evidence: CALL_SITE },
+      { id: "criterion", node: "Criterion", detail: "evaluate(List)", evidence: file("Criterion.java") },
+    ],
+    links: [
+      link,
+      {
+        id: "learned-criterion",
+        from: "learned",
+        to: "criterion",
+        relation: "call",
+        label: "evaluate(...)",
+        evidence: [CALL_SITE],
+      },
+    ],
+  };
+  const claims: FlowClaim[] = [
+    {
+      link_id: "record-learned",
+      expect: "present",
+      matcher: "data_lineage",
+      from: { path: "Learned.java", owner: "Learned", name: "state", arity: 0 },
+      to: { path: "Record.java", owner: "Record", name: "passed", arity: 0 },
+      evidence: [CALL_SITE, READ_DECL],
+      ...over.claim,
+    },
+    {
+      link_id: "learned-criterion",
+      expect: "present",
+      matcher: "direct_call",
+      from: { path: "Learned.java", owner: "Learned", name: "state", arity: 0 },
+      to: { path: "Criterion.java", owner: "Criterion", name: "evaluate", arity: 1 },
+      evidence: [CALL_SITE],
+    },
+    ...(over.extra ?? []),
+  ];
+  return { probe_id: "flow-java-shared-state", node, flow_claims: claims };
+};
+
 describe("the atomic Flow gate", () => {
   it("promotes a complete direct-call chain to verified", () => {
     const result = gateCandidate(contextFor(directFiles), candidate());
@@ -230,15 +340,108 @@ describe("the atomic Flow gate", () => {
     expect(result.finding).toContain("legacy calls_next");
   });
 
-  it("fails closed on reachability until its closed negative adapter lands", () => {
-    // A reachability claim is caption-level by construction: it states something
-    // about the whole graph, so it names no link.
-    const flow = directFlow({ caption: "Nothing else reads this record." });
-    const claim = { ...directClaim({ matcher: "reachability" }), link_id: undefined, expect: "absent" as const };
-    const result = gateCandidate(contextFor(directFiles), candidate(flow, [directClaim(), claim]));
+  it("promotes a data-lineage arrow drawn from the record to its reader", () => {
+    // The ONE reversed arrow in the engine. The claim names the reader as `from`
+    // and the record's read as `to` - the opposite of the arrow it is attached to -
+    // and the gate checks endpoint agreement in that declared order.
+    const result = gateCandidate(contextFor(lineageFiles), lineageCandidate());
+    expect(result.verdict).toBe("confirmed");
+    expect(result.node.confidence).toBe("verified");
+  });
+
+  it("refuses a lineage arrow whose named read writes no SELECT", () => {
+    // A method name proves nothing about durable storage, so the gate re-reads the
+    // declaration the claim cites: this one is the record's INSERT.
+    const result = gateCandidate(
+      contextFor(lineageFiles),
+      lineageCandidate({
+        link: { label: "insert(...)", evidence: [CALL_SITE, WRITE_DECL] },
+        claim: {
+          to: { path: "Record.java", owner: "Record", name: "insert", arity: 1 },
+          evidence: [CALL_SITE, WRITE_DECL],
+        },
+      }),
+    );
+    expect(result.verdict).toBe("overturned");
+    expect(result.finding).toContain("writes no SELECT");
+  });
+
+  it("refuses a lineage arrow labelled with a predicate its SQL does not write", () => {
+    // A lineage label carries literal SQL predicates, and a predicate is a claim
+    // about what the reader can see - the whole insight this archetype exists to
+    // carry - so the label is checked against the SQL the arrow cites.
+    const result = gateCandidate(
+      contextFor(lineageFiles),
+      lineageCandidate({
+        link: { label: "passed(...) where outcome = 'FAILED'", evidence: [CALL_SITE, READ_DECL] },
+      }),
+    );
+    expect(result.verdict).toBe("overturned");
+    expect(result.finding).toContain("does not write");
+  });
+
+  it("refuses a lineage claim whose endpoints run the way the arrow does", () => {
+    // Swapping the claim to match the arrow's direction is exactly the mistake the
+    // declared orientation exists to catch: it would assert that the record calls
+    // the reader.
+    const result = gateCandidate(
+      contextFor(lineageFiles),
+      lineageCandidate({
+        claim: {
+          from: { path: "Record.java", owner: "Record", name: "passed", arity: 0 },
+          to: { path: "Learned.java", owner: "Learned", name: "state", arity: 0 },
+        },
+      }),
+    );
+    expect(result.verdict).not.toBe("confirmed");
+    expect(result.node.confidence).toBe("absent");
+  });
+
+  it("confirms a closed negative when the symbol graph cannot reach the other derivation", () => {
+    const result = gateCandidate(
+      contextFor(lineageFiles),
+      lineageCandidate({
+        caption: "No derivation drawn here reaches another.",
+        extra: [independenceClaim()],
+      }),
+    );
+    expect(result.verdict).toBe("confirmed");
+    expect(result.node.confidence).toBe("verified");
+  });
+
+  it("refuses the closed negative when the reader can reach the other derivation", () => {
+    // THE MUTANT THAT MATTERS: one cross-branch reference, and the negative is no
+    // longer closed. It is `unresolved` rather than `contradicted` because an
+    // over-approximation that reaches something has not proved a read exists - only
+    // that it cannot rule one out - and the whole Flow is quarantined either way.
+    const files = {
+      ...lineageFiles,
+      // On the SAME line, so every cited span still points where it did: the
+      // mutant is one cross-branch reference, not a shifted file.
+      "Learned.java": lineageFiles["Learned.java"]!.replace(
+        "private final Record record;",
+        "private final Record record; private final Other other;",
+      ),
+    };
+    const result = gateCandidate(
+      contextFor(files),
+      lineageCandidate({
+        caption: "No derivation drawn here reaches another.",
+        extra: [independenceClaim()],
+      }),
+    );
     expect(result.verdict).toBe("unresolved");
     expect(result.node.confidence).toBe("absent");
-    expect(result.finding).toContain("fails closed");
+    expect(result.finding).toContain("reaches Other");
+  });
+
+  it("refuses a POSITIVE reachability claim, which has no closed proof", () => {
+    const result = gateCandidate(
+      contextFor(lineageFiles),
+      lineageCandidate({ extra: [{ ...independenceClaim(), expect: "present" as const }] }),
+    );
+    expect(result.verdict).toBe("unresolved");
+    expect(result.finding).toContain("absence only");
   });
 
   it("refuses a closed_dispatch claim that carries no set to re-resolve", () => {

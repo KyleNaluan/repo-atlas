@@ -833,6 +833,123 @@ public class PickRepository {
     expect(reason).toContain("PickService.pick");
   }, 60_000);
 
+  it("names a direct call inherited from a subject supertype, but traces it when the receiver's own type declares it", async () => {
+    // The base-service pattern: a controller calls, through a field typed as the
+    // subtype, a method the subtype INHERITS from a subject-owned base class.
+    // `declaredMethod` follows subject-owned supertypes, so the producer CAN
+    // resolve the call - and before the fix it drew the edge and traced on into a
+    // durable write, emitting a verified Flow. But the gate re-types a receiver
+    // only from the declarations in the calling file: it searches for a
+    // `BaseReportService` variable, the field is a `ReportService`, and the arrow
+    // to the supertype-owned method never re-resolves. The verified Flow came back
+    // OVERTURNED - a real chain as a confusing quarantine - which is the exact
+    // divergence the "resolve no further than the gate can re-resolve" rule names.
+    const inherited = contextFor({
+      "src/main/java/app/web/ReportController.java": `package app.web;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class ReportController {
+  private final ReportService service;
+
+  ReportController(ReportService service) {
+    this.service = service;
+  }
+
+  @PostMapping("/report")
+  public String report() {
+    service.record();
+    return "ok";
+  }
+}
+`,
+      "src/main/java/app/web/BaseReportService.java": `package app.web;
+
+public class BaseReportService {
+  protected final ReportRepository repository;
+
+  BaseReportService(ReportRepository repository) {
+    this.repository = repository;
+  }
+
+  void record() {
+    repository.save();
+  }
+}
+`,
+      "src/main/java/app/web/ReportService.java": `package app.web;
+
+public class ReportService extends BaseReportService {
+  ReportService(ReportRepository repository) {
+    super(repository);
+  }
+}
+`,
+      "src/main/java/app/web/ReportRepository.java": `package app.web;
+
+public class ReportRepository {
+  void save() {}
+}
+`,
+    });
+    const reason = absentReason(only(await runAdapter("flow-java-spring-http", inherited)));
+    expect(reason).toMatch(/^unresolved_receiver_type:/);
+    expect(reason).toContain("record");
+    expect(reason).toContain("ReportService");
+    expect(reason).toContain("BaseReportService");
+
+    // The honest counterpart pins the limit rather than merely pinning a failure:
+    // move `record()` onto ReportService's OWN type and the same call site is a
+    // traced edge the gate confirms. Nothing about the receiver or the terminal
+    // changed - only whether the declaration the producer resolved is one the gate
+    // can independently re-resolve from the calling file.
+    const owned = contextFor({
+      "src/main/java/app/web/ReportController.java": `package app.web;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class ReportController {
+  private final ReportService service;
+
+  ReportController(ReportService service) {
+    this.service = service;
+  }
+
+  @PostMapping("/report")
+  public String report() {
+    service.record();
+    return "ok";
+  }
+}
+`,
+      "src/main/java/app/web/ReportService.java": `package app.web;
+
+public class ReportService {
+  private final ReportRepository repository;
+
+  ReportService(ReportRepository repository) {
+    this.repository = repository;
+  }
+
+  void record() {
+    repository.save();
+  }
+}
+`,
+      "src/main/java/app/web/ReportRepository.java": `package app.web;
+
+public class ReportRepository {
+  void save() {}
+}
+`,
+    });
+    const candidate = only(await runAdapter("flow-java-spring-http", owned));
+    expect((candidate.node as FlowNode).confidence).toBe("verified");
+    expect(gateCandidate(owned, candidate).verdict).toBe("confirmed");
+  }, 60_000);
+
   it("cuts a cycle rather than following it, and says the recursion is why", async () => {
     const ctx = contextFor({
       "src/main/java/app/cli/Loop.java": `package app.cli;

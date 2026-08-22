@@ -459,6 +459,25 @@ const hasForeignSupertype = (index: JavaIndex, type: TypeSymbol): boolean =>
   [...type.supertypes].some((s) => uniqueType(index, s) === null);
 
 /**
+ * Whether a resolved declaration lives on a subject supertype rather than the
+ * receiver's own type - an inherited direct call.
+ *
+ * `declaredMethod` follows subject-owned supertypes so a chained accessor and an
+ * inherited call both resolve, but the gate re-types a receiver only from the
+ * declarations in the calling file: for a bare/`this` receiver its owner-name
+ * check compares the caller's type against the supertype and fails, and for a
+ * field or local it searches for a declaration of the supertype's name and never
+ * finds the subtype-typed variable. So an arrow whose target is owned by a
+ * supertype is one the gate cannot confirm. Drawing it would emit a verified
+ * Flow the gate then overturns - a real chain returning as a confusing
+ * quarantine - so this phase names the limit and fails closed on the same line,
+ * exactly as the chained-receiver limit does. Recovering these chains needs the
+ * gate's receiver resolution to become subtype-aware, which is a later phase.
+ */
+const inheritedDeclaration = (owner: TypeSymbol, receiver: TypeSymbol): boolean =>
+  owner.qualified !== receiver.qualified || owner.path !== receiver.path;
+
+/**
  * Trace one entry method to its terminals under the bounds above.
  *
  * The traversal is deliberately whole-graph rather than single-path: a real
@@ -658,6 +677,14 @@ export const traceFrom = (
 
       if (chainedReceiver) {
         chainGap();
+        continue;
+      }
+      if (inheritedDeclaration(found.type, target)) {
+        gap(
+          "unresolved_receiver_type",
+          key,
+          `${key} calls ${name} on ${target.name}, but the declaration is inherited from the supertype ${found.type.name}; the gate re-types a receiver only from the declarations in the calling file, so an arrow whose target is owned by a supertype is one it cannot confirm`,
+        );
         continue;
       }
       const targetKey = methodKey(found.type, found.method);

@@ -7,8 +7,8 @@
     "route": "POST /api/attempts/{}/submissions",
     "candidate_id": "fl-http-attemptcontroller-submit-7633fd7a",
     "outcome": "absent",
-    "reason": "unresolved_dispatch: backend/src/main/java/com/sweprep/backend/attempt/AttemptService.java#AttemptService.recordSubmission/3 calls ExerciseCatalog.byId through an interface, and this phase closes no implementation set (plus 9 further unresolved calls: unresolved_receiver_type x8, unresolved_dispatch x1)",
-    "phase": "Ten calls on this route's landmarks are unresolved at this phase: the registry dispatch through ExerciseCatalog the accepted plan closes in PR 5, which leads the reason as the load-bearing cut, and receivers held in `var` locals whose inferred type this phase does not compute and whose arrow the gate could not re-resolve either. It is cut rather than drawn shorter."
+    "reason": "unresolved_dispatch: backend/src/main/java/com/sweprep/backend/attempt/AttemptService.java#AttemptService.recordSubmission/3 calls ExerciseCatalog.byId through an interface, and this phase closes no implementation set (plus 12 further unresolved calls: unresolved_receiver_type x11, unresolved_dispatch x1)",
+    "phase": "Thirteen calls on this route's landmarks are unresolved at this phase: the registry dispatch through ExerciseCatalog the accepted plan closes in PR 5, which leads the reason as the load-bearing cut, receivers held in `var` locals whose inferred type this phase does not compute, and direct calls resolved only through a subject supertype - `Exercise.id` and `Exercise.title` inherited from `Content` - whose arrow the gate could not re-resolve from the calling file either. It is cut rather than drawn shorter."
   },
   "adapters": [
     {

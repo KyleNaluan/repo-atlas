@@ -23,6 +23,9 @@ import { measuredScale } from "./library/measured-scale.js";
 import { flowJavaCli } from "./library/flow-java-cli.js";
 import { flowJavaSharedState } from "./library/flow-java-shared-state.js";
 import { flowJavaSpringHttp } from "./library/flow-java-spring-http.js";
+import { flowJavaSpringMessage } from "./library/flow-java-spring-message.js";
+import { flowJavaSpringScheduled } from "./library/flow-java-spring-scheduled.js";
+import { flowSystemdUnit } from "./library/flow-systemd-unit.js";
 import { flowTypescriptHttpClient } from "./library/flow-typescript-http-client.js";
 import { tunedConfigProperties } from "./library/tuned-config-properties.js";
 import { parseJava, type SyntaxNode } from "./java.js";
@@ -33,13 +36,17 @@ import type { Harvest } from "../harvest/types.js";
 /**
  * #5's eight discovery probes, plus the node producers nothing else mints:
  * `unresolved-references` (#6 point 3), `measured-scale` (the stat tiles) and
- * the four Flow adapters (#35). Each Flow adapter is listed separately on
+ * the seven Flow adapters (#35). Each Flow adapter is listed separately on
  * purpose: one entry family being absent must not read as another one finding
  * nothing - and the TypeScript client adapter is separate from the Spring one
  * for the same reason, because "no frontend here" and "the frontend calls
  * nothing this backend serves" are different findings. The shared-state adapter
- * is the fourth, and it answers a question none of the other three ask: not what
- * a request does, but what independently derives from the state one left behind.
+ * answers a question none of the request-side ones ask: not what a request does,
+ * but what independently derives from the state one left behind. PR 8 adds the
+ * three entry families that have no caller in the tree at all - a clock, a
+ * broker, and a systemd unit - and each is again its own adapter, so "runs no
+ * batch work", "consumes no messages" and "ships no unit files" stay three
+ * different findings on the run's own report.
  */
 export const PROBES: readonly Probe[] = [
   decidedButUnbuilt,
@@ -56,6 +63,9 @@ export const PROBES: readonly Probe[] = [
   flowJavaCli,
   flowTypescriptHttpClient,
   flowJavaSharedState,
+  flowJavaSpringScheduled,
+  flowJavaSpringMessage,
+  flowSystemdUnit,
 ] as const;
 
 const git = (repo: string, args: string[]): string =>

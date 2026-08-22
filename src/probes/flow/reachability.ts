@@ -80,6 +80,60 @@ export const maskedJava = (source: string): string => {
   return out.join("");
 };
 
+/**
+ * The source with COMMENTS blanked and string literals left intact, length
+ * preserved (#35, PR 8).
+ *
+ * The other half of the same idea, for a different question. `maskedJava` asks
+ * "where is code", so it blanks strings too - and that is exactly wrong when the
+ * thing being read IS a string the code declares: a `@Scheduled(cron = "0 0 9 *
+ * * *")` masked that way reports an empty schedule, and the gate would refuse a
+ * correct trigger. What must not be readable is a commented-out annotation, so
+ * comments alone are blanked here.
+ */
+export const withoutComments = (source: string): string => {
+  const out = source.split("");
+  const blank = (from: number, to: number): void => {
+    for (let i = from; i < to && i < out.length; i += 1) if (out[i] !== "\n") out[i] = " ";
+  };
+  let i = 0;
+  while (i < source.length) {
+    const two = source.slice(i, i + 2);
+    if (source.slice(i, i + 3) === '"""') {
+      const end = source.indexOf('"""', i + 3);
+      i = end === -1 ? source.length : end + 3;
+      continue;
+    }
+    if (two === "//") {
+      const end = source.indexOf("\n", i);
+      const stop = end === -1 ? source.length : end;
+      blank(i, stop);
+      i = stop;
+      continue;
+    }
+    if (two === "/*") {
+      const end = source.indexOf("*/", i + 2);
+      const stop = end === -1 ? source.length : end + 2;
+      blank(i, stop);
+      i = stop;
+      continue;
+    }
+    if (source[i] === '"' || source[i] === "'") {
+      const quote = source[i]!;
+      let j = i + 1;
+      while (j < source.length && source[j] !== quote) {
+        if (source[j] === "\\") j += 1;
+        if (source[j] === "\n") break;
+        j += 1;
+      }
+      i = Math.min(j + 1, source.length);
+      continue;
+    }
+    i += 1;
+  }
+  return out.join("");
+};
+
 const escaped = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**

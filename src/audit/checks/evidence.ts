@@ -12,6 +12,7 @@ import { resolveComment, resolveIssue } from "../../harvest/cache.js";
 import type { IssueStore } from "../issue-store.js";
 import { flowTopologyProblems } from "../../gate/flow.js";
 import { READ_VERB, WRITE_VERB } from "../../probes/flow/sql.js";
+import { launchClassTokens } from "../../probes/flow/unit.js";
 import type {
   Atlas,
   AtlasNode,
@@ -377,12 +378,30 @@ const linkProblem = (ctx: AuditContext, flow: FlowNode, link: FlowLink): string 
 
   if (link.relation === "transport") {
     const contract = transportContract(flow, link);
-    if (!contract) {
-      return `${flow.id} link ${link.id} is transport but does not name an HTTP method and path`;
+    if (contract) {
+      return transportSupported(texts, contract)
+        ? null
+        : `${flow.id} link ${link.id} cites a route that does not establish ${contract.method} ${contract.path}`;
     }
-    return transportSupported(texts, contract)
+    // A transport arrow is the edge that leaves the process, and PR 8 adds the
+    // second way a subject writes one: a systemd unit whose `ExecStart` creates
+    // the process the rest of the figure runs in. The check is the same shape as
+    // the HTTP one - the cited evidence has to establish the endpoint the arrow
+    // lands on - and it reads the command through `launchClassTokens`, the same
+    // definition the producer and the gate resolve against, rather than a fourth
+    // copy that could drift the way the storage-verb list did.
+    const exec = /^\s*ExecStart\s*=\s*(.*)$/m.exec(texts.join("\n"));
+    if (!exec) {
+      return `${flow.id} link ${link.id} is transport but names neither an HTTP method and path nor a unit ExecStart`;
+    }
+    const target = flow.steps.find((step) => step.id === link.to);
+    const landing = `${target?.node ?? ""} ${target?.detail ?? ""}`;
+    const launched = launchClassTokens(exec[1] ?? "").filter((token) =>
+      landing.includes(token.slice(token.lastIndexOf(".") + 1)),
+    );
+    return launched.length > 0
       ? null
-      : `${flow.id} link ${link.id} cites a route that does not establish ${contract.method} ${contract.path}`;
+      : `${flow.id} link ${link.id} cites an ExecStart that launches nothing the step it points at names`;
   }
 
   const target = flow.steps.find((step) => step.id === link.to);

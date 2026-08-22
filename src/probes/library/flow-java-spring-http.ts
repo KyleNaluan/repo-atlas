@@ -16,11 +16,10 @@ import { flowCandidate, type TransportCaller } from "../flow/candidate.js";
 import { httpEntries, type HttpEntry } from "../flow/entries.js";
 import { clientIndex } from "../flow/http-client.js";
 import { slug } from "../id.js";
+import { declaresSpring } from "../flow/stereotype.js";
 import { javaIndex } from "../flow/symbols.js";
 import { traceFrom } from "../flow/trace.js";
 import type { Candidate, FlowClaim, Probe, ProbeContext } from "../types.js";
-
-const SPRING_IMPORT = /^\s*import\s+org\.springframework\./m;
 
 /**
  * The client modules that call one route, matched on verb AND normalized path.
@@ -79,8 +78,7 @@ export const flowJavaSpringHttp: Probe = {
   toolchain: "java",
   applies: async (ctx) => {
     const index = await javaIndex(ctx);
-    const runsSpring = index.paths.some((path) => SPRING_IMPORT.test(ctx.read(path) ?? ""));
-    return runsSpring
+    return declaresSpring(index.paths, ctx.read)
       ? { ok: true }
       : {
           ok: false,

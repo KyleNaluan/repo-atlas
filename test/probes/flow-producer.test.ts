@@ -15,11 +15,8 @@
  * than an echo of the producer.
  */
 import { describe, expect, it } from "vitest";
-import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { PROBES, runProbes, treeContext } from "../../src/probes/registry.js";
+import { PROBES, runProbes } from "../../src/probes/registry.js";
+import { contextFor, only, runAdapter } from "./flow-subject.js";
 import { gateCandidate } from "../../src/gate/gate.js";
 import { javaIndex } from "../../src/probes/flow/symbols.js";
 import { httpEntries, mainEntries } from "../../src/probes/flow/entries.js";
@@ -29,65 +26,6 @@ import { flowArchetype } from "../../src/rank/flow.js";
 import { presentTenseClaims, resolveFileEvidence } from "../../src/audit/checks/evidence.js";
 import type { Candidate, ProbeContext, ProbeOutcome } from "../../src/probes/types.js";
 import type { Atlas, FlowNode } from "../../src/schema/types.js";
-import type { Harvest } from "../../src/harvest/types.js";
-
-/* ---------------------------------------------------------- fixtures */
-
-const buildTree = (files: Record<string, string>): { path: string; sha: string } => {
-  const path = mkdtempSync(join(tmpdir(), "repo-atlas-flow-"));
-  for (const [name, contents] of Object.entries(files)) {
-    mkdirSync(dirname(join(path, name)), { recursive: true });
-    writeFileSync(join(path, name), contents, "utf8");
-  }
-  const git = (args: string[]) =>
-    execFileSync("git", args, { cwd: path, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-  git(["init", "--quiet", "--initial-branch=main"]);
-  git(["config", "user.email", "flow@test.invalid"]);
-  git(["config", "user.name", "flow test"]);
-  git(["config", "commit.gpgsign", "false"]);
-  git(["add", "-A"]);
-  git(["commit", "--quiet", "-m", "subject"]);
-  return { path, sha: git(["rev-parse", "HEAD"]).trim() };
-};
-
-const contextFor = (files: Record<string, string>): ProbeContext => {
-  const tree = buildTree(files);
-  const harvest = {
-    harvest_version: "1.0.0",
-    subject: {
-      owner: "o",
-      repo: "r",
-      url: "https://example.invalid/o/r",
-      branch: "main",
-      sha: tree.sha,
-      read_on: "2026-08-21",
-      visibility: "public",
-    },
-    issues: [],
-    scale: { files: 0, lines: 0, commits: 1, first_commit: null, last_commit: null, days: null },
-    density: {
-      closed_issues_with_resolution_comment: { value: 0, of: 0 },
-      comment_to_body_ratio: { value: 0 },
-      source_files_citing_issues: { value: 0, of: 0 },
-      adr_directory: { value: false },
-    },
-    sources: [],
-    private_split: { declared: false, readable_at_harvest: false },
-    memory_files: [],
-  } as unknown as Harvest;
-  return treeContext(harvest, tree.path);
-};
-
-const runAdapter = async (id: string, ctx: ProbeContext): Promise<Candidate[]> => {
-  const probe = PROBES.find((p) => p.id === id)!;
-  const applies = probe.applies ? await probe.applies(ctx) : { ok: true as const };
-  return applies.ok ? probe.run(ctx) : [];
-};
-
-const only = <T>(list: T[]): T => {
-  expect(list).toHaveLength(1);
-  return list[0]!;
-};
 
 /* ------------------------------------------------------ the fixtures */
 

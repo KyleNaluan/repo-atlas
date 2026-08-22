@@ -385,6 +385,41 @@ describe("a request signal wins the archetype even alongside a read fan-out", ()
     expect(flowArchetype(mixedTopology("fl-mixed", 5).node)).toBe("request_response");
   });
 
+  it("does not read a process-boundary crossing as a request signal (#35, PR 8)", () => {
+    // Until PR 8 the request signal was the `transport` RELATION, which was the
+    // same thing while HTTP was the only boundary a Flow crossed. A systemd unit
+    // launching a program crosses one too, and a timer firing is not a request -
+    // so the signal is the `request` KIND the producer stamps on an HTTP arrow
+    // and deliberately withholds from a launch arrow. Reading the relation would
+    // hand a cron job the request/response slot #39 reserves for a verified
+    // request signal.
+    const launched: FlowNode = {
+      type: "flow",
+      id: "fl-unit",
+      title: "cue.service starts a program",
+      evidence: [],
+      confidence: "verified",
+      interview_value: 0,
+      steps: [
+        { id: "unit", node: "cue.service" },
+        { id: "main", node: "Tool" },
+        { id: "store", node: "CueRepository" },
+      ],
+      links: [
+        { id: "unit-main", from: "unit", to: "main", relation: "transport", evidence: [] },
+        { id: "main-store", from: "main", to: "store", relation: "write", evidence: [] },
+      ],
+    };
+    expect(flowArchetype(launched)).toBe("unknown");
+    // An HTTP transport arrow is unchanged: the producer stamps it `request`.
+    expect(
+      flowArchetype({
+        ...launched,
+        links: [{ ...launched.links![0]!, kind: "request" }, launched.links![1]!],
+      }),
+    ).toBe("request_response");
+  });
+
   it("still reads the same fan-out as lineage once the request entry is removed", () => {
     const flow = mixedTopology("fl-mixed", 5).node;
     const lineageOnly: FlowNode = {
@@ -455,6 +490,10 @@ describe("a Flow with no entry signal is unknown, and claims no preferred slot",
     const projection = flowScoringProjection(rawCallGraph("fl-raw", 5).node);
     expect(projection.archetype).toBe("unknown");
     expect(projection.entry_kind).toBe("unknown");
+    // And it says WHY, rather than leaving a bare "unknown" to be interpreted.
+    // #39's archetype set is closed at two, so an entry family with no slot in it
+    // is a different fact from a topology with no entry at all (#35, PR 8).
+    expect(projection.unclassified_reason).toContain("no request signal");
   });
 
   it("fills a Flow slot the preferred archetypes leave genuinely open", () => {

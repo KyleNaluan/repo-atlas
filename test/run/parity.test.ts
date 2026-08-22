@@ -75,6 +75,14 @@ const measured = read<{
     routes_with_a_verified_caller: number;
   };
   adapters: FlowProducerAdapter[];
+  entry_adapters: {
+    spring_scheduled_annotations: number;
+    spring_listener_annotations: number;
+    systemd_unit_files: string[];
+    units_stitched_to_a_subject_main: number;
+    exec_start_read: string;
+    reference_flows_unchanged: boolean;
+  };
 }>("swe-prep.flow-producer.json");
 
 const countByType = (a: Atlas) =>
@@ -318,6 +326,50 @@ describe("where the engine falls short, and by how much", () => {
     // than spliced into the coding path, so nothing claims they run a runner.
     expect(measured.reference_narrative.components).toContain("AnswerKeyGrader");
     expect(measured.reference_narrative.components).toContain("SelfCheckGrader");
+  });
+
+  it("grows breadth without moving the first subject's yield (#35, PR 8)", () => {
+    // PR 8 adds three entry families that have no caller in the tree - a clock, a
+    // broker and a systemd unit - and the point of measuring it here is that
+    // breadth must not be paid for out of the two reference archetypes. It is
+    // not: every number the two describe blocks above assert is unchanged, and
+    // the three new adapters contribute exactly one candidate, an absent cut that
+    // names itself.
+    const scheduled = measured.adapters.find((a) => a.probe_id === "flow-java-spring-scheduled")!;
+    const message = measured.adapters.find((a) => a.probe_id === "flow-java-spring-message")!;
+    const systemd = measured.adapters.find((a) => a.probe_id === "flow-systemd-unit")!;
+
+    // RAN AND FOUND NOTHING, which is not the same finding as "did not apply".
+    // Spring is here, so both Spring adapters applied; this subject declares no
+    // clock trigger and no listener. Report 3.1 measured the same two zeros.
+    for (const adapter of [scheduled, message]) {
+      expect(adapter.status).toBe("ran");
+      expect(adapter.entries).toBe(0);
+      expect(adapter.verified_by_the_gate).toHaveLength(0);
+    }
+    expect(measured.entry_adapters.spring_scheduled_annotations).toBe(0);
+    expect(measured.entry_adapters.spring_listener_annotations).toBe(0);
+
+    // The systemd surface report 3.1 flagged - "filenames alone do not establish
+    // a business Flow" - resolves to exactly that. One .service, one .timer, and
+    // an ExecStart this reader will not follow: an install-time placeholder in
+    // front of a wrapper script. It is CUT AND NAMED, never drawn and never
+    // silent, which is the whole reason the adapter is registered.
+    expect(systemd.status).toBe("ran");
+    expect(systemd.entries).toBe(1);
+    expect(systemd.verified_by_the_gate).toHaveLength(0);
+    expect(systemd.cut_by_reason).toEqual({ unresolved_exec_target: 1 });
+    expect(measured.entry_adapters.systemd_unit_files).toHaveLength(2);
+    expect(measured.entry_adapters.units_stitched_to_a_subject_main).toBe(0);
+    expect(measured.entry_adapters.exec_start_read).toContain("daily-cue.sh");
+    expect(measured.entry_adapters.reference_flows_unchanged).toBe(true);
+
+    // And the CLI adapter's own yield did not move under the new stitch: two
+    // mains inventoried, one verified, one with no terminal to reach.
+    const cli = measured.adapters.find((a) => a.probe_id === "flow-java-cli")!;
+    expect(cli.entries).toBe(2);
+    expect(cli.verified_by_the_gate).toHaveLength(1);
+    expect(cli.cut_by_reason).toEqual({ no_terminal_reached: 1 });
   });
 
   it("renders no boundaries, because the only probe that finds them finds test-file noise", () => {

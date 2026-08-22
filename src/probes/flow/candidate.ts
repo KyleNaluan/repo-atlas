@@ -63,6 +63,27 @@ export interface TransportCaller {
   protocol: { method: HttpVerb; path: string };
 }
 
+/**
+ * One systemd unit that LAUNCHES a program entry, drawn as an arrow into it.
+ *
+ * Same shape and same reason as `TransportCaller` above: PR 4's CLI adapter drew
+ * a `main` with no answer to "and what starts it", and a unit file in the tree is
+ * a real answer rather than an invented one. The arrow's evidence names BOTH ends
+ * - the `ExecStart` directive and the `main` declaration - because a launch is a
+ * claim about an agreement between two files, not about either one alone.
+ */
+export interface LaunchCaller {
+  /** The rendered box title and step id source: the unit's own file name. */
+  unit: string;
+  path: string;
+  /** The `ExecStart` directive's line span, which is what the claim cites. */
+  exec: { line_start: number; line_end: number; command: string };
+  /** The fully-qualified class the command names. */
+  target: string;
+  /** What else the unit declares about the trigger, e.g. an `OnCalendar` timer. */
+  detail?: string;
+}
+
 export interface CandidateInput {
   probeId: string;
   /** Id prefix, so two adapters cannot mint the same element id. */
@@ -88,6 +109,17 @@ export interface CandidateInput {
    */
   callers?: TransportCaller[];
   /**
+   * The systemd units that start this entry, prepended as launch arrows.
+   *
+   * Each arrives already resolved to a fully-qualified class the subject declares
+   * with a real `main`; a unit whose command could not be pinned never reaches
+   * here, it is a named cut in the systemd adapter instead. It is a LIST because
+   * a subject may start one program from two units - a service and a one-shot
+   * migration, say - and drawing only the first would drop the second in silence,
+   * which is the one thing #6 forbids everywhere else in this producer.
+   */
+  launchers?: LaunchCaller[];
+  /**
    * What the caption says the story is traced FROM, when that is not the entry
    * method. A lineage story starts at a record rather than at an execution, and
    * "traced from SubmissionRepository.cleanPassInstants" would name one read
@@ -109,6 +141,22 @@ export interface CandidateInput {
   idHint?: string;
   trace: TraceResult;
 }
+
+/** One long line broken at token boundaries, so a wide box becomes a tall one. */
+const wrapped = (text: string, width = 52): string[] => {
+  const out: string[] = [];
+  let line = "";
+  for (const token of text.split(" ")) {
+    if (line !== "" && `${line} ${token}`.length > width) {
+      out.push(line);
+      line = token;
+      continue;
+    }
+    line = line === "" ? token : `${line} ${token}`;
+  }
+  if (line !== "") out.push(line);
+  return out;
+};
 
 const signature = (method: MethodSymbol): string =>
   `${method.name}(${method.params.map((p) => p.type).join(", ")})`;
@@ -671,20 +719,79 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
     }
   }
 
+  // The launch seam. A `main` is a story with no beginning until something in the
+  // tree says what starts it, and a systemd unit says exactly that - so the box is
+  // the unit file and the arrow is the `ExecStart` line, not a narrated
+  // "deployment" step. It is a `transport` relation because it is the edge that
+  // creates the process the rest of the figure runs inside, and unlike an HTTP
+  // transport arrow it carries no `request` kind: a timer firing is not a request,
+  // and #39 reserves the request/response archetype for a verified request signal.
+  const launchSteps: FlowStep[] = [];
+  // Every step id in the figure is used verbatim as a rendered element id, so a
+  // unit whose name slugs onto a traced box's id would produce invalid HTML and
+  // break the audit checks that resolve nodes by id. Taken from the ids already
+  // minted rather than assumed to be distinct.
+  const takenStepIds = new Set([...ids.values(), ...(input.callers ?? []).map((c) => c.id)]);
+  for (const launcher of input.launchers ?? []) {
+    let id = slug(launcher.unit);
+    for (let n = 2; takenStepIds.has(id); n += 1) id = `${slug(launcher.unit)}-${n}`;
+    takenStepIds.add(id);
+    const execEvidence = fileEvidence(
+      input.sha,
+      launcher.path,
+      launcher.exec.line_start,
+      launcher.exec.line_end,
+    );
+    launchSteps.push({
+      id,
+      node: launcher.unit,
+      // The command verbatim, WRAPPED at token boundaries rather than shortened.
+      // `rankdir=LR` lays a long line out as width, and a deployment command line
+      // is longer than any method signature beside it - but truncating it would
+      // hide the half of the directive the arrow's claim rests on, which is the
+      // trade PR 6 refused for edge labels and refuses again here.
+      detail: [
+        ...wrapped(`ExecStart=${launcher.exec.command}`),
+        ...(launcher.detail === undefined ? [] : [launcher.detail]),
+      ].join("\\l"),
+      evidence: execEvidence,
+    });
+    const linkId = `${id}-to-${entryStepId}`;
+    links.push({
+      id: linkId,
+      from: id,
+      to: entryStepId,
+      relation: "transport",
+      label: `starts ${launcher.target}`,
+      evidence: [execEvidence, entryEvidence],
+    });
+    claims.push({
+      link_id: linkId,
+      expect: "present",
+      matcher: "process_launch",
+      from: { path: launcher.path, name: launcher.unit },
+      to: symbolRef(entryLandmark),
+      launch: { target: launcher.target },
+      evidence: [execEvidence, entryEvidence],
+    });
+  }
+
   const node: FlowNode = {
     type: "flow",
     id: nodeId(input, entryLandmark.type, entryLandmark.method),
     title: input.title,
     caption: caption(
       input.captionFrom ??
-        (clientSteps.length === 0
-          ? `${entryLandmark.type.name}.${entryLandmark.method.name}`
-          : `${clientSteps.map((step) => step.node).join(" and ")} across ${input.entryTitle}`),
+        ((input.launchers ?? []).length > 0
+          ? `${input.launchers!.map((launcher) => launcher.unit).join(" and ")} into ${entryLandmark.type.name}.${entryLandmark.method.name}`
+          : clientSteps.length === 0
+            ? `${entryLandmark.type.name}.${entryLandmark.method.name}`
+            : `${clientSteps.map((step) => step.node).join(" and ")} across ${input.entryTitle}`),
       terminalsInGraph.map((key) => {
         const landmark = trace.landmarks.get(key)!;
         return `${landmark.type.name}.${landmark.method.name}`;
       }),
-      steps.length + clientSteps.length,
+      steps.length + clientSteps.length + launchSteps.length,
       links.length,
     ) + (input.captionSuffix === undefined ? "" : ` ${input.captionSuffix}`),
     orientation: "LR",
@@ -699,7 +806,7 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
     confidence: "verified",
     interview_value: 0,
     probe_id: input.probeId,
-    steps: [...clientSteps, ...steps],
+    steps: [...launchSteps, ...clientSteps, ...steps],
     links,
   };
   return { probe_id: input.probeId, node, flow_claims: claims };

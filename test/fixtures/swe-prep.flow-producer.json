@@ -330,6 +330,45 @@
         "too_few_derivations": 2
       },
       "note": "Six durable records were inventoried; two carry three independent derivations each, two are read by a service the producer could not resolve, and two are read by nothing but their own author. Every one of the four cuts names itself."
+    },
+    {
+      "probe_id": "flow-java-spring-scheduled",
+      "status": "ran",
+      "entries": 0,
+      "verified_by_the_gate": [],
+      "cut_by_reason": {},
+      "note": "Spring is here, so the adapter APPLIES and ran; this subject declares no @Scheduled method at all. Report 3.1 measured the same zero and drew the same distinction: 'No candidate after the detector ran; not detector inapplicability.'"
+    },
+    {
+      "probe_id": "flow-java-spring-message",
+      "status": "ran",
+      "entries": 0,
+      "verified_by_the_gate": [],
+      "cut_by_reason": {},
+      "note": "Same state, different question: the adapter applies because Spring is here, and no method in this subject carries @EventListener, @KafkaListener, @JmsListener or @RabbitListener. Registering it apart from the clock adapter is what keeps 'runs no batch work' and 'consumes no messages' from reading as one number."
+    },
+    {
+      "probe_id": "flow-systemd-unit",
+      "status": "ran",
+      "entries": 1,
+      "verified_by_the_gate": [],
+      "cut_by_reason": {
+        "unresolved_exec_target": 1
+      },
+      "note": "The subject declares two unit files - one .timer and one .service - and the .service runs `__REPO_PATH__/scripts/daily-cue.sh`: an install-time placeholder in front of a wrapper script. Neither half is followable to a subject-owned main, so the unit is cut by name rather than drawn. This is the design's own case (report 5.2): 'a timer file without a resolvable invoked command is an entry candidate that cannot complete, not a Flow'."
     }
-  ]
+  ],
+  "entry_adapters": {
+    "what": "What PR 8's three caller-less entry families found on this subject, measured rather than predicted (#35, PR 8).",
+    "spring_scheduled_annotations": 0,
+    "spring_listener_annotations": 0,
+    "systemd_unit_files": [
+      "scripts/daily-cue/swe-prep-daily-cue.service",
+      "scripts/daily-cue/swe-prep-daily-cue.timer"
+    ],
+    "units_stitched_to_a_subject_main": 0,
+    "exec_start_read": "__REPO_PATH__/scripts/daily-cue.sh",
+    "reference_flows_unchanged": true,
+    "note": "Breadth grew and the first subject's guarantees did not move: the request narrative is still 20 of 23 routes with the submission walkthrough verified at 25 boxes and 32 links, and the shared-state fan-out is still SubmissionRepository at 14/14 with its closed-negative caption. The three new adapters add one candidate to the run and it is an absent cut that names itself. Two of the three report the state report 3.1 predicted - detector ran, subject declares none - and the third reports the one the same section flagged: 'There is a systemd daily-cue surface, but filenames alone do not establish a business Flow.'"
+  }
 }

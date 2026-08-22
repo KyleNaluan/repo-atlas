@@ -66,8 +66,13 @@ Two Flow entry adapters trace an execution story from where the outside world re
 They are registered separately, because "this subject runs no Spring" and "this subject ships no runnable main" are different findings and one adapter may not answer for the other; an adapter whose framework is absent reports `not_applicable` with its reason rather than running empty.
 They are pure deterministic functions: no network, no model calls, cheap enough to be cacheable and small enough to be unit-tested against fixtures.
 
-The Flow tracer resolves receivers from declarations - fields, constructor injection, locals, parameters, static type names - picks overloads by arity and then by argument type, follows subject-owned supertypes, and treats a repository read or write and the value an entry returns as terminals.
-It stops, by name, wherever the tree stops establishing the next step: an interface dispatch this phase closes no implementation set for, a same-arity overload it cannot pick, a receiver it declines to type, a cycle, or a bound reached before a terminal.
+The Flow tracer resolves receivers from declarations - fields, constructor injection, locals, parameters, static type names, and a `var` local's own initialiser - picks overloads by arity and then by argument type, follows subject-owned supertypes, reads each file's imports so a subject type never shadows a library type of the same simple name, and treats a repository read or write, the value an entry returns, and a call that leaves the process as terminals.
+
+A call written through an interface is traced only where the subject's own wiring closes the implementation set: a sole implementation, a `sealed` base, or every implementation carrying a Spring stereotype.
+A closed set of several members fans out into one labelled, separately evidenced arrow per member, named by the `supports()` predicate a sealed hierarchy guards it with, by a keyed registry's literal, or by the implementation itself - never by picking the obvious one.
+The figure is drawn at component granularity, one box per Spring bean, storage boundary, terminal or held collaborator, with static helpers and value builders folded into the component that uses them.
+
+It stops, by name, wherever the tree stops establishing the next step: an interface whose set nothing closes, a same-arity overload it cannot pick, a receiver it declines to type, a cycle, or a bound reached before a terminal.
 Every stop is an `absent` candidate carrying its reason rather than a shorter diagram, because a path that stops when resolution becomes difficult is not a flow.
 
 Probes propose; they never decide. Every candidate goes to the existence gate, which resolves it against the tree at the pinned SHA and can **overturn the record in either direction**:
@@ -78,7 +83,8 @@ On the reference subject the gate overturns an open ticket for a "second languag
 A confirmed contradiction becomes a `divergence` edge rather than being dropped - the record and the build disagreeing is the finding, not noise to filter.
 A claim nothing in the tree can settle is demoted rather than admitted, because a claim nobody checked must never arrive looking checked.
 
-Links-based Flow candidates take the deliberately stricter path defined for [#35](https://github.com/KyleNaluan/repo-atlas/issues/35): every step and arrow must be evidenced, endpoints and topology must resolve, and every arrow carries one typed candidate-only claim that the gate checks again for a direct call, exact Spring route, or data access.
+Links-based Flow candidates take the deliberately stricter path defined for [#35](https://github.com/KyleNaluan/repo-atlas/issues/35): every step and arrow must be evidenced, endpoints and topology must resolve, and every arrow carries one typed candidate-only claim that the gate checks again for a direct call, exact Spring route, data access, or closed dispatch.
+A dispatch claim is re-checked as a *set*: the gate re-enumerates every subject implementation of the declared type from the blob and refuses the arrow if the count has moved, because proving the target still exists says nothing about whether it is still the only thing the call can reach.
 One missing, stale, ambiguous, or contradicted arrow quarantines the **complete** Flow as `absent`; it never becomes an attested or partial diagram, and rank excludes it independently of its score or any pin.
 Legacy `calls_next` artifacts remain readable through the schema 1.1 renderer bridge, but cannot be admitted as newly verified Flow candidates because they have no link-owned evidence or atomic claims.
 

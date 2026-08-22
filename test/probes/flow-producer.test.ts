@@ -1439,6 +1439,75 @@ public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
     expect(gated.verdict, gated.finding).toBe("confirmed");
     expect(gated.node.confidence).toBe("verified");
   }, 60_000);
+
+  // The producer draws the chain regardless of the accessor's own arguments, so
+  // the gate has to re-read them the same way. When an accessor argument is itself
+  // a call - `svc(body.trim()).record(...)` - a bounded `[^()]` class matching the
+  // accessor's argument list stops at the inner `(`, the chained receiver reads as
+  // no receiver, the bare-call fallback fails the owner check, and a real chain the
+  // producer traced comes back contradicted. Scanning the argument list with
+  // balanced parens is what keeps the two derivations agreeing. `verified` AND
+  // `confirmed` together are the point: the bug produced verified-then-quarantined.
+  it("re-resolves a local accessor whose argument is itself a call", async () => {
+    const ctx = contextFor({
+      "src/main/java/app/web/AccessorController.java": `package app.web;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class AccessorController {
+  private final AttemptService service;
+
+  AccessorController(AttemptService service) {
+    this.service = service;
+  }
+
+  @PostMapping("/accessor")
+  public String submit(String body) {
+    return svc(body.trim()).record(body);
+  }
+
+  private AttemptService svc(String key) {
+    return service;
+  }
+}
+`,
+      "src/main/java/app/web/AttemptService.java": `package app.web;
+
+import org.springframework.stereotype.Service;
+
+@Service
+public class AttemptService {
+  private final AttemptRepository attempts;
+
+  AttemptService(AttemptRepository attempts) {
+    this.attempts = attempts;
+  }
+
+  public String record(String body) {
+    return attempts.saveAttempt(body).toString();
+  }
+}
+`,
+      "src/main/java/app/web/AttemptRepository.java": `package app.web;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
+  Attempt saveAttempt(String body);
+}
+`,
+    });
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    const flow = candidate.node as FlowNode;
+    expect(flow.confidence).toBe("verified");
+    const direct = candidate.flow_claims!.find((c) => c.matcher === "direct_call")!;
+    expect(direct.from.name).toBe("submit");
+    expect(direct.to!.name).toBe("record");
+    const gated = gateCandidate(ctx, candidate);
+    expect(gated.verdict, gated.finding).toBe("confirmed");
+    expect(gated.node.confidence).toBe("verified");
+  }, 60_000);
 });
 
 /* --------------------------------------------- adapters and absence */

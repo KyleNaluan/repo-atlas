@@ -219,6 +219,61 @@ const parenEnd = (text: string, open: number): number => {
   return -1;
 };
 
+/** The index of the `(` that opens the parenthesised group closing at `close`. */
+const parenStart = (text: string, close: number): number => {
+  let depth = 0;
+  for (let i = close; i >= 0; i -= 1) {
+    const ch = text[i]!;
+    if (ch === ")") depth += 1;
+    else if (ch === "(") {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+};
+
+/** The identifier ending at `end` (inclusive), or null if that is not one. */
+const identBefore = (text: string, end: number): string | null => {
+  let start = end;
+  while (start >= 0 && /[\w$]/.test(text[start]!)) start -= 1;
+  const id = text.slice(start + 1, end + 1);
+  return /^[A-Za-z_$][\w$]*$/.test(id) ? id : null;
+};
+
+type ReceiverShape =
+  | { kind: "none" }
+  | { kind: "named"; receiver: string }
+  | { kind: "chained"; receiver: string };
+
+/**
+ * The receiver written immediately before a `.name(` call at `nameStart`.
+ *
+ * A chained receiver `accessor(...).name(` is resolved by matching the accessor's
+ * own parentheses with `parenStart` rather than a bounded character class, so an
+ * argument that is itself a call or a cast - `graderFor(exercise.type()).grade(...)`
+ * - does not defeat the read. A receiver shape this gate cannot name (`arr[i].x(`)
+ * reads as no receiver, exactly as the prior flat-regex form did.
+ */
+const receiverBefore = (span: string, nameStart: number): ReceiverShape => {
+  let dot = nameStart - 1;
+  while (dot >= 0 && /\s/.test(span[dot]!)) dot -= 1;
+  if (dot < 0 || span[dot] !== ".") return { kind: "none" };
+  let before = dot - 1;
+  while (before >= 0 && /\s/.test(span[before]!)) before -= 1;
+  if (before < 0) return { kind: "none" };
+  if (span[before] === ")") {
+    const open = parenStart(span, before);
+    if (open < 0) return { kind: "none" };
+    let callee = open - 1;
+    while (callee >= 0 && /\s/.test(span[callee]!)) callee -= 1;
+    const receiver = identBefore(span, callee);
+    return receiver ? { kind: "chained", receiver } : { kind: "none" };
+  }
+  const receiver = identBefore(span, before);
+  return receiver ? { kind: "named", receiver } : { kind: "none" };
+};
+
 /**
  * How many arguments or parameters sit between one pair of parentheses.
  *
@@ -348,27 +403,33 @@ const hasTypedCall = (
   const accessors = throughType ? accessorsReturning(fromSource, throughType) : new Set<string>();
   // A receiver constructed on the spot - `new RepDeriver().derive(spec)` - names
   // its own type at the call site, so it is re-readable here even though it is
-  // not a declared name the file binds.
+  // not a declared name the file binds. The constructor's own argument list is
+  // skipped with `parenEnd` rather than a bounded character class, so a nested
+  // call or cast - `new RepDeriver((Config) cfg).derive(...)` - still resolves.
   if (writtenOn !== undefined) {
-    const constructed = new RegExp(
-      `\\bnew\\s+(?:[\\w$]+\\s*\\.\\s*)*${escaped(simpleName(writtenOn))}\\s*(?:<[^;{}()]*>)?\\s*\\([^()]{0,200}\\)\\s*\\.\\s*${escaped(name)}\\s*\\(`,
+    const ctorHead = new RegExp(
+      `\\bnew\\s+(?:[\\w$]+\\s*\\.\\s*)*${escaped(simpleName(writtenOn))}\\s*(?:<[^;{}()]*>)?\\s*\\(`,
       "g",
     );
+    const chainTail = new RegExp(`^\\s*\\.\\s*${escaped(name)}\\s*\\(`);
     for (const span of callSpans) {
-      for (const match of span.matchAll(constructed)) {
-        const callOpen = match.index + match[0].length - 1;
+      for (const match of span.matchAll(ctorHead)) {
+        const ctorOpen = match.index + match[0].length - 1;
+        const ctorClose = parenEnd(span, ctorOpen);
+        if (ctorClose < 0) continue;
+        const tail = chainTail.exec(span.slice(ctorClose + 1));
+        if (!tail) continue;
+        const callOpen = ctorClose + tail[0].length;
         if (to.arity === undefined || argumentCounts(span, callOpen).has(to.arity)) return true;
       }
     }
   }
-  const occurrence = new RegExp(
-    `(?:(?<receiver>[A-Za-z_$][\\w$]*)\\s*(?<call>\\([^()]{0,200}\\))?\\s*\\.\\s*)?\\b${escaped(name)}\\s*\\(`,
-    "g",
-  );
+  const call = new RegExp(`\\b${escaped(name)}\\s*\\(`, "g");
   for (const span of callSpans) {
-    for (const match of span.matchAll(occurrence)) {
-      const receiver = match.groups?.["receiver"];
-      const chained = match.groups?.["call"] !== undefined;
+    for (const match of span.matchAll(call)) {
+      const shape = receiverBefore(span, match.index);
+      const receiver = shape.kind === "none" ? undefined : shape.receiver;
+      const chained = shape.kind === "chained";
       if (!receiver && looksLikeDeclaration(span, match.index)) continue;
       if (chained) {
         if (!receiver || !accessors.has(receiver)) continue;
@@ -382,9 +443,9 @@ const hasTypedCall = (
       } else if (receivers && receiver && !receivers.has(receiver)) {
         continue;
       }
-      // The pattern ends at the call's own `(`, so its position is exact. Finding
-      // it by searching for the method name would land inside a receiver that
-      // merely starts with it - `graderFor(x).grade(...)` counting `graderFor`'s
+      // `match` ends at the call's own `(`, so its position is exact. Finding it
+      // by searching for the method name would land inside a receiver that merely
+      // starts with it - `graderFor(x).grade(...)` counting `graderFor`'s
       // arguments as `grade`'s, and a real dispatch coming back contradicted.
       const callOpen = match.index + match[0].length - 1;
       if (to.arity !== undefined && !argumentCounts(span, callOpen).has(to.arity)) continue;
@@ -593,9 +654,27 @@ const resolveSpringRoute = (
  * the tree, by its own textual derivation, and refuses a claim whose count no
  * longer matches - the producer read a parse tree, this reads source.
  */
+// A per-context cache: one dispatch claim re-enumerates the same set several
+// times (the membership count, the branch-guard sources, the abstract-intermediate
+// subtype check), each a fixed-point scan over every subject .java file. The read
+// is deterministic for a fixed context, so the cache is pure - same inputs, same
+// answer - and keyed by simple name because the enumeration already is.
+const implementationsCache = new WeakMap<
+  ProbeContext,
+  Map<string, { path: string; name: string }[]>
+>();
+
 const implementationsInTree = (ctx: ProbeContext, base: string): { path: string; name: string }[] => {
+  const key = simpleName(base);
+  let perContext = implementationsCache.get(ctx);
+  if (!perContext) {
+    perContext = new Map();
+    implementationsCache.set(ctx, perContext);
+  }
+  const cached = perContext.get(key);
+  if (cached) return cached;
   const found: { path: string; name: string }[] = [];
-  const named = new Set<string>([simpleName(base)]);
+  const named = new Set<string>([key]);
   const sources = ctx.paths
     .filter((path) => path.endsWith(".java") && isSourceFile(path))
     .map((path) => ({ path, source: ctx.read(path) }))
@@ -621,6 +700,7 @@ const implementationsInTree = (ctx: ProbeContext, base: string): { path: string;
       }
     }
   }
+  perContext.set(key, found);
   return found;
 };
 

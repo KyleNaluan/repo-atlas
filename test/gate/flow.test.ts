@@ -401,6 +401,36 @@ describe("Flow relationship resolvers", () => {
     );
   });
 
+  it("refuses a transport arrow whose cited call writes a relative URL literal", () => {
+    // The claim's protocol names the absolute route, but the cited span writes a
+    // relative literal that resolves against the page URL rather than the subject's
+    // route table. The gate tests the literal before normalizing it, so it refuses
+    // the arrow rather than echoing a producer that admitted one.
+    const files = {
+      "client.ts": 'function request() { return fetch("api/orders"); }\n',
+      "Controller.java":
+        '@RequestMapping("/api")\nclass Controller { @GetMapping("/orders") void submit() {} }\n',
+    };
+    const evidence = [file("client.ts"), file("Controller.java")];
+    const protocol = { method: "GET" as const, path: "/api/orders" };
+    const flow = directFlow({
+      steps: [
+        { id: "caller", node: "request", evidence: file("client.ts") },
+        { id: "target", node: "Controller.submit", evidence: file("Controller.java") },
+      ],
+      links: [directLink({ relation: "transport", label: "GET /api/orders", evidence })],
+    });
+    const claim = directClaim({
+      matcher: "spring_route",
+      from: { path: "client.ts", name: "request", protocol },
+      to: { path: "Controller.java", owner: "Controller", name: "submit", protocol },
+      evidence,
+    });
+    expect(gateCandidate(contextFor(files), candidate(flow, [claim])).node.confidence).toBe(
+      "absent",
+    );
+  });
+
   it("refuses a transport arrow whose cited call hands fetch an options variable", () => {
     // `fetch(url)` with no options is a GET by specification, which both halves
     // may read. `fetch(url, init)` states the method somewhere else entirely, so

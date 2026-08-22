@@ -2763,6 +2763,26 @@ describe("stitching a TypeScript caller to the Spring route it names", () => {
     expect(cut.absent_reason).toMatch(/^generated_path: /);
   }, 60_000);
 
+  it("names a relative-path call rather than rewriting it to an absolute route", async () => {
+    // A relative fetch resolves against the page URL, not against the subject's
+    // route table, so stitching it to a same-named Spring route asserts a contract
+    // nothing established. The literal a client writes IS the route or it is not.
+    const files = {
+      ...STITCHED,
+      "frontend/src/Practice.tsx": PRACTICE.replace(
+        "`/api/attempts/${attemptId}/submit`",
+        "'api/attempts/x/submit'",
+      ),
+    };
+    const { flow } = await springFlow(files);
+    expect(flow.title).toContain("entry to terminal");
+    expect(flow.links!.some((l) => l.relation === "transport")).toBe(false);
+    const cut = only(await runAdapter("flow-typescript-http-client", contextFor(files)));
+    expect(cut.absent_reason).toMatch(/^dynamic_path: /);
+    expect(cut.absent_reason).toContain("api/attempts/x/submit");
+    expect(cut.node.confidence).toBe("absent");
+  }, 60_000);
+
   it("names a call whose HTTP method is not written down", async () => {
     const files = {
       ...STITCHED,

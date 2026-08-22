@@ -621,8 +621,12 @@ const clientEndpointAt = (
   const offset = args.length - args.trimStart().length;
   const literal = /^(['"`])([^'"`\\]*)\1/.exec(args.trimStart());
   if (!literal) return null;
+  // Test the captured literal, not the normalized route: normalizedPath prepends
+  // a slash so its output always starts with "/". A relative fetch resolves against
+  // the page URL and a cross-origin URL is not this subject's route, so the gate
+  // independently refuses both rather than echoing a producer that admitted one.
+  if (!literal[2]!.startsWith("/")) return null;
   const path = normalizedPath(literal[2]!);
-  if (!path.startsWith("/")) return null;
 
   const rest = args.slice(offset + literal[0].length).trim();
   if (rest.length === 0) return { method: IMPLIED_CLIENT_VERB, path };

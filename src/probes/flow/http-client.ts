@@ -284,10 +284,16 @@ export const endpointOfCall = (
         };
   }
   const inner = source.slice(literal.start + 1, literal.end - 1);
-  const path = normalizedRoute(inner);
-  if (!path.startsWith("/")) {
+  // The literal a client writes IS the route or it is not. normalizedRoute
+  // unconditionally prepends a slash to make two derivations comparable, so
+  // testing its output can never reject anything - the guard runs against the
+  // raw literal. A relative fetch resolves against the page URL and a cross-origin
+  // `http(s)://` URL is not established to reach this subject's Spring route, so
+  // both are cut rather than stitched to a contract nothing established.
+  if (!inner.startsWith("/")) {
     return { ok: false, kind: "dynamic_path", detail: `\`${inner}\` is not a subject-relative route` };
   }
+  const path = normalizedRoute(inner);
 
   const second = args[1];
   if (!second) return { ok: true, protocol: { method: IMPLIED_VERB, path } };

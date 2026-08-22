@@ -380,6 +380,19 @@ describe("the atomic Flow gate", () => {
     expect(result.finding).toContain("does not write");
   });
 
+  it("accepts a label predicate whose SQL omits the spaces around the operator", () => {
+    // Both sides go through `literalPredicates`, so `outcome='PASSED'` in the SQL
+    // and `outcome = 'PASSED'` on the label are the same predicate by construction -
+    // no substring match that a third normalization could drift from.
+    const unspaced: Record<string, string> = {
+      ...lineageFiles,
+      "Record.java": lineageFiles["Record.java"]!.replace("outcome = 'PASSED'", "outcome='PASSED'"),
+    };
+    const result = gateCandidate(contextFor(unspaced), lineageCandidate());
+    expect(result.verdict).toBe("confirmed");
+    expect(result.node.confidence).toBe("verified");
+  });
+
   it("refuses a lineage claim whose endpoints run the way the arrow does", () => {
     // Swapping the claim to match the arrow's direction is exactly the mistake the
     // declared orientation exists to catch: it would assert that the record calls

@@ -1181,8 +1181,6 @@ const resolveDataLineage = (
   return { verdict: "confirmed", finding: `${claim.from.name} reads ${to.name}` };
 };
 
-const normalizedSql = (value: string): string => value.replace(/\s+/g, " ").trim().toLowerCase();
-
 /**
  * A lineage arrow's LABEL is a claim, and this is where it is checked.
  *
@@ -1215,8 +1213,9 @@ const lineageLabelProblem = (
       if (span.text !== undefined) spans.push(span.text);
     }
   }
+  const written = new Set(spans.flatMap((span) => literalPredicates(span)));
   for (const predicate of literalPredicates(link.label ?? "")) {
-    if (!spans.some((span) => normalizedSql(span).includes(normalizedSql(predicate)))) {
+    if (!written.has(predicate)) {
       return `the arrow is labelled \`${predicate}\`, which the SQL it cites does not write`;
     }
   }

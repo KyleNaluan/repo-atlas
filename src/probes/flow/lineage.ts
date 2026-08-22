@@ -384,7 +384,17 @@ export interface SubjectGraph {
   subtypes: Map<string, Set<string>>;
 }
 
+const graphCache = new WeakMap<ProbeContext, SubjectGraph>();
+
 export const subjectGraph = (ctx: ProbeContext, index: JavaIndex): SubjectGraph => {
+  const cached = graphCache.get(ctx);
+  if (cached) return cached;
+  const graph = buildSubjectGraph(ctx, index);
+  graphCache.set(ctx, graph);
+  return graph;
+};
+
+const buildSubjectGraph = (ctx: ProbeContext, index: JavaIndex): SubjectGraph => {
   const masked = new Map<string, string>();
   const maskOf = (path: string): string => {
     if (!masked.has(path)) masked.set(path, maskedJava(ctx.read(path) ?? ""));

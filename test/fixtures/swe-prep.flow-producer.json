@@ -34,7 +34,7 @@
       "SolutionCommitService",
       "SolutionCommitResult"
     ],
-    "phase": "PR 5 closes the dispatch seam PR 4 cut at. Every arrow on this route now resolves and the gate independently re-resolves all 49 of them, including the closed-set dispatches through ExerciseCatalog (a sole bean), Grader (four beans guarded by supports() over the sealed Grading hierarchy), LanguageAdapter and Runner (keyed registries), and Comparison (a sealed hierarchy). The non-coding grading branches are drawn as their own labelled arrows rather than summarised in prose, which is why the figure carries more boxes than the hand-made reference's thirteen: the reference names AnswerKey/SelfCheck/SqlQuery in a caption, and this draws each with its own evidence. Compressing or splitting the figure is PR 6's work; refusing to emit a fully verified story was not an honest way to defer it."
+    "phase": "PR 5 closes the dispatch seam PR 4 cut at. Every arrow on this route now resolves and the gate independently re-resolves all 53 of them, including the closed-set dispatches through ExerciseCatalog (a sole bean), Grader (four beans guarded by supports() over the sealed Grading hierarchy), LanguageAdapter and Runner (keyed registries), and Comparison (a sealed hierarchy). The non-coding grading branches are drawn as their own labelled arrows rather than summarised in prose, which is why the figure carries more boxes than the hand-made reference's thirteen: the reference names AnswerKey/SelfCheck/SqlQuery in a caption, and this draws each with its own evidence. Compressing or splitting the figure is PR 6's work; refusing to emit a fully verified story was not an honest way to defer it."
   },
   "adapters": [
     {

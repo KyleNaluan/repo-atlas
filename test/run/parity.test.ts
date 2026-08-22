@@ -156,7 +156,7 @@ describe("where the engine falls short, and by how much", () => {
     expect(Object.keys(http.cut_by_reason!)).toEqual(["unresolved_receiver_type"]);
 
     // THE ONE THAT MATTERS. The submission walkthrough #35 exists to recover is
-    // verified through the gate, not forced: every one of its forty-nine arrows
+    // verified through the gate, not forced: every one of its fifty-three arrows
     // was independently re-resolved against the pinned tree, and a single
     // unresolvable arrow anywhere the entry reaches would have quarantined the
     // whole thing.

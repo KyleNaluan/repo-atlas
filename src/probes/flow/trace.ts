@@ -174,6 +174,65 @@ const throughChainedCall = (node: SyntaxNode | null): boolean => {
 };
 
 /**
+ * The leaf a receiver chain is rooted in: the innermost object of nested calls,
+ * field reads and parentheses.
+ *
+ * Used only to tell a depth-bounded subject chain (name it) from a depth-bounded
+ * library chain (leave it silent, since gapping a call on someone else's library
+ * is exactly what this phase must not do). The root leaf is one or two levels
+ * deep, so typing it never re-approaches the recursion bound.
+ */
+const chainRoot = (node: SyntaxNode | null): SyntaxNode | null => {
+  let cur = node;
+  while (cur) {
+    if (cur.type === "parenthesized_expression") {
+      cur = cur.namedChild(0);
+      continue;
+    }
+    if (cur.type === "method_invocation" || cur.type === "field_access") {
+      const object = cur.childForFieldName("object");
+      if (object === null) return cur;
+      cur = object;
+      continue;
+    }
+    return cur;
+  }
+  return null;
+};
+
+/** The scopes a local nested inside a method body belongs to something other than
+ * the method: a lambda's or anonymous/local class's own body, not the method's. */
+const NESTED_SCOPE = new Set(["lambda_expression", "class_body"]);
+
+/**
+ * Node identity by source span. `web-tree-sitter` hands back a fresh wrapper
+ * object for every `.parent` access, so `===` between two wrappers for the same
+ * node is false; a span comparison is the stable identity these walks need.
+ */
+const sameNode = (a: SyntaxNode, b: SyntaxNode): boolean =>
+  a.type === b.type &&
+  a.startPosition.row === b.startPosition.row &&
+  a.startPosition.column === b.startPosition.column &&
+  a.endPosition.row === b.endPosition.row &&
+  a.endPosition.column === b.endPosition.column;
+
+/**
+ * Whether a node sits directly in one method body rather than inside a lambda,
+ * anonymous class or nested type declared within it.
+ *
+ * Method-wide is deliberate - a name declared in one `if` branch is still in
+ * scope for the whole method here - but a lambda parameter's local or an
+ * anonymous class's field is a different scope's declaration entirely.
+ */
+const inMethodBody = (node: SyntaxNode, body: SyntaxNode): boolean => {
+  for (let cur = node.parent; cur; cur = cur.parent) {
+    if (sameNode(cur, body)) return true;
+    if (NESTED_SCOPE.has(cur.type)) return false;
+  }
+  return false;
+};
+
+/**
  * Every name a method body can use as a receiver, with the type it was declared
  * with: the enclosing type's fields, this method's parameters, and its locals.
  *
@@ -190,7 +249,13 @@ const receiverTypes = (type: TypeSymbol, method: MethodSymbol): Map<string, stri
   };
   for (const param of method.params) if (param.name) remember(param.name, param.type);
   if (method.body) {
+    // Only this method's own locals: findAll descends into lambda and anonymous
+    // class bodies, and a local from an inner scope typed onto the outer method's
+    // receiver map is a declaration the calling scope does not actually have. The
+    // gate re-types receivers by scanning the whole file and would confirm the
+    // same wrong attribution rather than catch it, so the scope check lives here.
     for (const local of findAll(method.body, "local_variable_declaration")) {
+      if (!inMethodBody(local, method.body)) continue;
       const declared = local.childForFieldName("type")?.text;
       if (!declared) continue;
       for (const declarator of findAll(local, "variable_declarator")) {
@@ -234,9 +299,17 @@ type Resolved =
   | { kind: "foreign" }
   | { kind: "ambiguous"; name: string }
   /** A subject-owned receiver this phase declines to type. Named, never skipped. */
-  | { kind: "unestablished"; why: string };
+  | { kind: "unestablished"; why: string }
+  /**
+   * The recursion depth bound stopped before this expression's root could be
+   * typed. Distinct from `foreign` because a receiver we could not reach and a
+   * library call must not look the same: the call site re-checks the chain's root
+   * to tell a depth-bounded subject chain (named) from a library one (silent).
+   */
+  | { kind: "depth_exceeded" };
 
 const FOREIGN: Resolved = { kind: "foreign" };
+const DEPTH_EXCEEDED: Resolved = { kind: "depth_exceeded" };
 
 /**
  * The subject type an expression evaluates to, when the tree establishes one.
@@ -259,7 +332,7 @@ const expressionType = (
   depth = 0,
 ): Resolved => {
   if (expr === null) return { kind: "subject", type };
-  if (depth > 4) return FOREIGN;
+  if (depth > 4) return DEPTH_EXCEEDED;
   if (expr.type === "this") return { kind: "subject", type };
   if (expr.type === "identifier") {
     const declared = receivers.get(expr.text);
@@ -563,6 +636,24 @@ export const traceFrom = (
             key,
             `${key} calls ${name} on the lambda parameter ${receiverNode.text}, whose type this phase does not establish`,
           );
+        }
+        continue;
+      }
+      if (receiver.kind === "depth_exceeded") {
+        // The chain nests past the recursion bound, so its root went untyped -
+        // not because it is a library call but because the walk stopped short. A
+        // chain rooted in a subject type is named like any other chained receiver
+        // this phase cannot establish, so a very long fluent chain quarantines by
+        // name rather than dropping a possibly load-bearing branch in silence; a
+        // chain rooted in a genuinely foreign type stays silent and untraced. The
+        // bound itself is unchanged, only its reporting. No fixture: the trigger
+        // needs a contrived six-deep receiver chain that would read worse than
+        // this note.
+        if (
+          chainedReceiver &&
+          expressionType(index, type, method, receivers, chainRoot(receiverNode)).kind === "subject"
+        ) {
+          chainGap();
         }
         continue;
       }

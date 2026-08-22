@@ -529,6 +529,86 @@ public class AttemptService {
     expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
   }, 60_000);
 
+  it("keeps a nested type's fields out of the type that encloses it", async () => {
+    const ctx = contextFor({
+      "src/main/java/app/web/InboxController.java": `package app.web;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class InboxController {
+  private final InboxService attempts;
+
+  InboxController(InboxService attempts) {
+    this.attempts = attempts;
+  }
+
+  @PostMapping("/inbox")
+  public String receive(@RequestBody String body) {
+    note.write(body);
+    return attempts.store(body);
+  }
+
+  static class Cursor {
+    private final long attempts;
+    private final NoteRepository note;
+
+    Cursor(long attempts, NoteRepository note) {
+      this.attempts = attempts;
+      this.note = note;
+    }
+  }
+}
+`,
+      "src/main/java/app/web/InboxService.java": `package app.web;
+
+public class InboxService {
+  private final InboxRepository repository;
+
+  InboxService(InboxRepository repository) {
+    this.repository = repository;
+  }
+
+  public String store(String body) {
+    return repository.saveMessage(body);
+  }
+}
+`,
+      "src/main/java/app/web/InboxRepository.java": `package app.web;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface InboxRepository extends JpaRepository<String, String> {
+  String saveMessage(String body);
+}
+`,
+      "src/main/java/app/web/NoteRepository.java": `package app.web;
+
+public class NoteRepository {
+  void write(String body) {}
+}
+`,
+    });
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    const flow = candidate.node as FlowNode;
+    // `findAll` walks the whole subtree, so before the scope fix the nested Cursor
+    // leaked both its fields into InboxController. Mode 1: `Cursor.attempts` (a
+    // long) conflicts with the real injected `attempts` and deletes it, so
+    // `attempts.store(body)` resolves foreign and the controller->service branch
+    // drops in silence - the whole Flow vanishing rather than quarantining. Mode 2:
+    // `Cursor.note` types the `note.write(body)` receiver the outer method does not
+    // have, drawing a write arrow into NoteRepository that is not this method's.
+    // The fixed producer keeps the real chain and never traces `note`.
+    expect(flow.confidence).toBe("verified");
+    expect(flow.steps.map((s) => s.id)).toEqual([
+      "inboxcontroller-receive",
+      "inboxservice-store",
+      "inboxrepository-savemessage",
+    ]);
+    expect(flow.steps.some((s) => s.id.includes("note"))).toBe(false);
+    expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
+  }, 60_000);
+
 });
 
 /* ------------------------------------------- what it refuses to draw */

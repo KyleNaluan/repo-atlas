@@ -170,7 +170,15 @@ const fieldsOf = (type: SyntaxNode, methods: MethodSymbol[], typeName: string): 
     seen.set(name, declared);
   };
   const body = type.childForFieldName("body");
+  // Only this type's own fields, exactly as methodsOf scopes its members: a field
+  // declared in a nested type belongs to that type, not to the one enclosing it.
+  // A receiver typed from a declaration the calling scope does not actually have
+  // is worse than an untyped one, because the gate re-types receivers by scanning
+  // the whole file and would confirm the same wrong attribution rather than catch
+  // it - one of the few places producer and gate can agree and both be wrong.
+  const ownScope = [...enclosingTypeNames(type), nameOf(type) ?? ""].join(".");
   for (const field of body ? findAll(body, "field_declaration") : []) {
+    if (enclosingTypeNames(field).join(".") !== ownScope) continue;
     const declared = field.childForFieldName("type")?.text;
     if (!declared) continue;
     for (const declarator of findAll(field, "variable_declarator")) {

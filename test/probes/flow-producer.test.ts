@@ -25,6 +25,7 @@ import { javaIndex } from "../../src/probes/flow/symbols.js";
 import { httpEntries, mainEntries } from "../../src/probes/flow/entries.js";
 import { normalizedRoute } from "../../src/probes/flow/route.js";
 import { LONG_FLOW_STEPS, narrativeDepth, renderFlow } from "../../src/render/diagram.js";
+import { flowArchetype } from "../../src/rank/flow.js";
 import { presentTenseClaims, resolveFileEvidence } from "../../src/audit/checks/evidence.js";
 import type { Candidate, ProbeContext, ProbeOutcome } from "../../src/probes/types.js";
 import type { Atlas, FlowNode } from "../../src/schema/types.js";
@@ -2987,5 +2988,297 @@ describe("the readability criterion, measured on what the producer emits", () =>
     expect(rendered.depth).toBe(narrativeDepth(flow));
     // The transport crossing is drawn as a crossing rather than as another call.
     expect(rendered.dot).toMatch(/practice-tsx" -> "attemptcontroller-submit".*style=dotted/);
+  }, 60_000);
+});
+
+/* --------------------------------- PR 7: the shared-state fan-out (5.5) */
+
+/**
+ * One durable record and the derivations over it, the second archetype #35 exists
+ * to recover.
+ *
+ * Every fixture below is a small real repository, and each names one of the four
+ * outcomes 5.5 allows: three independent branches drawn from the record, a hub
+ * with too few to be a story, a reader that reaches no rule, and a cross-branch
+ * reference that costs the figure its negative sentence but not the figure.
+ */
+const RECORD_REPOSITORY = `package app.store;
+
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class RecordRepository {
+  private final JdbcClient jdbc;
+
+  RecordRepository(JdbcClient jdbc) {
+    this.jdbc = jdbc;
+  }
+
+  public void insert(Row row) {
+    jdbc.sql("INSERT INTO submission (id, outcome) VALUES (:id, :outcome)").update();
+  }
+
+  public List<Row> passedRows(UUID userId) {
+    return jdbc.sql("SELECT id FROM submission WHERE outcome = 'PASSED'").list();
+  }
+
+  public List<Row> failedRows(UUID userId) {
+    return jdbc.sql("SELECT id FROM submission WHERE outcome = 'FAILED'").list();
+  }
+
+  public List<Row> allRows(UUID userId) {
+    return jdbc.sql("SELECT id FROM submission").list();
+  }
+}
+`;
+
+const RECORD_WRITER = `package app.store;
+
+import org.springframework.stereotype.Service;
+
+@Service
+public class WriteService {
+  private final RecordRepository records;
+
+  WriteService(RecordRepository records) {
+    this.records = records;
+  }
+
+  public void record(Row row) {
+    records.insert(row);
+  }
+}
+`;
+
+const pureDerivation = (name: string) => `package app.derive;
+
+public final class ${name} {
+  public static State evaluate(List<Row> rows) {
+    return new State(rows.size());
+  }
+}
+`;
+
+const reader = (type: string, method: string, read: string, derivation: string) => `package app.derive;
+
+import app.store.RecordRepository;
+import org.springframework.stereotype.Service;
+
+@Service
+public class ${type} {
+  private final RecordRepository records;
+
+  ${type}(RecordRepository records) {
+    this.records = records;
+  }
+
+  public State ${method}(UUID userId) {
+    return ${derivation}.evaluate(records.${read}(userId));
+  }
+}
+`;
+
+const RECORD_TREE: Record<string, string> = {
+  "src/main/java/app/store/RecordRepository.java": RECORD_REPOSITORY,
+  "src/main/java/app/store/WriteService.java": RECORD_WRITER,
+  "src/main/java/app/derive/Learned.java": reader("Learned", "learned", "passedRows", "Criterion"),
+  "src/main/java/app/derive/Confusion.java": reader("Confusion", "confused", "failedRows", "Pairs"),
+  "src/main/java/app/derive/Priority.java": reader("Priority", "priority", "allRows", "Quality"),
+  "src/main/java/app/derive/Criterion.java": pureDerivation("Criterion"),
+  "src/main/java/app/derive/Pairs.java": pureDerivation("Pairs"),
+  "src/main/java/app/derive/Quality.java": pureDerivation("Quality"),
+  "src/main/java/app/derive/State.java": `package app.derive;
+
+public record State(int count) {}
+`,
+};
+
+const lineageOf = async (files: Record<string, string>) => {
+  const ctx = contextFor(files);
+  const candidates = await runAdapter("flow-java-shared-state", ctx);
+  return { ctx, candidates };
+};
+
+describe("the shared-state fan-out (#35, PR 7)", () => {
+  it("draws one record fanning out to three independently evidenced derivations", async () => {
+    const { ctx, candidates } = await lineageOf(RECORD_TREE);
+    const candidate = only(candidates.filter((c) => c.node.confidence === "verified"));
+    const flow = candidate.node as FlowNode;
+
+    // The hub is the ROOT, and the arrows run the way the data travels.
+    const hub = flow.steps[0]!;
+    expect(hub.node).toBe("RecordRepository");
+    const lineage = flow.links!.filter((l) => l.from === hub.id);
+    expect(lineage).toHaveLength(3);
+    expect(lineage.every((l) => l.relation === "read")).toBe(true);
+
+    // Each branch is labelled by the tree: a code identifier and, where the SQL
+    // writes one, its literal predicate. No mechanically generated prose.
+    expect(lineage.map((l) => l.label).sort()).toEqual([
+      "allRows(...)",
+      "failedRows(...) where outcome = 'FAILED'",
+      "passedRows(...) where outcome = 'PASSED'",
+    ]);
+
+    // Distinct evidence per branch: each cites its own call site AND the read's
+    // own declaration, because the SQL in that body is half of what it asserts.
+    const cited = lineage.map((l) =>
+      (l.evidence as { path: string }[]).map((e) => e.path).sort().join("|"),
+    );
+    expect(new Set(cited).size).toBe(3);
+
+    // Each branch reaches its own named pure derivation, drawn as its own box.
+    for (const name of ["Criterion", "Pairs", "Quality"]) {
+      expect(flow.steps.map((s) => s.node)).toContain(name);
+    }
+
+    // The claim runs the OTHER WAY from the arrow, and says so.
+    const claim = candidate.flow_claims!.find((c) => c.link_id === lineage[0]!.id)!;
+    expect(claim.matcher).toBe("data_lineage");
+    expect(claim.from.owner).not.toContain("RecordRepository");
+    expect(claim.to!.owner).toContain("RecordRepository");
+
+    // And the whole chain survives an independent re-resolution.
+    const gated = gateCandidate(ctx, candidate);
+    expect(gated.verdict).toBe("confirmed");
+    expect(gated.node.confidence).toBe("verified");
+  }, 60_000);
+
+  it("admits the closed negative only with a claim per ordered pair", async () => {
+    const { ctx, candidates } = await lineageOf(RECORD_TREE);
+    const candidate = only(candidates.filter((c) => c.node.confidence === "verified"));
+    expect((candidate.node as FlowNode).caption).toContain("No derivation drawn here reaches another");
+    const negatives = candidate.flow_claims!.filter((c) => c.matcher === "reachability");
+    expect(negatives.length).toBeGreaterThan(0);
+    expect(negatives.every((c) => c.expect === "absent" && c.link_id === undefined)).toBe(true);
+    expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
+  }, 60_000);
+
+  it("omits the negative sentence entirely when one branch can reach another", async () => {
+    // Not weakened to "appear independent" (report 5.5): the sentence is gone and
+    // the figure - which claims nothing about independence - still stands.
+    const files = {
+      ...RECORD_TREE,
+      "src/main/java/app/derive/Learned.java": reader(
+        "Learned",
+        "learned",
+        "passedRows",
+        "Criterion",
+      ).replace("import app.store.RecordRepository;", "import app.store.RecordRepository;\nimport app.derive.Pairs;"),
+    };
+    const { ctx, candidates } = await lineageOf(files);
+    const candidate = only(candidates.filter((c) => c.node.confidence === "verified"));
+    expect((candidate.node as FlowNode).caption).not.toContain("No derivation");
+    expect(candidate.flow_claims!.some((c) => c.matcher === "reachability")).toBe(false);
+    expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
+  }, 60_000);
+
+  it("does not let a javadoc cross-reference defeat the closed negative", async () => {
+    // The line the reachability closure draws, and the one that decides whether
+    // the sentence is ever printable on a documented subject. A comment naming
+    // another derivation cannot call it, so it does not close the graph - and the
+    // reference subject's services cross-reference each other in javadoc
+    // constantly. An import of the same name (the test above) does.
+    const files = {
+      ...RECORD_TREE,
+      "src/main/java/app/derive/Learned.java": reader(
+        "Learned",
+        "learned",
+        "passedRows",
+        "Criterion",
+      ).replace("@Service", "/** Unlike {@link Pairs}, this reads only clean passes. */\n@Service"),
+    };
+    const { ctx, candidates } = await lineageOf(files);
+    const candidate = only(candidates.filter((c) => c.node.confidence === "verified"));
+    expect((candidate.node as FlowNode).caption).toContain("No derivation drawn here reaches another");
+    expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
+  }, 60_000);
+
+  it("cuts a hub with only two branches, and names the count", async () => {
+    const files = { ...RECORD_TREE };
+    delete files["src/main/java/app/derive/Priority.java"];
+    const { candidates } = await lineageOf(files);
+    const cut = only(candidates.filter((c) => c.node.confidence === "absent"));
+    expect(cut.absent_reason).toMatch(/^too_few_derivations: 2 subject services read RecordRepository/);
+    // The record's own author is named as a refusal rather than left out silently,
+    // and it is refused on what the subject DECLARES - it writes the record.
+    expect(cut.absent_reason).toContain("WriteService (writes_the_record)");
+  }, 60_000);
+
+  it("refuses a reader that reaches no named rule, and says which", async () => {
+    // Structural, not a resolution failure: this service reads the record and
+    // hands it to another SERVICE, so nothing in the branch is a derivation.
+    const files = {
+      ...RECORD_TREE,
+      "src/main/java/app/derive/Priority.java": `package app.derive;
+
+import app.store.RecordRepository;
+import org.springframework.stereotype.Service;
+
+@Service
+public class Priority {
+  private final RecordRepository records;
+  private final Learned learned;
+
+  Priority(RecordRepository records, Learned learned) {
+    this.records = records;
+    this.learned = learned;
+  }
+
+  public State priority(UUID userId) {
+    records.allRows(userId);
+    return learned.learned(userId);
+  }
+}
+`,
+    };
+    const { candidates } = await lineageOf(files);
+    const cut = only(candidates.filter((c) => c.node.confidence === "absent"));
+    expect(cut.absent_reason).toContain("Priority (no_derivation_reached)");
+  }, 60_000);
+
+  it("quarantines the whole record story when the gate cannot re-resolve one arrow", async () => {
+    // THE DISAGREEMENT TEST. The producer's proposal is resolved against a tree
+    // where one branch no longer makes the call it claims; the gate is a check,
+    // not an echo, so the whole Flow goes absent rather than losing a branch.
+    const { candidates } = await lineageOf(RECORD_TREE);
+    const candidate = only(candidates.filter((c) => c.node.confidence === "verified"));
+    const moved = contextFor({
+      ...RECORD_TREE,
+      "src/main/java/app/derive/Confusion.java": reader(
+        "Confusion",
+        "confused",
+        "failedRows",
+        "Pairs",
+      ).replace("records.failedRows(userId)", "List.of()"),
+    });
+    const gated = gateCandidate(moved, candidate);
+    expect(gated.node.confidence).toBe("absent");
+    expect(gated.verdict).not.toBe("confirmed");
+  }, 60_000);
+
+  it("gives rank's second archetype slot something produced to fill", async () => {
+    // #39 reserves one request/response slot and one shared-state/data-lineage
+    // slot after the floor. Until this phase only the first had a producer behind
+    // it, so the split was machinery with nothing to separate. Both archetypes are
+    // now classified from a graph the producer actually emitted.
+    const { candidates } = await lineageOf(RECORD_TREE);
+    const lineage = only(candidates.filter((c) => c.node.confidence === "verified"));
+    expect(flowArchetype(lineage.node as FlowNode)).toBe("shared_state_lineage");
+    const { flow } = await springFlow(STITCHED);
+    expect(flowArchetype(flow)).toBe("request_response");
+    // The lineage figure reads as a strip, not as a wall: its longest path is what
+    // a reader follows, and the fan-out sits beside it (report 5.4).
+    expect(narrativeDepth(lineage.node as FlowNode)).toBeLessThanOrEqual(LONG_FLOW_STEPS);
+  }, 60_000);
+
+  it("reports not applicable by name on a subject that stores nothing", async () => {
+    const ctx = contextFor({
+      "src/main/java/app/Plain.java": "package app;\n\npublic class Plain { void run() {} }\n",
+    });
+    const probe = PROBES.find((p) => p.id === "flow-java-shared-state")!;
+    const applies = await probe.applies!(ctx);
+    expect(applies.ok).toBe(false);
+    expect(applies.ok === false && applies.reason).toContain("durable-storage boundary");
   }, 60_000);
 });

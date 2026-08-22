@@ -105,6 +105,18 @@ export type FlowMatcher =
   | "spring_route"
   | "closed_dispatch"
   | "data_access"
+  /**
+   * A DATA-LINEAGE arrow: the record on the left, the derivation that reads it on
+   * the right (#35, PR 7, report 5.5).
+   *
+   * It shares the `read` relation with `data_access` and points the OTHER WAY,
+   * because a request story draws the caller reaching storage while a lineage
+   * story draws storage reaching its readers. The two are separate matchers
+   * rather than one matcher with a guessed orientation: the gate checks that a
+   * claim's endpoints agree with the arrow it is attached to, and a check that
+   * accepted either order would accept a swapped arrow.
+   */
+  | "data_lineage"
   | "reachability";
 
 /**
@@ -201,8 +213,8 @@ export interface Probe {
    */
   applies?: (ctx: ProbeContext) => { ok: true } | { ok: false; reason: string } | Promise<{ ok: true } | { ok: false; reason: string }>;
   /**
-   * Async only because five probes need a WASM parse tree - the three
-   * structural discovery probes and the two Flow entry adapters; nothing here
+   * Async only because seven probes need a WASM parse tree - the three
+   * structural discovery probes and the four Flow adapters; nothing here
    * waits on the network or on a model, and every probe is deterministic.
    */
   run: (ctx: ProbeContext) => Candidate[] | Promise<Candidate[]>;

@@ -36,7 +36,8 @@ interface FlowProducerAdapter {
     steps: number;
     links: number;
     narrative_depth: number;
-    transport_links: number;
+    archetype: string;
+    transport_links?: number;
   }[];
   cut_by_reason?: Record<string, number>;
 }
@@ -47,11 +48,24 @@ const measured = read<{
   reference_narrative: {
     route: string;
     outcome: string;
+    archetype: string;
     steps: number;
     links: number;
     transport_links: number;
     narrative_depth: number;
     components: string[];
+  };
+  lineage_narrative: {
+    record: string;
+    outcome: string;
+    archetype: string;
+    steps: number;
+    links: number;
+    narrative_depth: number;
+    branches: { to: string; label: string; cited_spans: number }[];
+    derivations: string[];
+    closed_negative_claims: number;
+    caption: string;
   };
   typescript_client: {
     modules_scanned: number;
@@ -127,19 +141,77 @@ describe("what the engine reproduces", () => {
   });
 });
 
-describe("where the engine falls short, and by how much", () => {
-  it("renders seven of the reference's node types minus flows", () => {
-    // THE PINNED SHORTFALL. The committed end-to-end artifact was produced
-    // before any Flow producer existed, so section 04 reports absent in it. That
-    // is honest - the renderer says so rather than omitting it - but it is not
-    // parity, and this test records the gap rather than letting a green suite
-    // imply there isn't one.
-    expect(countByType(produced)["flow"]).toBeUndefined();
+describe("the two reference archetypes, both produced and both verified", () => {
+  // THE TWO-FLOW PARITY PROPERTIES (report section 2). Until PR 7 this described
+  // a GAP: the reference carries two Flows of two different kinds and the engine
+  // produced neither, then one. It now describes what the producer yields, as
+  // named properties rather than as a count - a count of two is satisfied by two
+  // endpoint tours, which is exactly what the design says parity is not.
+  const verified = (probe: string) =>
+    measured.adapters.find((a) => a.probe_id === probe)!.verified_by_the_gate!;
+
+  it("produces one Flow of each archetype, from adapters that ask different questions", () => {
     expect(countByType(reference)["flow"]).toBe(2);
-    expect(produced.record.section_presence["flows"]).toBe("absent");
-    // PR 3 made rank ready for two complementary Flows, but did not mint one:
-    // budget readiness must not make section 04 imply extraction happened.
+    const request = verified("flow-java-spring-http");
+    const lineage = verified("flow-java-shared-state");
+    expect(request.every((f) => f.archetype === "request_response")).toBe(true);
+    expect(lineage.every((f) => f.archetype === "shared_state_lineage")).toBe(true);
+    // #39's budget of two, after the floor, now has both slots to fill from real
+    // extraction rather than one archetype competing with itself.
+    expect(measured.reference_narrative.archetype).toBe("request_response");
+    expect(measured.lineage_narrative.archetype).toBe("shared_state_lineage");
     expect(produced.record.budgets["flows"]).toBe(2);
+  });
+
+  it("recovers the shared-state fan-out over the record the submission flow writes", () => {
+    const lineage = measured.lineage_narrative;
+    expect(lineage.outcome).toBe("verified");
+    expect(lineage.record).toBe("SubmissionRepository");
+    // AT LEAST THREE BRANCHES, each with its own evidence (report 5.5 point 4).
+    expect(lineage.branches.length).toBeGreaterThanOrEqual(3);
+    for (const branch of lineage.branches) expect(branch.cited_spans).toBeGreaterThanOrEqual(2);
+    expect(new Set(lineage.branches.map((b) => b.to)).size).toBe(lineage.branches.length);
+    // Labels are the tree's own words: a code identifier, and the literal SQL
+    // predicate the read writes. The reference artifact's insight - the competence
+    // signal is filtered in SQL rather than in a caller - is recovered, not narrated.
+    expect(lineage.branches.map((b) => b.label).join("\n")).toContain("s.outcome = 'PASSED'");
+    expect(lineage.branches.map((b) => b.label).join("\n")).toContain("s.outcome = 'FAILED'");
+    // And each branch ends at a named pure derivation, as the hand-made one does.
+    for (const derivation of ["LearnedCriterion", "ConfusionPairs", "ChallengeQuality"]) {
+      expect(lineage.derivations, derivation).toContain(derivation);
+    }
+  });
+
+  it("prints the independence claim only because a closed check established it", () => {
+    // The hand-made caption says "None of the three reads either of the others".
+    // That sentence is admissible only with a closed reachability proof per
+    // ordered pair, and it is omitted entirely - never softened - without one.
+    expect(measured.lineage_narrative.closed_negative_claims).toBeGreaterThanOrEqual(6);
+    expect(measured.lineage_narrative.caption).toContain("No derivation drawn here reaches another");
+    const lineage = verified("flow-java-shared-state");
+    // The other record's story is the control: it draws three branches too, and
+    // one of them CAN reach another's read model, so it prints no such sentence.
+    expect(lineage.length).toBe(2);
+  });
+
+  it("reads as a strip: the fan-out sits beside the path, not along it", () => {
+    expect(measured.lineage_narrative.narrative_depth).toBeLessThanOrEqual(8);
+    expect(measured.lineage_narrative.steps).toBeGreaterThan(
+      measured.lineage_narrative.narrative_depth,
+    );
+  });
+});
+
+describe("where the engine falls short, and by how much", () => {
+  it("has not re-run the end-to-end pipeline since the producer existed", () => {
+    // THE REMAINING SHORTFALL, and it is now a different one. The producer emits
+    // both archetypes and the gate verifies both (above), but the COMMITTED
+    // end-to-end artifact predates every Flow phase and still reports section 04
+    // absent. Refreshing it needs a credentialed model score run, which CI does
+    // not hold and which no Flow phase has taken on; this records that rather than
+    // letting a green suite imply the artifact moved.
+    expect(countByType(produced)["flow"]).toBeUndefined();
+    expect(produced.record.section_presence["flows"]).toBe("absent");
   });
 
   it("records what the Flow producer now yields on this subject, rather than predicting it", () => {

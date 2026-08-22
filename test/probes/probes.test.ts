@@ -114,18 +114,19 @@ describe("the probe manifest", () => {
     // `unresolved-references` is #6 point 3. `measured-scale` restates figures the
     // harvest already measured as Fact nodes - the stat tiles the reference
     // overview opens with, which no stage produced at all.
-    // The eleventh, twelfth and thirteenth are #35's Flow adapters. They are three
-    // entries rather than one for the same reason the list is enumerated at all:
-    // "this subject runs no Spring", "this subject ships no runnable main" and
-    // "this subject has no frontend calling it" are different findings, and no
-    // one adapter can report another's absence.
-    expect(PROBES).toHaveLength(13);
+    // The last four are #35's Flow adapters. They are four entries rather than one
+    // for the same reason the list is enumerated at all: "this subject runs no
+    // Spring", "this subject ships no runnable main", "this subject has no
+    // frontend calling it" and "this subject stores nothing it derives from" are
+    // different findings, and no one adapter can report another's absence.
+    expect(PROBES).toHaveLength(14);
     expect(PROBES.map((p) => p.id).sort()).toEqual([
       "ci-policy-guards",
       "decided-but-unbuilt",
       "dependency-asymmetry",
       "dependency-divergence",
       "flow-java-cli",
+      "flow-java-shared-state",
       "flow-java-spring-http",
       "flow-typescript-http-client",
       "measured-scale",
@@ -142,6 +143,7 @@ describe("the probe manifest", () => {
     expect(java.sort()).toEqual([
       "dependency-asymmetry",
       "flow-java-cli",
+      "flow-java-shared-state",
       "flow-java-spring-http",
       "sealed-hierarchies",
       "throw-where-siblings-return",
@@ -157,6 +159,7 @@ describe("the probe manifest", () => {
     expect(skipped.map((o) => o.probe_id).sort()).toEqual([
       "dependency-asymmetry",
       "flow-java-cli",
+      "flow-java-shared-state",
       "flow-java-spring-http",
       "flow-typescript-http-client",
       "sealed-hierarchies",

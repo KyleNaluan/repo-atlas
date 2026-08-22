@@ -311,6 +311,31 @@ export const MUTANTS: Mutant[] = [
   },
   {
     check: "E2",
+    breaks: "a keyed dispatch branch names a key the guard it cites does not produce",
+    apply: (ctx) =>
+      withFlow(
+        ctx,
+        flowMutant("fl-link-wrong-dispatch-key", {
+          relation: "dispatch",
+          // The cited span IS a keyed guard - `languageId()` returning "java" -
+          // and the label claims the branch the registry takes for Python. A word
+          // list would pass this: the span is selection-shaped. Comparing the
+          // label's key against the source is what catches it.
+          label: 'execute(...) via "python"',
+          evidence: [
+            {
+              kind: "file",
+              path: "backend/src/main/java/com/sweprep/backend/runner/LocalJavaRunner.java",
+              line_start: 32,
+              line_end: 35,
+              sha: ctx.atlas.subject.sha,
+            },
+          ],
+        }),
+      ),
+  },
+  {
+    check: "E2",
     breaks: "an ambiguous interface dispatch is asserted as one concrete implementation",
     apply: (ctx) =>
       withFlow(

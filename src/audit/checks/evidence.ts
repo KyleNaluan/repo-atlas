@@ -11,6 +11,7 @@ import { failed, notApplicable, passed, type AuditContext, type CheckResult } fr
 import { resolveComment, resolveIssue } from "../../harvest/cache.js";
 import type { IssueStore } from "../issue-store.js";
 import { flowTopologyProblems } from "../../gate/flow.js";
+import { READ_VERB, WRITE_VERB } from "../../probes/flow/sql.js";
 import type {
   Atlas,
   AtlasNode,
@@ -396,17 +397,41 @@ const linkProblem = (ctx: AuditContext, flow: FlowNode, link: FlowLink): string 
     return `${flow.id} link ${link.id} cites readable source that names a different target`;
   }
 
-  if (link.relation === "read" && !/\b(?:select|from|join|find|get|read|load|fetch|query|lookup|search)\w*\b/i.test(combined)) {
+  // The read/write verb lists are the ones the tracer and the gate already use
+  // (`sql.ts`), rather than a fourth copy that drifted: the copy this check used
+  // to keep lacked `count` and `exists`, and refused a rendered arrow citing
+  // `submissions.countsForAttempts(...)` - a real read, named by a verb two other
+  // readers of this codebase already recognise. The SQL keywords sit beside them
+  // because a JDBC repository's own body is the other way a read is written.
+  if (link.relation === "read" && !READ_VERB.test(combined) && !/\b(?:select|from|join)\b/i.test(combined)) {
     return `${flow.id} link ${link.id} is typed read but its evidence establishes no read`;
   }
-  if (link.relation === "write" && !/\b(?:insert|update|delete|save|write|persist|store|upsert|merge)\w*\b/i.test(combined)) {
+  if (link.relation === "write" && !WRITE_VERB.test(combined)) {
     return `${flow.id} link ${link.id} is typed write but its evidence establishes no write`;
   }
-  if (
-    link.relation === "dispatch" &&
-    !/\b(?:supports|switch|case|instanceof|implementation|implementations)\b/i.test(combined)
-  ) {
-    return `${flow.id} link ${link.id} asserts one dispatch target without closed-selection evidence`;
+  // A dispatch arrow says the call reaches one of a set the tree closes, and that
+  // this branch is the one the tree names. There are two ways a subject writes
+  // that, and this check now reads both.
+  //
+  // A KEYED branch labels itself with the literal the registry routes on
+  // (`generateHarness(...) via "java"`), and the strongest thing this check can
+  // ask is that the cited guard span actually produce that key - a stronger test
+  // than any word list, because it compares the label against the source rather
+  // than looking for selection-shaped vocabulary near it.
+  //
+  // Otherwise the set is closed by a declaration - `class X implements Y`, a
+  // `sealed` base, a `permits` clause, a `supports()` predicate. The list this
+  // check kept recognised `implementation` but not `implements`, so every
+  // sole-implementation dispatch in the reference subject's own flagship Flow
+  // failed a gate whose evidence was sitting in the citation.
+  if (link.relation === "dispatch") {
+    const key = /"([^"]+)"/.exec(link.label ?? "");
+    const closed = key
+      ? combined.includes(key[1]!)
+      : /\b(?:supports|switch|case|instanceof|implementations?|implements|sealed|permits)\b/i.test(combined);
+    if (!closed) {
+      return `${flow.id} link ${link.id} asserts one dispatch target without closed-selection evidence`;
+    }
   }
   return null;
 };

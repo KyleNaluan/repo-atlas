@@ -9,6 +9,7 @@
  */
 import { isSourceFile } from "../harvest/tree.js";
 import { normalizedRoute } from "../probes/flow/route.js";
+import { SPRING_STEREOTYPES } from "../probes/flow/stereotype.js";
 import type { Candidate, FlowClaim, ProbeContext, SymbolRef } from "../probes/types.js";
 import type {
   Evidence,
@@ -782,7 +783,14 @@ const dispatchBranchProblem = (
       const missing = dispatch.labels.filter(
         (label) =>
           !sources.some((source) =>
-            new RegExp(`instanceof\\s+${escaped(label).replace(/\\\./g, "\\.")}\\b`).test(source),
+            // The producer normalises the guard type through `qualifiedTypeName`,
+            // which drops lowercase (package) segments, so a source written
+            // `instanceof com.grader.Grading.TestCases` yields the label
+            // `Grading.TestCases`. The gate strips the same optional leading
+            // package path here rather than requiring the label immediately after
+            // `instanceof`, mirroring the producer exactly as the keyed_registry
+            // check already tolerates the formatting the producer is blind to.
+            new RegExp(`instanceof\\s+(?:[a-z$][\\w$]*\\.)*${escaped(label)}\\b`).test(source),
           ),
       );
       return missing.length === 0
@@ -813,7 +821,12 @@ const dispatchBranchProblem = (
   }
 };
 
-const STEREOTYPE = /@(?:Component|Service|Repository|Controller|RestController|Configuration)\b/;
+// Built from the shared list so the gate re-derives "is a bean" from the same
+// definition the producer draws it from, reading annotation text where the
+// producer read annotation nodes. Hand-writing `@Controller\b` here is what
+// caused the drift this replaces: it cannot match `@ControllerAdvice`, whose own
+// `\b` falls after `Advice`, so a longer stereotype name needs its own alternative.
+const STEREOTYPE = new RegExp(`@(?:${SPRING_STEREOTYPES.map(escaped).join("|")})\\b`);
 
 const READ_METHOD = /^(?:find|get|read|load|select|exists|count|query|fetch|lookup|search)/i;
 const WRITE_METHOD = /^(?:save|write|insert|update|delete|remove|persist|store|upsert|merge)/i;

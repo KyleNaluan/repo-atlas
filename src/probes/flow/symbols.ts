@@ -25,6 +25,7 @@ import {
   type SyntaxNode,
 } from "../java.js";
 import type { ProbeContext } from "../types.js";
+import { SPRING_STEREOTYPES } from "./stereotype.js";
 
 export interface AnnotationRef {
   name: string;
@@ -245,26 +246,6 @@ const fieldsOf = (
   return { simple, declared: seen };
 };
 
-/**
- * Spring's stereotype annotations: the subject's own declaration that a type is
- * a component of the running application rather than a helper inside one.
- *
- * `@Bean` factory methods are deliberately not read here. The bean they produce
- * is typed by a return type this index would have to infer through a factory,
- * and a component set that is partly declared and partly guessed is worse than
- * one that says what it read.
- */
-const STEREOTYPES = [
-  "Component",
-  "Service",
-  "Repository",
-  "Controller",
-  "RestController",
-  "ControllerAdvice",
-  "RestControllerAdvice",
-  "Configuration",
-];
-
 const methodsOf = (type: SyntaxNode, path: string, owner: string): MethodSymbol[] => {
   const body = type.childForFieldName("body");
   if (!body) return [];
@@ -336,7 +317,7 @@ const typesIn = (root: SyntaxNode, path: string): TypeSymbol[] => {
       annotations,
       fields: fields.simple,
       fieldsDeclared: fields.declared,
-      bean: annotations.some((a) => STEREOTYPES.includes(a.name)),
+      bean: annotations.some((a) => SPRING_STEREOTYPES.includes(a.name)),
       methods,
       line_start: lineOf(node),
       header_line_end: lineOf(node.childForFieldName("body") ?? node),

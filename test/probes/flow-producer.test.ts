@@ -2132,6 +2132,200 @@ public class MemoryCatalog extends AbstractCatalog {
     }
     expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
   }, 60_000);
+
+  it("confirms a closed set whose beans are @ControllerAdvice / @RestControllerAdvice", async () => {
+    // The producer's bean check and the gate's stereotype check are two readings
+    // of one list, and they had drifted: the gate's regex omitted ControllerAdvice
+    // and its `@Controller\b` could not match `@ControllerAdvice` anyway. So a set
+    // the producer counted as container-managed (every member a bean) was one the
+    // gate reported as unmanaged, contradicting a real closed_set arrow and
+    // quarantining the whole Flow. The verified + confirmed pairing is the point:
+    // the producer draws this either way, so a producer-only test would pass while
+    // the gate overturned it.
+    const ctx = contextFor({
+      "src/main/java/app/web/CatalogController.java": SPRING_CONTROLLER,
+      "src/main/java/app/web/CatalogService.java": SERVICE,
+      "src/main/java/app/web/Catalog.java": CATALOG,
+      "src/main/java/app/web/FileCatalog.java": `package app.web;
+
+import org.springframework.web.bind.annotation.ControllerAdvice;
+
+@ControllerAdvice
+public class FileCatalog implements Catalog {
+  private final ItemRepository items;
+
+  FileCatalog(ItemRepository items) {
+    this.items = items;
+  }
+
+  public String byId(String id) {
+    return items.findTitle(id);
+  }
+}
+`,
+      "src/main/java/app/web/MemoryCatalog.java": `package app.web;
+
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+@RestControllerAdvice
+public class MemoryCatalog implements Catalog {
+  private final ItemRepository items;
+
+  MemoryCatalog(ItemRepository items) {
+    this.items = items;
+  }
+
+  public String byId(String id) {
+    return items.findTitle(id.trim());
+  }
+}
+`,
+      "src/main/java/app/web/ItemRepository.java": REPOSITORY,
+    });
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    const flow = candidate.node as FlowNode;
+    expect(flow.confidence).toBe("verified");
+    const dispatches = flow.links!.filter((l) => l.relation === "dispatch");
+    expect(dispatches).toHaveLength(2);
+    for (const link of dispatches) {
+      const claim = candidate.flow_claims!.find((c) => c.link_id === link.id)!;
+      expect(claim.dispatch!.via).toBe("closed_set");
+      expect(claim.dispatch!.member_count).toBe(2);
+    }
+    expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
+  }, 60_000);
+
+  it("confirms a sealed_guard whose instanceof names the type by its full package", async () => {
+    // The producer normalises the guard type through qualifiedTypeName, which drops
+    // lowercase package segments, so `instanceof app.web.Grading.TestCases` becomes
+    // the label `Grading.TestCases`. A gate that required that label immediately
+    // after `instanceof` would be defeated by the intervening `app.web.` and report
+    // the branch missing, contradicting a genuine guard. The gate strips the same
+    // optional package path the producer does, so the two derivations agree.
+    const ctx = contextFor({
+      "src/main/java/app/web/GradeController.java": `package app.web;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class GradeController {
+  private final GraderRegistry graders;
+
+  GradeController(GraderRegistry graders) {
+    this.graders = graders;
+  }
+
+  @PostMapping("/api/grade")
+  public String grade(@RequestBody String body) {
+    return graders.grade(new Exercise(new Grading.TestCases()), body);
+  }
+}
+`,
+      "src/main/java/app/web/GraderRegistry.java": `package app.web;
+
+import java.util.List;
+import org.springframework.stereotype.Component;
+
+@Component
+public class GraderRegistry {
+  private final List<Grader> graders;
+
+  GraderRegistry(List<Grader> graders) {
+    this.graders = List.copyOf(graders);
+  }
+
+  public String grade(Exercise exercise, String submission) {
+    return graderFor(exercise).grade(exercise, submission);
+  }
+
+  private Grader graderFor(Exercise exercise) {
+    return graders.stream().filter(grader -> grader.supports(exercise)).findFirst().orElseThrow();
+  }
+}
+`,
+      "src/main/java/app/web/Grading.java": `package app.web;
+
+public sealed interface Grading permits Grading.TestCases, Grading.AnswerKey {
+  record TestCases() implements Grading {}
+  record AnswerKey() implements Grading {}
+}
+`,
+      "src/main/java/app/web/Exercise.java": `package app.web;
+
+public record Exercise(Grading grading) {}
+`,
+      "src/main/java/app/web/Grader.java": `package app.web;
+
+public interface Grader {
+  boolean supports(Exercise exercise);
+  String grade(Exercise exercise, String submission);
+}
+`,
+      "src/main/java/app/web/TestCaseGrader.java": `package app.web;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class TestCaseGrader implements Grader {
+  private final ResultRepository results;
+
+  TestCaseGrader(ResultRepository results) {
+    this.results = results;
+  }
+
+  public boolean supports(Exercise exercise) {
+    return exercise.grading() instanceof app.web.Grading.TestCases;
+  }
+
+  public String grade(Exercise exercise, String submission) {
+    return results.saveResult(submission);
+  }
+}
+`,
+      "src/main/java/app/web/AnswerKeyGrader.java": `package app.web;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class AnswerKeyGrader implements Grader {
+  private final ResultRepository results;
+
+  AnswerKeyGrader(ResultRepository results) {
+    this.results = results;
+  }
+
+  public boolean supports(Exercise exercise) {
+    return exercise.grading() instanceof app.web.Grading.AnswerKey;
+  }
+
+  public String grade(Exercise exercise, String submission) {
+    return results.saveResult(submission);
+  }
+}
+`,
+      "src/main/java/app/web/ResultRepository.java": `package app.web;
+
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class ResultRepository {
+  public String saveResult(String value) { return value; }
+}
+`,
+    });
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    const flow = candidate.node as FlowNode;
+    expect(flow.confidence).toBe("verified");
+    const dispatches = flow.links!.filter((l) => l.relation === "dispatch");
+    expect(dispatches).toHaveLength(2);
+    const labels = dispatches.map((l) => l.label).join(" ");
+    expect(labels).toContain("Grading.TestCases");
+    expect(labels).toContain("Grading.AnswerKey");
+    for (const link of dispatches) {
+      expect(candidate.flow_claims!.find((c) => c.link_id === link.id)!.dispatch!.via).toBe("sealed_guard");
+    }
+    expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
+  }, 60_000);
 });
 
 /* ---------------------- boundary link kinds and compression (#35, PR 5) */

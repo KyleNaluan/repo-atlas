@@ -1817,7 +1817,7 @@ public class PythonRunner implements Runner {
     this.runs = runs;
   }
 
-  public String languageId() { return "python"; }
+  public String languageId() { return "python" ; }
 
   public String execute(String submission) {
     return runs.saveRun(submission);
@@ -1841,6 +1841,11 @@ public class RunRepository {
     expect(dispatches).toHaveLength(2);
     const labels = dispatches.map((l) => l.label).join(" ");
     expect(labels).toContain('"java"');
+    // PythonRunner writes `return "python" ;` with a space before the semicolon.
+    // The producer reads the key off the AST and is formatting-agnostic, so the
+    // gate must be too: an exact `return "python";` substring check would miss
+    // this and contradict a genuine branch, quarantining the whole Flow. The
+    // `confirmed` assertion below is what would fail if the gate went exact.
     expect(labels).toContain('"python"');
     for (const link of dispatches) {
       expect(candidate.flow_claims!.find((c) => c.link_id === link.id)!.dispatch!.via).toBe("keyed_registry");
@@ -1917,6 +1922,66 @@ public class MemoryCatalog implements Catalog {
     const gated = gateCandidate(grown, repinned);
     expect(gated.node.confidence).toBe("absent");
     expect(gated.finding).toContain("not the 1 this arrow closed the set at");
+  }, 60_000);
+
+  it("resolves a member that inherits the dispatched method from an abstract base", async () => {
+    // Two @Component subclasses close the set, but NEITHER declares byId - they
+    // inherit it from an abstract intermediate. The producer's methodOn() follows
+    // supertypes, so the arrow's target file is that abstract base, which the set
+    // deliberately excludes as a waypoint. A gate that required the target's file
+    // to be one of the concrete implementations would contradict a real chain and
+    // quarantine the whole Flow, so it re-derives the base as a supertype of a
+    // member from source instead.
+    const ctx = contextFor({
+      "src/main/java/app/web/CatalogController.java": SPRING_CONTROLLER,
+      "src/main/java/app/web/CatalogService.java": SERVICE,
+      "src/main/java/app/web/Catalog.java": CATALOG,
+      "src/main/java/app/web/BaseCatalog.java": `package app.web;
+
+public abstract class BaseCatalog implements Catalog {
+  private final ItemRepository items;
+
+  BaseCatalog(ItemRepository items) {
+    this.items = items;
+  }
+
+  public String byId(String id) {
+    return items.findTitle(id);
+  }
+}
+`,
+      "src/main/java/app/web/FileCatalog.java": `package app.web;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class FileCatalog extends BaseCatalog {
+  FileCatalog(ItemRepository items) {
+    super(items);
+  }
+}
+`,
+      "src/main/java/app/web/MemoryCatalog.java": `package app.web;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class MemoryCatalog extends BaseCatalog {
+  MemoryCatalog(ItemRepository items) {
+    super(items);
+  }
+}
+`,
+      "src/main/java/app/web/ItemRepository.java": REPOSITORY,
+    });
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    const flow = candidate.node as FlowNode;
+    expect(flow.confidence).toBe("verified");
+    const dispatch = flow.links!.find((l) => l.relation === "dispatch")!;
+    expect(dispatch.label).toContain("byId");
+    const claim = candidate.flow_claims!.find((c) => c.link_id === dispatch.id)!;
+    expect(claim.dispatch!.member_count).toBe(2);
+    expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
   }, 60_000);
 });
 

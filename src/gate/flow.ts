@@ -672,7 +672,23 @@ const resolveClosedDispatch = (
   const inheritedDefault =
     to.path === dispatch.base.path &&
     new RegExp(`\\bdefault\\b[^;{]*\\b${escaped(simpleName(to.name))}\\s*\\(`).test(baseSource);
-  if (!inheritedDefault && !implementations.some((impl) => impl.path === to.path)) {
+  // A concrete member may inherit the dispatched method from an ABSTRACT subject
+  // superclass instead of declaring it itself; the producer's methodOn() follows
+  // supertypes, so the target's file is that abstract intermediate, which the set
+  // deliberately excludes as a waypoint. Accept it only when the tree re-derives
+  // it as a supertype of a member of the set - proving the relation from source,
+  // as the inheritedDefault case does for an interface's own default.
+  const declaringType = to.receiver ?? to.owner;
+  const inheritedFromIntermediate =
+    !inheritedDefault &&
+    declaringType !== undefined &&
+    to.path !== dispatch.base.path &&
+    implementations.some((impl) => declaresSubtype(ctx, impl.name, declaringType));
+  if (
+    !inheritedDefault &&
+    !inheritedFromIntermediate &&
+    !implementations.some((impl) => impl.path === to.path)
+  ) {
     return {
       verdict: "contradicted",
       finding: `${to.path} is not among the ${implementations.length} subject implementations of ${baseName}`,
@@ -760,7 +776,9 @@ const dispatchBranchProblem = (
         : `${dispatch.base.path}'s implementation no longer guards on ${missing.join(", ")}`;
     }
     case "keyed_registry": {
-      const missing = dispatch.labels.filter((label) => !toSource.includes(`return ${label};`));
+      const missing = dispatch.labels.filter(
+        (label) => !new RegExp(`\\breturn\\s*\\(?\\s*${escaped(label)}\\s*\\)?\\s*;`).test(toSource),
+      );
       return missing.length === 0 ? null : `the implementation no longer returns the key ${missing.join(", ")}`;
     }
     case "closed_set": {

@@ -142,15 +142,18 @@ describe("where the engine falls short, and by how much", () => {
     expect(cli.entries).toBe(2);
 
     // Three thin route stories survive independent re-resolution; the rest are
-    // cut, and fourteen of them at exactly the seam section 9 predicted.
+    // cut, and fifteen of them at exactly the seam section 9 predicted.
     expect(http.verified_by_the_gate).toHaveLength(3);
-    expect(http.cut_by_reason!["unresolved_dispatch"]).toBe(14);
+    expect(http.cut_by_reason!["unresolved_dispatch"]).toBe(15);
 
     // The one that matters most is a cut: the submission walkthrough #35 exists
     // to recover stops at a registry interface, and this phase closes no
     // implementation set. It is recorded as absent rather than forced through.
     expect(measured.reference_narrative.outcome).toBe("absent");
-    expect(measured.reference_narrative.reason).toContain("unresolved_dispatch");
+    // The headline names the load-bearing cut, not whichever gap the walk reached
+    // first: the record's leading reason is what a reader uses to decide whether a
+    // later phase closes this story, so the dispatch seam PR 5 resolves must lead.
+    expect(measured.reference_narrative.reason).toMatch(/^unresolved_dispatch:/);
     expect(
       http.verified_by_the_gate!.some((f) => f.title.includes("submissions")),
       "the submission narrative must not be asserted before its dispatch resolves",

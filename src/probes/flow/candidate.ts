@@ -15,7 +15,15 @@
 import { shortHash, slug } from "../id.js";
 import type { Candidate, FlowClaim, SymbolRef } from "../types.js";
 import type { FileEvidence, FlowLink, FlowNode, FlowStep } from "../../schema/types.js";
-import { BOUNDS, retained, type TraceEdge, type TraceLandmark, type TraceResult } from "./trace.js";
+import {
+  BOUNDS,
+  retained,
+  type GapKind,
+  type TraceEdge,
+  type TraceGap,
+  type TraceLandmark,
+  type TraceResult,
+} from "./trace.js";
 import type { MethodSymbol, TypeSymbol } from "./symbols.js";
 
 export interface CandidateInput {
@@ -128,6 +136,36 @@ const orderedKeys = (trace: TraceResult, keep: Set<string>, edges: TraceEdge[]):
 };
 
 /**
+ * Which gap leads an absent Flow's reason.
+ *
+ * Not traversal order: a reader uses the headline to decide whether a later
+ * phase closes this story, so it must name the seam that actually blocks it. An
+ * `unresolved_dispatch` through an interface is closed in a planned later phase,
+ * while an untypeable receiver is the walk giving up on the calling file, so the
+ * dispatch is the load-bearing cut even when the walk hit the receiver first.
+ * Kinds after the first two share one declared order; ties within a kind break
+ * by traversal order, which keeps the choice deterministic.
+ */
+const SEAM_PRIORITY: readonly GapKind[] = [
+  "unresolved_dispatch",
+  "unresolved_receiver_type",
+  "ambiguous_overload",
+  "unprovable_data_access",
+  "unresolved_target",
+  "trace_bound_before_terminal",
+];
+
+const headlineGap = (gaps: TraceGap[]): TraceGap | undefined => {
+  let best: TraceGap | undefined;
+  for (const gap of gaps) {
+    if (best === undefined || SEAM_PRIORITY.indexOf(gap.kind) < SEAM_PRIORITY.indexOf(best.kind)) {
+      best = gap;
+    }
+  }
+  return best;
+};
+
+/**
  * The trace as a candidate: a complete verified proposal, or an absent cut.
  *
  * Every refusal below is the same rule stated for a different failure - the
@@ -143,13 +181,17 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
   // It is checked FIRST because a bound reached before a terminal is why there
   // is no terminal, and reporting the symptom would hide the cause.
   //
-  // The first gap is reported in full and the rest by kind and count. Reporting
-  // only the first would make the record say one call could not be resolved
-  // where four could not, and a reader deciding whether a later phase closes
-  // this story needs to know which seams are in the way, not just the earliest.
-  const blocking = trace.gaps[0];
+  // The headline gap is chosen by a fixed seam priority, not by traversal order:
+  // the record's headline reason is what a reader uses to decide whether a later
+  // phase closes this story, so it must name the seam that actually blocks it -
+  // the interface dispatch a future phase resolves - rather than whichever call
+  // the walk happened to reach first. Ties break by traversal order, so the
+  // choice stays deterministic. The rest are reported by kind and count;
+  // dropping them would make the record say one call could not be resolved where
+  // four could not.
+  const blocking = headlineGap(trace.gaps);
   if (blocking) {
-    const others = trace.gaps.slice(1);
+    const others = trace.gaps.filter((g) => g !== blocking);
     const byKind = [...new Set(others.map((g) => g.kind))]
       .map((kind) => `${kind} x${others.filter((g) => g.kind === kind).length}`)
       .join(", ");

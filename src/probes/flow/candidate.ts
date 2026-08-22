@@ -46,8 +46,13 @@ export interface TransportCaller {
   actions: string[];
   /** The box's evidence: the first action's declaration through its call site. */
   box: { line_start: number; line_end: number };
-  /** Every call site, cited by the transport link. */
-  calls: { line_start: number; line_end: number }[];
+  /**
+   * Every call site, cited by the transport link and each its own atomic claim.
+   * `action` names the enclosing function THIS call sits in, so the claim the
+   * gate re-resolves against this span is attributed to the action that wrote it
+   * rather than to the module's first action.
+   */
+  calls: { line_start: number; line_end: number; action: string }[];
   /**
    * The declaration that closes the callee as an HTTP client, when it is not
    * `fetch` itself - cited for the same reason a dispatch arrow cites its guard:
@@ -565,29 +570,38 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
   // the callee as an HTTP client - the same reason a dispatch arrow cites its
   // guard - because that is the whole of what the gate must re-derive from the
   // blob to agree the two files share one contract.
+  //
+  // One arrow per calling MODULE, but one atomic claim per CALL SITE, exactly as a
+  // crossing link carries one claim per call: the arrow may cite ten call sites
+  // and each is re-resolved against its OWN span, so a span that does not make the
+  // claimed call cannot ride in on another that does. Every claim cites exactly
+  // three things - its own call span, the wrapper that closes the client, and the
+  // handler - and the union of the per-site claims' evidence is exactly the link's
+  // rendered evidence, which `linkEvidenceMatchesClaims` re-checks at the gate.
   const clientSteps: FlowStep[] = [];
   const entryStepId = ids.get(trace.entry)!;
+  const entryEvidence = fileEvidence(
+    input.sha,
+    entryLandmark.type.path,
+    entryLandmark.method.line_start,
+    entryLandmark.method.line_end,
+  );
   for (const caller of input.callers ?? []) {
+    const wrapperEvidence =
+      caller.wrapper === undefined
+        ? undefined
+        : fileEvidence(
+            input.sha,
+            caller.wrapper.path,
+            caller.wrapper.line_start,
+            caller.wrapper.line_end,
+          );
     const evidence = [
       ...caller.calls.map((call) =>
         fileEvidence(input.sha, caller.path, call.line_start, call.line_end),
       ),
-      ...(caller.wrapper === undefined
-        ? []
-        : [
-            fileEvidence(
-              input.sha,
-              caller.wrapper.path,
-              caller.wrapper.line_start,
-              caller.wrapper.line_end,
-            ),
-          ]),
-      fileEvidence(
-        input.sha,
-        entryLandmark.type.path,
-        entryLandmark.method.line_start,
-        entryLandmark.method.line_end,
-      ),
+      ...(wrapperEvidence === undefined ? [] : [wrapperEvidence]),
+      entryEvidence,
     ];
     const route = `${caller.protocol.method} ${caller.protocol.path}`;
     clientSteps.push({
@@ -602,14 +616,20 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
     });
     const id = `${caller.id}-to-${entryStepId}`;
     links.push({ id, from: caller.id, to: entryStepId, relation: "transport", kind: "request", label: route, evidence });
-    claims.push({
-      link_id: id,
-      expect: "present",
-      matcher: "spring_route",
-      from: { path: caller.path, name: caller.actions[0]!, protocol: caller.protocol },
-      to: { ...symbolRef(entryLandmark), protocol: caller.protocol },
-      evidence,
-    });
+    for (const call of caller.calls) {
+      claims.push({
+        link_id: id,
+        expect: "present",
+        matcher: "spring_route",
+        from: { path: caller.path, name: call.action, protocol: caller.protocol },
+        to: { ...symbolRef(entryLandmark), protocol: caller.protocol },
+        evidence: [
+          fileEvidence(input.sha, caller.path, call.line_start, call.line_end),
+          ...(wrapperEvidence === undefined ? [] : [wrapperEvidence]),
+          entryEvidence,
+        ],
+      });
+    }
   }
 
   const node: FlowNode = {

@@ -190,6 +190,40 @@ const STITCHED: Record<string, string> = {
   "frontend/src/Practice.tsx": PRACTICE,
 };
 
+/**
+ * One module, two call sites into the same route: one arrow that cites two calls.
+ *
+ * This is where the transport seam has to carry one atomic claim PER call site,
+ * not one claim over both - otherwise a call site that stops making the call rides
+ * in on the one beside it that still does.
+ */
+const PRACTICE_TWICE = `import { apiFetch } from './api'
+
+export function Practice() {
+  async function handleSubmit(attemptId: string) {
+    const response = await apiFetch(\`/api/attempts/\${attemptId}/submit\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ submission: 'x' }),
+    })
+    return response.json()
+  }
+  async function handleResubmit(attemptId: string) {
+    const retry = await apiFetch(\`/api/attempts/\${attemptId}/submit\`, {
+      method: 'POST',
+    })
+    return retry.json()
+  }
+  return { handleSubmit, handleResubmit }
+}
+`;
+
+const STITCHED_TWICE: Record<string, string> = {
+  ...LINEAR,
+  "frontend/src/api.ts": API,
+  "frontend/src/Practice.tsx": PRACTICE_TWICE,
+};
+
 /** The one Flow the Spring adapter emits for the LINEAR route. */
 const springFlow = async (files: Record<string, string>): Promise<{ ctx: ProbeContext; flow: FlowNode; candidate: Candidate }> => {
   const ctx = contextFor(files);
@@ -2699,6 +2733,49 @@ describe("stitching a TypeScript caller to the Spring route it names", () => {
     const moved = contextFor({
       ...STITCHED,
       "frontend/src/Practice.tsx": PRACTICE.replace("method: 'POST'", "method: 'PUT'"),
+    });
+    const repinned = JSON.parse(JSON.stringify(candidate).replaceAll(ctx.sha, moved.sha)) as Candidate;
+    const gated = gateCandidate(moved, repinned);
+    expect(gated.node.confidence).toBe("absent");
+    expect(gated.finding).toContain("quarantined atomically");
+  }, 60_000);
+
+  it("carries one atomic claim per client call site on a single arrow", async () => {
+    // One module POSTs the same route from two actions, so one arrow cites two
+    // call sites. Each is its own spring_route claim the gate re-resolves against
+    // its OWN span - the same guarantee a crossing link gives, applied to the
+    // transport seam - and the union of their evidence is exactly the arrow's.
+    const { ctx, flow, candidate } = await springFlow(STITCHED_TWICE);
+    const transport = flow.links!.filter((l) => l.relation === "transport");
+    expect(transport).toHaveLength(1);
+    const cited = (transport[0]!.evidence as { path: string }[]).map((e) => e.path);
+    expect(cited).toEqual([
+      "frontend/src/Practice.tsx",
+      "frontend/src/Practice.tsx",
+      "frontend/src/api.ts",
+      "src/main/java/app/web/AttemptController.java",
+    ]);
+    const claims = candidate.flow_claims!.filter((c) => c.link_id === transport[0]!.id);
+    expect(claims).toHaveLength(2);
+    expect(claims.map((c) => c.from.name).sort()).toEqual(["handleResubmit", "handleSubmit"]);
+
+    const gated = gateCandidate(ctx, candidate);
+    expect(gated.verdict).toBe("confirmed");
+    expect(gated.node.confidence).toBe("verified");
+  }, 60_000);
+
+  it("quarantines the whole Flow when one of two call sites on an arrow stops calling", async () => {
+    // The gate-disagreement mutant for per-site transport resolution. One arrow
+    // cites two call sites; in the moved tree exactly one action no longer makes
+    // the call, and the story is cut whole. Before per-site claims this passed,
+    // because the surviving call site alone satisfied the single shared claim.
+    const { ctx, candidate } = await springFlow(STITCHED_TWICE);
+    const moved = contextFor({
+      ...STITCHED_TWICE,
+      "frontend/src/Practice.tsx": PRACTICE_TWICE.replace(
+        "const retry = await apiFetch(`/api/attempts/${attemptId}/submit`, {",
+        "const retry = await computeLocally(attemptId, {",
+      ),
     });
     const repinned = JSON.parse(JSON.stringify(candidate).replaceAll(ctx.sha, moved.sha)) as Candidate;
     const gated = gateCandidate(moved, repinned);

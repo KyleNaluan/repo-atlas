@@ -57,7 +57,7 @@ const callersOf = (ctx: ProbeContext, entry: HttpEntry): TransportCaller[] => {
         line_start: Math.min(...calls.map((call) => call.action.line_start)),
         line_end: Math.max(...calls.map((call) => call.call.line_end)),
       },
-      calls: calls.map((call) => call.call),
+      calls: calls.map((call) => ({ ...call.call, action: call.action.name })),
       ...(wrapper === undefined
         ? {}
         : {

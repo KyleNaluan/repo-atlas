@@ -682,6 +682,15 @@ const closesHttpClient = (name: string, texts: Map<string, string[]>): boolean =
   return false;
 };
 
+/**
+ * Whether the CITED caller spans re-derive this claim's endpoint.
+ *
+ * A transport arrow carries one atomic claim PER call site (#35, PR 6), so the
+ * claim cites exactly one call span in the caller's own file - the loop is not a
+ * tolerance for several unrelated call sites riding in on one another, it iterates
+ * because a wrapper declared in the caller's OWN module cites a second span for
+ * this path, and that declaration span establishes no endpoint of its own.
+ */
 const clientEstablishes = (
   claim: FlowClaim,
   texts: Map<string, string[]>,

@@ -1983,6 +1983,95 @@ public class MemoryCatalog extends BaseCatalog {
     expect(claim.dispatch!.member_count).toBe(2);
     expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
   }, 60_000);
+
+  it("confirms a labelled dispatch whose method is inherited from an abstract base", async () => {
+    // The dispatched byId() is declared on an abstract intermediate that both
+    // @Component catalogs inherit without overriding, so the arrow's target file is
+    // that abstract base - but each branch's `instanceof` guard lives in its own
+    // concrete implementation, not the base. A gate that validated the sealed_guard
+    // labels only against the arrow's target file (as it did before) would find
+    // neither guard there, contradict a genuine branch, and quarantine the whole
+    // Flow. The `verified` + `confirmed` pairing is the point: the producer draws
+    // this either way, so a test checking only the producer would pass while the
+    // gate overturned it.
+    const ctx = contextFor({
+      "src/main/java/app/web/CatalogController.java": SPRING_CONTROLLER,
+      "src/main/java/app/web/CatalogService.java": SERVICE,
+      "src/main/java/app/web/Catalog.java": `package app.web;
+
+public interface Catalog {
+  boolean supports(Grading grading);
+  String byId(String id);
+}
+`,
+      "src/main/java/app/web/Grading.java": `package app.web;
+
+public sealed interface Grading permits Grading.ByKey, Grading.ByName {
+  record ByKey() implements Grading {}
+  record ByName() implements Grading {}
+}
+`,
+      "src/main/java/app/web/AbstractCatalog.java": `package app.web;
+
+public abstract class AbstractCatalog implements Catalog {
+  private final ItemRepository items;
+
+  AbstractCatalog(ItemRepository items) {
+    this.items = items;
+  }
+
+  public String byId(String id) {
+    return items.findTitle(id);
+  }
+}
+`,
+      "src/main/java/app/web/FileCatalog.java": `package app.web;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class FileCatalog extends AbstractCatalog {
+  FileCatalog(ItemRepository items) {
+    super(items);
+  }
+
+  public boolean supports(Grading grading) {
+    return grading instanceof Grading.ByKey;
+  }
+}
+`,
+      "src/main/java/app/web/MemoryCatalog.java": `package app.web;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class MemoryCatalog extends AbstractCatalog {
+  MemoryCatalog(ItemRepository items) {
+    super(items);
+  }
+
+  public boolean supports(Grading grading) {
+    return grading instanceof Grading.ByName;
+  }
+}
+`,
+      "src/main/java/app/web/ItemRepository.java": REPOSITORY,
+    });
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    const flow = candidate.node as FlowNode;
+    expect(flow.confidence).toBe("verified");
+    const dispatches = flow.links!.filter((l) => l.relation === "dispatch");
+    expect(dispatches.length).toBeGreaterThan(0);
+    const labels = dispatches.map((l) => l.label).join(" ");
+    expect(labels).toContain("Grading.ByKey");
+    expect(labels).toContain("Grading.ByName");
+    for (const link of dispatches) {
+      const claim = candidate.flow_claims!.find((c) => c.link_id === link.id)!;
+      expect(claim.dispatch!.via).toBe("sealed_guard");
+      expect(claim.dispatch!.member_count).toBe(2);
+    }
+    expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
+  }, 60_000);
 });
 
 /* ---------------------- boundary link kinds and compression (#35, PR 5) */

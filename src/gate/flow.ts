@@ -762,24 +762,41 @@ const dispatchBranchProblem = (
   memberCount: number,
 ): string | null => {
   const baseName = simpleName(dispatch.base.name);
+  // A branch label is guarded in the file of the implementation that declares the
+  // guard, which is not always the arrow's target file: when the dispatched method
+  // is inherited from a shared abstract intermediate, the target collapses onto the
+  // base while each `instanceof`/`return "key"` guard stays in its own concrete
+  // implementation. So the gate re-reads the whole set's own sources, exactly as
+  // the closed_set case does, and a label is satisfied when SOME member declares it.
+  const guardSources = (): string[] =>
+    [toSource, ...implementationsInTree(ctx, baseName).map((impl) => ctx.read(impl.path))].filter(
+      (source): source is string => source !== null,
+    );
   switch (dispatch.via) {
     case "sole_implementation":
       return memberCount === 1
         ? null
         : `${baseName} is claimed to have a sole implementation but the tree holds ${memberCount}`;
     case "sealed_guard": {
+      const sources = guardSources();
       const missing = dispatch.labels.filter(
-        (label) => !new RegExp(`instanceof\\s+${escaped(label).replace(/\\\./g, "\\.")}\\b`).test(toSource),
+        (label) =>
+          !sources.some((source) =>
+            new RegExp(`instanceof\\s+${escaped(label).replace(/\\\./g, "\\.")}\\b`).test(source),
+          ),
       );
       return missing.length === 0
         ? null
-        : `${dispatch.base.path}'s implementation no longer guards on ${missing.join(", ")}`;
+        : `no subject implementation of ${baseName} guards on ${missing.join(", ")}`;
     }
     case "keyed_registry": {
+      const sources = guardSources();
       const missing = dispatch.labels.filter(
-        (label) => !new RegExp(`\\breturn\\s*\\(?\\s*${escaped(label)}\\s*\\)?\\s*;`).test(toSource),
+        (label) => !sources.some((source) => new RegExp(`\\breturn\\s*\\(?\\s*${escaped(label)}\\s*\\)?\\s*;`).test(source)),
       );
-      return missing.length === 0 ? null : `the implementation no longer returns the key ${missing.join(", ")}`;
+      return missing.length === 0
+        ? null
+        : `no subject implementation of ${baseName} returns the key ${missing.join(", ")}`;
     }
     case "closed_set": {
       if (declaredSealed(baseSource, baseName)) return null;

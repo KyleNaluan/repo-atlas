@@ -217,55 +217,107 @@ const sameNode = (a: SyntaxNode, b: SyntaxNode): boolean =>
   a.endPosition.column === b.endPosition.column;
 
 /**
- * Whether a node sits directly in one method body rather than inside a lambda,
- * anonymous class or nested type declared within it.
+ * The scope a local belongs to: the nearest enclosing lambda, anonymous- or
+ * local-class body, or the method body itself.
  *
- * Method-wide is deliberate - a name declared in one `if` branch is still in
- * scope for the whole method here - but a lambda parameter's local or an
- * anonymous class's field is a different scope's declaration entirely.
+ * Method-wide within one scope is deliberate - a name declared in one `if` branch
+ * is still in scope for the whole method here - but a local declared inside a
+ * lambda is a different scope's declaration: visible inside that lambda and not a
+ * sibling one, and not the method body around it.
  */
-const inMethodBody = (node: SyntaxNode, body: SyntaxNode): boolean => {
-  for (let cur = node.parent; cur; cur = cur.parent) {
-    if (sameNode(cur, body)) return true;
-    if (NESTED_SCOPE.has(cur.type)) return false;
+const declaringScope = (local: SyntaxNode, body: SyntaxNode): SyntaxNode => {
+  for (let cur = local.parent; cur; cur = cur.parent) {
+    if (sameNode(cur, body)) return body;
+    if (NESTED_SCOPE.has(cur.type)) return cur;
+  }
+  return body;
+};
+
+/** Whether `scope` encloses `node`, or is `node` itself. */
+const scopeContains = (scope: SyntaxNode, node: SyntaxNode): boolean => {
+  for (let cur: SyntaxNode | null = node; cur; cur = cur.parent) {
+    if (sameNode(cur, scope)) return true;
   }
   return false;
 };
 
+interface ReceiverScope {
+  /** The receivers in scope at one call site: fields, parameters, in-scope locals. */
+  at: (callSite: SyntaxNode) => Map<string, string>;
+  /** Every name declared as a local anywhere in the body, in any scope. */
+  localNames: Set<string>;
+}
+
 /**
- * Every name a method body can use as a receiver, with the type it was declared
- * with: the enclosing type's fields, this method's parameters, and its locals.
+ * Every name a method body can use as a receiver, resolved per call site by its
+ * scope chain: the enclosing type's fields, this method's parameters, and the
+ * locals whose declaring scope encloses that site.
  *
- * A name declared twice with different types is dropped rather than guessed, on
- * the same rule the field index uses: an ambiguous receiver must fail closed.
+ * The scope check is load-bearing in both directions. `walk` visits invocations
+ * inside lambda and anonymous-class bodies flatly, so a local declared in one
+ * lambda must not type a receiver in a sibling lambda or in the method body - a
+ * declaration the calling scope does not actually have; the gate re-types
+ * receivers by scanning the whole file and would confirm the same wrong
+ * attribution rather than catch it, so the scope check lives here, one of the few
+ * places producer and gate can agree and both be wrong. The other way, a
+ * lambda-local resolved at a site its own lambda encloses is gate-compatible:
+ * the gate's `typedReceivers` finds the same declaration in the file, so typing
+ * it reopens no divergence - the alternative is a durable write inside a lambda
+ * dropping in silence.
+ *
+ * A name declared twice with different types in one scope chain is dropped rather
+ * than guessed, the same rule the field index uses: an ambiguous receiver fails
+ * closed and is then named at the call site rather than skipped.
  */
-const receiverTypes = (type: TypeSymbol, method: MethodSymbol): Map<string, string> => {
-  const names = new Map<string, string>(type.fields);
-  const conflicting = new Set<string>();
-  const remember = (name: string, declared: string): void => {
+const receiverScope = (type: TypeSymbol, method: MethodSymbol): ReceiverScope => {
+  const base = new Map<string, string>(type.fields);
+  const baseConflict = new Set<string>();
+  const remember = (
+    names: Map<string, string>,
+    conflicting: Set<string>,
+    name: string,
+    declared: string,
+  ): void => {
     const previous = names.get(name);
     if (previous !== undefined && previous !== declared) conflicting.add(name);
     names.set(name, declared);
   };
-  for (const param of method.params) if (param.name) remember(param.name, param.type);
+  for (const param of method.params) {
+    if (param.name) remember(base, baseConflict, param.name, param.type);
+  }
+
+  const locals: { name: string; declared: string; scope: SyntaxNode }[] = [];
+  const localNames = new Set<string>();
   if (method.body) {
-    // Only this method's own locals: findAll descends into lambda and anonymous
-    // class bodies, and a local from an inner scope typed onto the outer method's
-    // receiver map is a declaration the calling scope does not actually have. The
-    // gate re-types receivers by scanning the whole file and would confirm the
-    // same wrong attribution rather than catch it, so the scope check lives here.
     for (const local of findAll(method.body, "local_variable_declaration")) {
-      if (!inMethodBody(local, method.body)) continue;
       const declared = local.childForFieldName("type")?.text;
       if (!declared) continue;
-      for (const declarator of findAll(local, "variable_declarator")) {
+      const scope = declaringScope(local, method.body);
+      // Direct declarators only: a local declared inside a lambda in this local's
+      // initialiser is its own declaration, reached by the outer loop with its own
+      // scope, and must not be attributed to this one.
+      for (let i = 0; i < local.namedChildCount; i += 1) {
+        const declarator = local.namedChild(i);
+        if (declarator?.type !== "variable_declarator") continue;
         const name = declarator.childForFieldName("name")?.text;
-        if (name) remember(name, simpleTypeName(declared));
+        if (!name) continue;
+        locals.push({ name, declared: simpleTypeName(declared), scope });
+        localNames.add(name);
       }
     }
   }
-  for (const name of conflicting) names.delete(name);
-  return names;
+
+  const at = (callSite: SyntaxNode): Map<string, string> => {
+    const names = new Map(base);
+    const conflicting = new Set(baseConflict);
+    for (const local of locals) {
+      if (!scopeContains(local.scope, callSite)) continue;
+      remember(names, conflicting, local.name, local.declared);
+    }
+    for (const name of conflicting) names.delete(name);
+    return names;
+  };
+  return { at, localNames };
 };
 
 /**
@@ -598,10 +650,8 @@ export const traceFrom = (
     }
     const body = method.body;
     if (!body) return;
-    const receivers = receiverTypes(type, method);
+    const scope = receiverScope(type, method);
     const untypedLambdaNames = lambdaParameters(body);
-    const argTypes = (arg: SyntaxNode): Resolved =>
-      expressionType(index, type, method, receivers, arg, 1);
 
     const invocations: SyntaxNode[] = [];
     walk(body, (n) => {
@@ -612,6 +662,12 @@ export const traceFrom = (
       const name = invocation.childForFieldName("name")?.text;
       if (name === undefined) continue;
       const receiverNode = invocation.childForFieldName("object");
+      // Receivers are resolved from the invocation's own scope chain, so a local
+      // declared inside a lambda types a call inside that same lambda but not one
+      // outside it.
+      const receivers = scope.at(invocation);
+      const argTypes = (arg: SyntaxNode): Resolved =>
+        expressionType(index, type, method, receivers, arg, 1);
       const receiver = expressionType(index, type, method, receivers, receiverNode);
       // A receiver reached through a chained call is one this phase can type but
       // the gate cannot: it re-types a receiver only from named declarations in
@@ -626,16 +682,29 @@ export const traceFrom = (
           `${key} calls ${name} on \`${receiverNode!.text}\`, a chained call this phase types but the gate re-types a receiver only from the declarations in the calling file`,
         );
       if (receiver.kind === "foreign") {
-        if (
-          receiverNode?.type === "identifier" &&
-          !receivers.has(receiverNode.text) &&
-          untypedLambdaNames.has(receiverNode.text)
-        ) {
-          gap(
-            "unresolved_receiver_type",
-            key,
-            `${key} calls ${name} on the lambda parameter ${receiverNode.text}, whose type this phase does not establish`,
-          );
+        if (receiverNode?.type === "identifier" && !receivers.has(receiverNode.text)) {
+          const on = receiverNode.text;
+          if (untypedLambdaNames.has(on)) {
+            gap(
+              "unresolved_receiver_type",
+              key,
+              `${key} calls ${name} on the lambda parameter ${on}, whose type this phase does not establish`,
+            );
+          } else if (scope.localNames.has(on)) {
+            // A local by this name is declared in the method, but in a scope that
+            // does not enclose this call - a sibling lambda or anonymous class, or
+            // dropped as an ambiguous redeclaration. It is a subject-shaped
+            // receiver this phase declined to type, so it is named rather than
+            // skipped: a silent drop here could be a durable write, and the gate
+            // re-resolves only emitted claims. A genuinely foreign receiver - a
+            // library static, a literal - names no method local and stays foreign
+            // and untraced, unchanged.
+            gap(
+              "unresolved_receiver_type",
+              key,
+              `${key} calls ${name} on ${on}, a local declared in a scope this call is not inside`,
+            );
+          }
         }
         continue;
       }

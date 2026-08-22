@@ -1030,6 +1030,93 @@ public class ReportRepository {
     expect(gateCandidate(owned, candidate).verdict).toBe("confirmed");
   }, 60_000);
 
+  it("traces a durable write on a local declared inside a lambda, but names one out of scope", async () => {
+    // Scoping locals to the method-body-minus-nested-scopes excluded a local
+    // declared inside a lambda from the receiver map, while the walk still traces
+    // the invocations inside that lambda. A `repo.saveAttempt(item)` on such a
+    // local then fell through as foreign and was dropped SILENTLY: the write
+    // vanished from a Flow that still reached a terminal through the response and
+    // rendered verified - a durable write missing from a confident picture, which
+    // the gate never re-resolves because it re-resolves emitted claims, not
+    // omitted edges. The receiver is now resolved from the call site's own scope
+    // chain, so the write is traced.
+    const inLambda = contextFor({
+      "src/main/java/app/web/ImportController.java": `package app.web;
+
+import java.util.List;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class ImportController {
+  private final AttemptRepository repository;
+
+  ImportController(AttemptRepository repository) {
+    this.repository = repository;
+  }
+
+  @PostMapping("/import")
+  public RunResponse importAll(@RequestBody List<Attempt> items) {
+    items.forEach(item -> {
+      AttemptRepository repo = repository;
+      repo.saveAttempt(item);
+    });
+    return RunResponse.of(items);
+  }
+}
+`,
+      "src/main/java/app/web/AttemptRepository.java": REPOSITORY,
+      "src/main/java/app/web/RunResponse.java": RESPONSE,
+    });
+    const candidate = only(await runAdapter("flow-java-spring-http", inLambda));
+    const flow = candidate.node as FlowNode;
+    expect(flow.confidence).toBe("verified");
+    const write = flow.links!.find((l) => l.to === "attemptrepository-saveattempt");
+    expect(write, "the durable write inside the lambda must be traced").toBeDefined();
+    expect(write!.relation).toBe("write");
+    // The gate re-resolves it too: `typedReceivers` finds the `AttemptRepository
+    // repo` declaration by scanning the whole calling file, so it re-types a
+    // lambda-local receiver as readily as a method-level one. Typing these reopens
+    // none of the producer/gate divergence the other named limits exist for.
+    expect(gateCandidate(inLambda, candidate).verdict).toBe("confirmed");
+
+    // The counterpart pins that the scope check actually restricts rather than
+    // resolving everything method-wide again: an identifier whose local is
+    // declared in a SIBLING lambda is out of scope at the call site. It is neither
+    // typed wrongly (the pre-scope over-collection) nor dropped in silence (the
+    // regression); it fails closed by name, so a subject-shaped identifier
+    // receiver always ends in a resolved edge or a named gap.
+    const outOfScope = contextFor({
+      "src/main/java/app/web/SplitController.java": `package app.web;
+
+import java.util.List;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class SplitController {
+  private final AttemptRepository repository;
+
+  SplitController(AttemptRepository repository) {
+    this.repository = repository;
+  }
+
+  @PostMapping("/split")
+  public String split(@RequestBody List<Attempt> first, List<Attempt> second) {
+    first.forEach(a -> {
+      AttemptRepository repo = repository;
+      repo.saveAttempt(a);
+    });
+    second.forEach(b -> repo.saveAttempt(b));
+    return "ok";
+  }
+}
+`,
+      "src/main/java/app/web/AttemptRepository.java": REPOSITORY,
+    });
+    const reason = absentReason(only(await runAdapter("flow-java-spring-http", outOfScope)));
+    expect(reason).toMatch(/^unresolved_receiver_type:/);
+    expect(reason).toContain("repo");
+  }, 60_000);
+
   it("cuts a cycle rather than following it, and says the recursion is why", async () => {
     const ctx = contextFor({
       "src/main/java/app/cli/Loop.java": `package app.cli;

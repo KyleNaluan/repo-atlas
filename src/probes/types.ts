@@ -60,6 +60,17 @@ export interface Candidate {
    * never the producer's proposed proof recipe.
    */
   flow_claims?: FlowClaim[];
+  /**
+   * Why a producer proposed this candidate as `absent` rather than as a chain
+   * to check.
+   *
+   * A Flow producer can fail in several different ways - a receiver it cannot
+   * type, a dispatch this phase closes no set for, a bound reached before a
+   * terminal - and #6 forbids communicating absence by silence. The gate refuses
+   * to promote an absent proposal either way; this is what lets the reason reach
+   * `record.absent_cuts` instead of being replaced by a generic refusal.
+   */
+  absent_reason?: string;
 }
 
 /** A source symbol named precisely enough for the gate to locate it again. */
@@ -149,6 +160,18 @@ export interface Probe {
    * the seam explicit rather than shipping unexercised TS/Python probe code.
    */
   toolchain: Toolchain;
+  /**
+   * Whether this probe's subject-side prerequisite is present at all, beyond the
+   * toolchain.
+   *
+   * The toolchain test answers "does this subject have Java"; a framework
+   * adapter also has to answer "does this subject run Spring". Without the
+   * second question a Spring route detector on a plain-Java subject would report
+   * "ran, found nothing", which reads as an absence of routes rather than an
+   * absence of the framework - the exact conflation #5 rejects for toolchains,
+   * one level down. Returning a reason keeps the report saying so BY NAME.
+   */
+  applies?: (ctx: ProbeContext) => { ok: true } | { ok: false; reason: string } | Promise<{ ok: true } | { ok: false; reason: string }>;
   /**
    * Async only because three probes need a WASM parse tree; nothing here waits
    * on the network or on a model, and every probe is deterministic.

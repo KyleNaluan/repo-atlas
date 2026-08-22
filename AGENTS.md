@@ -59,6 +59,17 @@ The existence gate runs in **both directions** (#7 point 7), and the single-dire
 
 Flow is the atomic exception to that generic outcome path (#35): every links-based candidate needs one `flow_claims` entry per arrow, and one unresolved, stale, or contradicted arrow quarantines the **whole** Flow as `absent` - never attested, partial, or converted to a subject divergence. Direct-call, exact Spring-route, and data-access matchers resolve now; `closed_dispatch` and `reachability` deliberately fail closed until their producer phases add the required closed-set knowledge. Legacy `calls_next` remains a render input only and cannot enter as a newly verified candidate.
 
+## The Flow producer
+
+`src/probes/flow/` is the shared machinery and `src/probes/library/flow-java-*.ts` are the registered adapters (#35, PR 4). One entry family per adapter, deliberately: "no Spring here" and "no runnable main here" are different findings, which is what the `Probe.applies` hook exists for - a framework-level applicability answer the toolchain test cannot give.
+
+Two rules make it more than a call-graph walker, and both are easy to erase by accident:
+
+- **A gap anywhere the entry reaches quarantines the whole candidate**, not merely a gap on a path that survived pruning. Scoping it to survivors turns pruning into a way to walk around an unresolved dispatch and still draw a confident picture, which is the "path that stops when resolution becomes difficult" the design forbids. Every stop is an `absent` candidate whose `absent_reason` starts with a kind token (`unresolved_dispatch:`, `landmark_budget_exceeded:`, ...) so the record can count failures without string-matching a sentence.
+- **The producer resolves no further than the gate can re-resolve.** They are independent derivations - a parse tree against a blob reread - so they must fail closed on the same line, or a real chain returns as a confusing quarantine. That is why a receiver held in ANOTHER type's field is a named limit rather than a traced edge, and why `normalizedRoute` (`src/probes/flow/route.ts`) is shared by both while the resolution stays split, exactly as `manifests.ts` shares one definition of "declared".
+
+What the reference subject yields is measured, not predicted: `test/fixtures/swe-prep.flow-producer.json` pins it, carries the command that regenerates it against a swe-prep clone, and is asserted by `test/run/parity.test.ts`. At `086c999` the submission narrative #35 exists to recover is still cut, at `ExerciseCatalog.byId` through an interface.
+
 `assets/tree-sitter-java.wasm` is vendored deliberately. The only npm package shipping a prebuilt Java grammar bundles ~40 of them at 50 MB for one 430 KB file, which is not a defensible npx footprint. `web-tree-sitter` is pinned to the ABI that grammar was built against - **the two move together or not at all**.
 
 ## Write

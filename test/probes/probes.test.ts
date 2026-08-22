@@ -114,12 +114,18 @@ describe("the probe manifest", () => {
     // `unresolved-references` is #6 point 3. `measured-scale` restates figures the
     // harvest already measured as Fact nodes - the stat tiles the reference
     // overview opens with, which no stage produced at all.
-    expect(PROBES).toHaveLength(10);
+    // The eleventh and twelfth are #35's Flow entry adapters. They are two
+    // entries rather than one for the same reason the list is enumerated at all:
+    // "this subject runs no Spring" and "this subject ships no runnable main"
+    // are different findings, and one adapter cannot report the other's absence.
+    expect(PROBES).toHaveLength(12);
     expect(PROBES.map((p) => p.id).sort()).toEqual([
       "ci-policy-guards",
       "decided-but-unbuilt",
       "dependency-asymmetry",
       "dependency-divergence",
+      "flow-java-cli",
+      "flow-java-spring-http",
       "measured-scale",
       "repeated-sql-predicates",
       "sealed-hierarchies",
@@ -133,6 +139,8 @@ describe("the probe manifest", () => {
     const java = PROBES.filter((p) => p.toolchain === "java").map((p) => p.id);
     expect(java.sort()).toEqual([
       "dependency-asymmetry",
+      "flow-java-cli",
+      "flow-java-spring-http",
       "sealed-hierarchies",
       "throw-where-siblings-return",
     ]);
@@ -146,6 +154,8 @@ describe("the probe manifest", () => {
     const skipped = outcomes.filter((o) => o.status === "not_applicable");
     expect(skipped.map((o) => o.probe_id).sort()).toEqual([
       "dependency-asymmetry",
+      "flow-java-cli",
+      "flow-java-spring-http",
       "sealed-hierarchies",
       "throw-where-siblings-return",
     ]);

@@ -348,7 +348,7 @@ export const sectionFlows = async (
   const cut = deletionsFor(atlas, "flows");
   const figures: Safe[] = [];
   for (const flow of flows) {
-    const { svg, long } = await renderFlow(flow, cache);
+    const { svg, long, depth } = await renderFlow(flow, cache);
     figures.push(html`
       <div class="dive-head">
         <h3 id="${flow.id}">${title(flow)}</h3>
@@ -370,6 +370,10 @@ export const sectionFlows = async (
           <span>${chrome`<i style="background:#7aa2f7"></i>request path`}</span>
           <span>${chrome`<i style="background:#7ec699"></i>response path`}</span>
           <span>${chrome`<i style="background:#d9a441"></i>side path or side effect`}</span>
+          <span
+            >${chrome`<i style="background:transparent;border-top:2px dotted #7aa2f7"></i>network
+            boundary`}</span
+          >
           <span class="dim"
             >${chrome`laid out by Graphviz - no coordinate in this file was written by hand`}</span
           >
@@ -379,9 +383,10 @@ export const sectionFlows = async (
           : ""}
         ${long
           ? html`<p class="small dim">
-              ${chrome`This flow has ${flow.steps.length} steps and lays out as a strip rather than a
-              readable figure. Diagram quality is bounded by how the flow is modelled, not by the
-              layout engine; splitting it at a natural seam is a modelling decision.`}
+              ${chrome`The longest narrative through this flow runs ${depth} landmarks deep, so it
+              lays out as a strip rather than a readable figure. Diagram quality is bounded by how
+              the flow is modelled, not by the layout engine; splitting it at a natural seam is a
+              modelling decision.`}
             </p>`
           : ""}
       </figure>

@@ -24,6 +24,7 @@ import { gateCandidate } from "../../src/gate/gate.js";
 import { javaIndex } from "../../src/probes/flow/symbols.js";
 import { httpEntries, mainEntries } from "../../src/probes/flow/entries.js";
 import { normalizedRoute } from "../../src/probes/flow/route.js";
+import { LONG_FLOW_STEPS, narrativeDepth, renderFlow } from "../../src/render/diagram.js";
 import { presentTenseClaims, resolveFileEvidence } from "../../src/audit/checks/evidence.js";
 import type { Candidate, ProbeContext, ProbeOutcome } from "../../src/probes/types.js";
 import type { Atlas, FlowNode } from "../../src/schema/types.js";
@@ -155,6 +156,45 @@ const LINEAR: Record<string, string> = {
   "src/main/java/app/web/AttemptService.java": SERVICE,
   "src/main/java/app/web/AttemptRepository.java": REPOSITORY,
   "src/main/java/app/web/RunResponse.java": RESPONSE,
+};
+
+/* ------------------- the TypeScript transport seam (#35, PR 6) */
+
+const API = `// The wrapper the subject's own wiring closes as an HTTP client.
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
+
+export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const url = \`\${API_BASE_URL}\${path}\`
+  return await fetch(url, init)
+}
+`;
+
+const PRACTICE = `import { apiFetch } from './api'
+
+export function Practice() {
+  async function handleSubmit(attemptId: string) {
+    const response = await apiFetch(\`/api/attempts/\${attemptId}/submit\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ submission: 'x' }),
+    })
+    return response.json()
+  }
+  return handleSubmit
+}
+`;
+
+const STITCHED: Record<string, string> = {
+  ...LINEAR,
+  "frontend/src/api.ts": API,
+  "frontend/src/Practice.tsx": PRACTICE,
+};
+
+/** The one Flow the Spring adapter emits for the LINEAR route. */
+const springFlow = async (files: Record<string, string>): Promise<{ ctx: ProbeContext; flow: FlowNode; candidate: Candidate }> => {
+  const ctx = contextFor(files);
+  const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+  return { ctx, candidate, flow: candidate.node as FlowNode };
 };
 
 /* ---------------------------------------------------- entry inventory */
@@ -1568,8 +1608,14 @@ public class Service {
 /* ------------------------------------- the audit reads what it emits */
 
 describe("a produced Flow satisfies the audit's static evidence gates", () => {
-  it("resolves every citation and establishes every rendered relationship", async () => {
-    const ctx = contextFor(LINEAR);
+  // The stitched tree, so the transport arrow is audited too: E2's transport
+  // branch is the one check that reads a cross-language contract, and a Flow
+  // that passed only because it had no such arrow would prove nothing about it.
+  it.each([
+    ["a backend-entry Flow", LINEAR],
+    ["a Flow stitched to its TypeScript caller", STITCHED],
+  ])("resolves every citation and establishes every rendered relationship: %s", async (_what, files) => {
+    const ctx = contextFor(files);
     const candidate = only(await runAdapter("flow-java-spring-http", ctx));
     const atlas = {
       schema_version: "1.1.0",
@@ -2610,5 +2656,239 @@ public class OrderRepository {
       "derive",
     );
     expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
+  }, 60_000);
+});
+
+describe("stitching a TypeScript caller to the Spring route it names", () => {
+  it("draws the transport arrow and verifies it through the gate", async () => {
+    const { ctx, flow, candidate } = await springFlow(STITCHED);
+
+    // The story now starts where a person starts it. PR 4 could only claim this
+    // route in a caption, because "a transport link needs a real caller".
+    expect(flow.title).toContain("browser to terminal");
+    const client = flow.steps[0]!;
+    expect(client.node).toBe("Practice.tsx");
+    expect(client.detail).toBe("handleSubmit()");
+    // The route is on the ARROW, not repeated inside the box it leaves.
+    expect(flow.links!.find((l) => l.relation === "transport")!.label).toBe(
+      "POST /api/attempts/{}/submit",
+    );
+
+    const transport = flow.links!.filter((l) => l.relation === "transport");
+    expect(transport).toHaveLength(1);
+    // Both ends plus the declaration that closes the callee as an HTTP client:
+    // exactly what the gate has to reread to agree the two files share a contract.
+    const cited = (transport[0]!.evidence as { path: string }[]).map((e) => e.path);
+    expect(cited).toEqual([
+      "frontend/src/Practice.tsx",
+      "frontend/src/api.ts",
+      "src/main/java/app/web/AttemptController.java",
+    ]);
+
+    const gated = gateCandidate(ctx, candidate);
+    expect(gated.verdict).toBe("confirmed");
+    expect(gated.node.confidence).toBe("verified");
+  }, 60_000);
+
+  it("quarantines the whole Flow when the caller's verb moves under it", async () => {
+    // The gate-disagreement mutant for the new claim kind. The route still
+    // exists, the path still matches, and the story is still cut whole: a
+    // transport arrow claims an agreement, and half of one is not a weaker
+    // agreement.
+    const { ctx, candidate } = await springFlow(STITCHED);
+    const moved = contextFor({
+      ...STITCHED,
+      "frontend/src/Practice.tsx": PRACTICE.replace("method: 'POST'", "method: 'PUT'"),
+    });
+    const repinned = JSON.parse(JSON.stringify(candidate).replaceAll(ctx.sha, moved.sha)) as Candidate;
+    const gated = gateCandidate(moved, repinned);
+    expect(gated.node.confidence).toBe("absent");
+    expect(gated.finding).toContain("quarantined atomically");
+  }, 60_000);
+
+  it("refuses the stitch when the wrapper adds path text of its own", async () => {
+    // A helper that rewrites the URL makes the call site's literal something
+    // other than the route, so the subject has not closed it as an HTTP client
+    // and no arrow may be drawn from it. The route keeps its own entry rather
+    // than gaining a caller nothing established.
+    const { flow } = await springFlow({
+      ...STITCHED,
+      "frontend/src/api.ts": API.replace("`${API_BASE_URL}${path}`", "`${API_BASE_URL}/v2${path}`"),
+    });
+    expect(flow.title).toContain("entry to terminal");
+    expect(flow.links!.some((l) => l.relation === "transport")).toBe(false);
+  }, 60_000);
+
+  it("does not stitch a caller that names the same path under another verb", async () => {
+    // Report 5.2's rule, which is why the match is on verb AND normalized path:
+    // this subject writes GET and POST against several identical paths.
+    const files = {
+      ...STITCHED,
+      "frontend/src/Practice.tsx": PRACTICE.replace("method: 'POST'", "method: 'DELETE'"),
+    };
+    const { flow } = await springFlow(files);
+    expect(flow.links!.some((l) => l.relation === "transport")).toBe(false);
+
+    const cuts = await runAdapter("flow-typescript-http-client", contextFor(files));
+    expect(cuts).toHaveLength(1);
+    expect(cuts[0]!.absent_reason).toMatch(/^route_method_mismatch: /);
+    expect(cuts[0]!.absent_reason).toContain("declares that path only for POST");
+    expect(cuts[0]!.node.confidence).toBe("absent");
+  }, 60_000);
+
+  it("names a call whose URL is built at run time rather than guessing at one", async () => {
+    const files = {
+      ...STITCHED,
+      "frontend/src/Practice.tsx": PRACTICE.replace(
+        "`/api/attempts/${attemptId}/submit`",
+        "routeFor(attemptId)",
+      ),
+    };
+    const { flow } = await springFlow(files);
+    expect(flow.links!.some((l) => l.relation === "transport")).toBe(false);
+    const cut = only(await runAdapter("flow-typescript-http-client", contextFor(files)));
+    expect(cut.absent_reason).toMatch(/^dynamic_path: /);
+    expect(cut.absent_reason).toContain("routeFor(attemptId)");
+  }, 60_000);
+
+  it("names a call whose URL is assembled from a literal and an expression", async () => {
+    const files = {
+      ...STITCHED,
+      "frontend/src/Practice.tsx": PRACTICE.replace(
+        "`/api/attempts/${attemptId}/submit`",
+        "'/api/attempts/' + attemptId + '/submit'",
+      ),
+    };
+    const cut = only(await runAdapter("flow-typescript-http-client", contextFor(files)));
+    expect(cut.absent_reason).toMatch(/^generated_path: /);
+  }, 60_000);
+
+  it("names a call whose HTTP method is not written down", async () => {
+    const files = {
+      ...STITCHED,
+      "frontend/src/Practice.tsx": PRACTICE.replace(
+        /\{\n      method: 'POST',[\s\S]*?\}\)/,
+        "requestInit)",
+      ),
+    };
+    const cut = only(await runAdapter("flow-typescript-http-client", contextFor(files)));
+    expect(cut.absent_reason).toMatch(/^dynamic_request_init: /);
+  }, 60_000);
+
+  it("names a resolved call that no Spring mapping in this subject serves", async () => {
+    const files = {
+      ...STITCHED,
+      "frontend/src/Practice.tsx": PRACTICE.replace("/api/attempts/${attemptId}/submit", "/api/ghost"),
+    };
+    const cut = only(await runAdapter("flow-typescript-http-client", contextFor(files)));
+    expect(cut.absent_reason).toMatch(/^no_subject_route: /);
+  }, 60_000);
+
+  it("emits nothing of its own for a call it stitched, so one route is one story", async () => {
+    // The successful half of what this adapter finds is a transport arrow inside
+    // the route's own Flow, evidenced at both ends there. A second candidate
+    // telling the same story from the same call site would put two tellings in
+    // front of #39's budget of two.
+    expect(await runAdapter("flow-typescript-http-client", contextFor(STITCHED))).toHaveLength(0);
+  }, 60_000);
+
+  it("reports its own applicability by name, at both levels", async () => {
+    const noFrontend = await runProbes(contextFor(LINEAR));
+    const client = noFrontend.outcomes.find((o) => o.probe_id === "flow-typescript-http-client")!;
+    expect(client.status).toBe("not_applicable");
+    expect(client.status === "not_applicable" && client.reason).toContain("not applicable to this toolchain");
+
+    // TypeScript is here and calls nothing: a SUBJECT-level answer the toolchain
+    // test cannot give.
+    const silent = await runProbes(contextFor({ ...LINEAR, "frontend/src/App.tsx": "export const x = 1\n" }));
+    const quiet = silent.outcomes.find((o) => o.probe_id === "flow-typescript-http-client")!;
+    expect(quiet.status).toBe("not_applicable");
+    expect(quiet.status === "not_applicable" && quiet.reason).toContain("no production TypeScript module calls");
+
+    // A frontend with no Spring route to stitch TO says that instead of blaming
+    // the calls for missing an inventory this phase never had.
+    const noBackend = await runProbes(contextFor({ "frontend/src/api.ts": API, "frontend/src/Practice.tsx": PRACTICE }));
+    const unmatched = noBackend.outcomes.find((o) => o.probe_id === "flow-typescript-http-client")!;
+    expect(unmatched.status).toBe("not_applicable");
+    expect(unmatched.status === "not_applicable" && unmatched.reason).toContain("no Spring HTTP route");
+  }, 180_000);
+});
+
+describe("one arrow per relationship, however many calls it carries", () => {
+  const REPEATED: Record<string, string> = {
+    ...LINEAR,
+    "src/main/java/app/web/AttemptService.java": `package app.web;
+
+public class AttemptService {
+  private final AttemptRepository attempts;
+
+  AttemptService(AttemptRepository attempts) {
+    this.attempts = attempts;
+  }
+
+  public Attempt submit(UUID id, RunRequest request) {
+    Attempt attempt = new Attempt(id, request.code());
+    attempts.insertAttempt(attempt);
+    attempts.updateAttempt(attempt);
+    return attempts.saveAttempt(attempt);
+  }
+}
+`,
+    "src/main/java/app/web/AttemptRepository.java": `package app.web;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
+  Attempt saveAttempt(Attempt attempt);
+  void insertAttempt(Attempt attempt);
+  void updateAttempt(Attempt attempt);
+}
+`,
+  };
+
+  it("draws three calls into one component as one arrow with three claims", async () => {
+    const { ctx, flow, candidate } = await springFlow(REPEATED);
+    const toRepository = flow.links!.filter((l) => l.to.includes("attemptrepository"));
+    // One relationship, drawn once. PR 5 drew one arrow per differently-labelled
+    // call, which on the reference subject put ten arrows between one pair of
+    // boxes - the readability failure report 5.4 names.
+    expect(toRepository).toHaveLength(1);
+    // One name per line: in `rankdir=LR` a comma-joined list becomes width.
+    expect(toRepository[0]!.label).toBe(
+      "insertAttempt(...)\\lupdateAttempt(...)\\lsaveAttempt(...)",
+    );
+    expect(toRepository[0]!.evidence).toHaveLength(3);
+
+    // And nothing was merged away: every call site is still its own atomic claim,
+    // and the gate resolves each one before the arrow survives.
+    const claims = candidate.flow_claims!.filter((c) => c.link_id === toRepository[0]!.id);
+    expect(claims).toHaveLength(3);
+    expect(claims.map((c) => c.to!.name).sort()).toEqual([
+      "insertAttempt",
+      "saveAttempt",
+      "updateAttempt",
+    ]);
+    expect(gateCandidate(ctx, candidate).node.confidence).toBe("verified");
+
+    // Every method the arrow touches is still named in the box it lands on, so
+    // the figure never points at a box whose text does not mention the target.
+    const box = flow.steps.find((s) => s.id === toRepository[0]!.to)!;
+    for (const name of ["insertAttempt", "updateAttempt", "saveAttempt"]) {
+      expect(box.detail).toContain(name);
+    }
+  }, 60_000);
+
+});
+
+describe("the readability criterion, measured on what the producer emits", () => {
+  it("measures the narrative a reader follows, not the boxes a fan-out adds", async () => {
+    const { flow } = await springFlow(STITCHED);
+    // Practice.tsx -> route -> service -> repository, and the response beside it.
+    expect(narrativeDepth(flow)).toBeLessThanOrEqual(LONG_FLOW_STEPS);
+    const rendered = await renderFlow(flow);
+    expect(rendered.long).toBe(false);
+    expect(rendered.depth).toBe(narrativeDepth(flow));
+    // The transport crossing is drawn as a crossing rather than as another call.
+    expect(rendered.dot).toMatch(/practice-tsx" -> "attemptcontroller-submit".*style=dotted/);
   }, 60_000);
 });

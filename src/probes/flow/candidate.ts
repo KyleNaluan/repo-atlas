@@ -24,6 +24,38 @@ import {
   type TraceResult,
 } from "./trace.js";
 import type { MethodSymbol, TypeSymbol } from "./symbols.js";
+import type { HttpVerb } from "./entries.js";
+
+/**
+ * One module that CALLS an HTTP entry, drawn as a transport arrow into it.
+ *
+ * PR 4 claimed the Spring route at caption level and said why: "a transport link
+ * needs a real caller". This is that caller. The box is the calling module, at
+ * the same one-box-per-component granularity every other box uses, and the arrow
+ * is a `transport` link whose evidence names BOTH ends - the client call site and
+ * the handler declaration - because a transport claim is a claim about an
+ * agreement between two files, not about either one alone.
+ */
+export interface TransportCaller {
+  /** The rendered box title: the module the call is written in. */
+  node: string;
+  /** Flow-local step id; minted from the path so two modules cannot collide. */
+  id: string;
+  path: string;
+  /** The named actions in this module that call the route, in source order. */
+  actions: string[];
+  /** The box's evidence: the first action's declaration through its call site. */
+  box: { line_start: number; line_end: number };
+  /** Every call site, cited by the transport link. */
+  calls: { line_start: number; line_end: number }[];
+  /**
+   * The declaration that closes the callee as an HTTP client, when it is not
+   * `fetch` itself - cited for the same reason a dispatch arrow cites its guard:
+   * without it the arrow's claim cannot be re-derived from the blob.
+   */
+  wrapper?: { path: string; line_start: number; line_end: number };
+  protocol: { method: HttpVerb; path: string };
+}
 
 export interface CandidateInput {
   probeId: string;
@@ -41,6 +73,14 @@ export interface CandidateInput {
   entryKind?: "request";
   /** Claims about the entry itself, e.g. the route a Spring handler serves. */
   entryClaims?: FlowClaim[];
+  /**
+   * Verified client callers of the entry, prepended as transport arrows.
+   *
+   * They arrive already matched on verb AND normalized path (never on path text
+   * alone, per report 5.2), and a caller the adapter could not pin exactly never
+   * reaches here: it is a named `absent` cut in its own adapter instead.
+   */
+  callers?: TransportCaller[];
   trace: TraceResult;
 }
 
@@ -232,6 +272,31 @@ const componentOf = (
   return component;
 };
 
+/**
+ * The figure's one sentence: where the story starts, where it ends, and its size.
+ *
+ * The endings are counted rather than listed in full. A fan-out reaches a dozen
+ * terminals, and a caption that names every one is a paragraph the reader skips -
+ * while the count is the fact that matters and each ending is a box in the figure
+ * beside it. Nothing is hidden by counting something the figure already draws.
+ */
+const caption = (
+  from: string,
+  terminals: string[],
+  landmarks: number,
+  links: number,
+): string => {
+  const shown = terminals.slice(0, 3).join(", ");
+  const rest = terminals.length - 3;
+  const ends =
+    terminals.length === 0
+      ? "its terminals"
+      : rest > 0
+        ? `${shown} and ${rest} further ${rest === 1 ? "terminal" : "terminals"}`
+        : shown;
+  return `Traced from ${from} to ${ends}: ${landmarks} landmarks and ${links} independently resolved links.`;
+};
+
 const headlineGap = (gaps: TraceGap[]): TraceGap | undefined => {
   let best: TraceGap | undefined;
   for (const gap of gaps) {
@@ -363,38 +428,83 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
     };
   });
 
+  const entryLandmark = trace.landmarks.get(trace.entry)!;
   const links: FlowLink[] = [];
   const claims: FlowClaim[] = [...(input.entryClaims ?? [])];
-  const usedLinkIds = new Set<string>();
-  const drawn = new Set<string>();
+  const relationOf = (edge: TraceEdge): FlowLink["relation"] =>
+    edge.relation === "call" && edge.inReturn && trace.terminals.has(edge.to)
+      ? "return"
+      : edge.relation;
+
+  // ONE ARROW PER RELATIONSHIP, not one per call (#35, PR 6, report 5.4).
+  //
+  // PR 5 drew a separate arrow for every differently-labelled crossing, and on
+  // the reference subject that put ten arrows between one pair of boxes, each
+  // labelled with a different static helper. That is not ten relationships: it is
+  // one component calling into another ten times, and drawing it ten times is the
+  // readability failure the criterion names - while hiding any of those call
+  // sites would be the worse failure it names first.
+  //
+  // So the grouping key is the RELATIONSHIP - the two components and the typed
+  // relation - and the arrow carries every call site as its own evidence and its
+  // own atomic claim. A `dispatch` arrow is the deliberate exception: its label is
+  // a BRANCH PREDICATE the tree names, so two dispatch branches are two different
+  // executions and stay two arrows (PR 5 decision 1). Every method any of these
+  // calls touches is still named in the box it touches, so nothing is lost from
+  // the figure - only repeated from it.
+  const groups = new Map<string, TraceEdge[]>();
   for (const edge of crossing) {
     const from = ids.get(component.get(edge.from)!)!;
     const to = ids.get(component.get(edge.to)!)!;
-    // Two methods of one component calling the same target the same way is one
-    // arrow, not two drawn on top of each other. Differently labelled crossings
-    // stay separate arrows with their own evidence, which is what PR 1's
-    // edge-level contract exists for.
-    const shape = `${from}|${to}|${edge.relation}|${edge.label}`;
-    if (drawn.has(shape)) continue;
-    drawn.add(shape);
+    const relation = relationOf(edge);
+    const key =
+      relation === "dispatch"
+        ? `${from}|${to}|${relation}|${edge.label}`
+        : `${from}|${to}|${relation}`;
+    groups.set(key, [...(groups.get(key) ?? []), edge]);
+  }
+
+  const usedLinkIds = new Set<string>();
+  for (const [key, edges] of groups) {
+    const [from, to] = key.split("|") as [string, string];
+    const relation = relationOf(edges[0]!);
     const base = `${from}-to-${to}`;
     let id = base;
     for (let n = 2; usedLinkIds.has(id); n += 1) id = `${base}-${n}`;
     usedLinkIds.add(id);
-    // A dispatch arrow cites the guard as well as the call site: the claim it
-    // makes is not "this call reaches that method" but "this call reaches one of
-    // a set the tree closes, and this branch is the one the guard names". The
-    // guard body is where that second half is written.
-    const evidence = [
-      fileEvidence(input.sha, edge.path, edge.line_start, edge.line_end),
-      ...(edge.dispatch?.guards ?? []).map((guard) =>
-        fileEvidence(input.sha, guard.path, guard.line_start, guard.line_end),
-      ),
-    ];
-    const relation =
-      edge.relation === "call" && edge.inReturn && trace.terminals.has(edge.to)
-        ? ("return" as const)
-        : edge.relation;
+
+    const evidence: FileEvidence[] = [];
+    const cited = new Set<string>();
+    const add = (e: FileEvidence): void => {
+      const key_ = `${e.path}:${e.line_start}-${e.line_end}`;
+      if (cited.has(key_)) return;
+      cited.add(key_);
+      evidence.push(e);
+    };
+    for (const edge of edges) {
+      // A dispatch arrow cites the guard as well as the call site: the claim it
+      // makes is not "this call reaches that method" but "this call reaches one of
+      // a set the tree closes, and this branch is the one the guard names". The
+      // guard body is where that second half is written.
+      add(fileEvidence(input.sha, edge.path, edge.line_start, edge.line_end));
+      for (const guard of edge.dispatch?.guards ?? []) {
+        add(fileEvidence(input.sha, guard.path, guard.line_start, guard.line_end));
+      }
+    }
+
+    // The label names what the arrow carries, ONE NAME PER LINE. In `rankdir=LR`
+    // a comma-joined list of calls is laid out as horizontal width, and on the
+    // reference subject that alone made the figure three times wider than the
+    // boxes needed - so the same names stacked cost nothing but the height the
+    // fan-out already spends. Three names is the most an edge label reads at;
+    // the rest are countable rather than hidden, and every one of them is named
+    // in the box the arrow lands on.
+    const names = [...new Set(edges.map((edge) => edge.label))];
+    const label = [
+      ...names.slice(0, 3),
+      ...(names.length > 3 ? [`+${names.length - 3} more`] : []),
+    ].join("\\l");
+
     links.push({
       id,
       from,
@@ -404,48 +514,119 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
         ? { kind: "response" as const }
         : relation === "side_effect"
           ? { kind: "aside" as const }
-          : {}),
-      label: edge.label,
+          : relation === "transport"
+            ? { kind: "request" as const }
+            : {}),
+      label,
       evidence,
     });
-    const to_ = symbolRef(trace.landmarks.get(edge.to)!);
 
+    // One claim per CALL SITE, all of them on this one arrow. The gate resolves
+    // every one and requires their evidence to be exactly the arrow's, so merging
+    // arrows never merges away a claim: an arrow drawn over ten call sites is an
+    // arrow ten independent re-resolutions have to agree with.
+    for (const edge of edges) {
+      const target = symbolRef(trace.landmarks.get(edge.to)!);
+      claims.push({
+        link_id: id,
+        expect: "present",
+        matcher:
+          relation === "read" || relation === "write"
+            ? "data_access"
+            : relation === "dispatch"
+              ? "closed_dispatch"
+              : "direct_call",
+        from: symbolRef(trace.landmarks.get(edge.from)!),
+        to: edge.receiver === undefined ? target : { ...target, receiver: edge.receiver.qualified },
+        evidence: [
+          fileEvidence(input.sha, edge.path, edge.line_start, edge.line_end),
+          ...(edge.dispatch?.guards ?? []).map((guard) =>
+            fileEvidence(input.sha, guard.path, guard.line_start, guard.line_end),
+          ),
+        ],
+        ...(edge.dispatch === undefined
+          ? {}
+          : {
+              dispatch: {
+                base: { path: edge.dispatch.base.path, name: edge.dispatch.base.qualified },
+                via: edge.dispatch.via,
+                member_count: edge.dispatch.memberCount,
+                labels: edge.dispatch.labels,
+              },
+            }),
+      });
+    }
+  }
+
+  // The transport seam. PR 4 could only claim the route in a caption, and said
+  // why: a transport link needs a real caller. With one, the story starts where a
+  // person starts it, and the arrow across the process boundary is drawn rather
+  // than described. Its evidence names BOTH ends plus the declaration that closes
+  // the callee as an HTTP client - the same reason a dispatch arrow cites its
+  // guard - because that is the whole of what the gate must re-derive from the
+  // blob to agree the two files share one contract.
+  const clientSteps: FlowStep[] = [];
+  const entryStepId = ids.get(trace.entry)!;
+  for (const caller of input.callers ?? []) {
+    const evidence = [
+      ...caller.calls.map((call) =>
+        fileEvidence(input.sha, caller.path, call.line_start, call.line_end),
+      ),
+      ...(caller.wrapper === undefined
+        ? []
+        : [
+            fileEvidence(
+              input.sha,
+              caller.wrapper.path,
+              caller.wrapper.line_start,
+              caller.wrapper.line_end,
+            ),
+          ]),
+      fileEvidence(
+        input.sha,
+        entryLandmark.type.path,
+        entryLandmark.method.line_start,
+        entryLandmark.method.line_end,
+      ),
+    ];
+    const route = `${caller.protocol.method} ${caller.protocol.path}`;
+    clientSteps.push({
+      id: caller.id,
+      node: caller.node,
+      // The box names the actions; the ARROW names the route. Printing the route
+      // in both widens every client box by the length of a URL to say a second
+      // time what the edge label already says.
+      detail: caller.actions.map((action) => `${action}()`).join("\\l"),
+      kind: "request",
+      evidence: fileEvidence(input.sha, caller.path, caller.box.line_start, caller.box.line_end),
+    });
+    const id = `${caller.id}-to-${entryStepId}`;
+    links.push({ id, from: caller.id, to: entryStepId, relation: "transport", kind: "request", label: route, evidence });
     claims.push({
       link_id: id,
       expect: "present",
-      matcher:
-        relation === "read" || relation === "write"
-          ? "data_access"
-          : relation === "dispatch"
-            ? "closed_dispatch"
-            : "direct_call",
-      from: symbolRef(trace.landmarks.get(edge.from)!),
-      to: edge.receiver === undefined ? to_ : { ...to_, receiver: edge.receiver.qualified },
+      matcher: "spring_route",
+      from: { path: caller.path, name: caller.actions[0]!, protocol: caller.protocol },
+      to: { ...symbolRef(entryLandmark), protocol: caller.protocol },
       evidence,
-      ...(edge.dispatch === undefined
-        ? {}
-        : {
-            dispatch: {
-              base: { path: edge.dispatch.base.path, name: edge.dispatch.base.qualified },
-              via: edge.dispatch.via,
-              member_count: edge.dispatch.memberCount,
-              labels: edge.dispatch.labels,
-            },
-          }),
     });
   }
 
-  const entryLandmark = trace.landmarks.get(trace.entry)!;
   const node: FlowNode = {
     type: "flow",
     id: nodeId(input, entryLandmark.type, entryLandmark.method),
     title: input.title,
-    caption: `Traced from ${entryLandmark.type.name}.${entryLandmark.method.name} to ${terminalsInGraph
-      .map((key) => {
+    caption: caption(
+      clientSteps.length === 0
+        ? `${entryLandmark.type.name}.${entryLandmark.method.name}`
+        : `${clientSteps.map((step) => step.node).join(" and ")} across ${input.entryTitle}`,
+      terminalsInGraph.map((key) => {
         const landmark = trace.landmarks.get(key)!;
         return `${landmark.type.name}.${landmark.method.name}`;
-      })
-      .join(", ")}: ${steps.length} landmarks and ${links.length} independently resolved links.`,
+      }),
+      steps.length + clientSteps.length,
+      links.length,
+    ),
     orientation: "LR",
     evidence: [
       fileEvidence(
@@ -458,7 +639,7 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
     confidence: "verified",
     interview_value: 0,
     probe_id: input.probeId,
-    steps,
+    steps: [...clientSteps, ...steps],
     links,
   };
   return { probe_id: input.probeId, node, flow_claims: claims };

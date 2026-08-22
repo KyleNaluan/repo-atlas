@@ -140,7 +140,59 @@ describe("the atomic Flow gate", () => {
     const result = gateCandidate(contextFor(directFiles), candidate(directFlow(), []));
     expect(result.verdict).toBe("unresolved");
     expect(result.node.confidence).toBe("absent");
-    expect(result.finding).toContain("exactly one is required");
+    expect(result.finding).toContain("no atomic claim");
+  });
+
+  it("resolves every call site an arrow was drawn over, not just the first", () => {
+    // PR 6 draws ONE arrow for one relationship exercised several times, so an
+    // arrow may carry several atomic claims. The guarantee is unchanged and is
+    // checked rather than assumed: each cited call site is independently
+    // re-resolved, and one that names a different target quarantines the Flow
+    // exactly as it would have when it was an arrow of its own.
+    const files = {
+      "Caller.java": [
+        "class Caller {",
+        "  private final Target target;",
+        "  void run() { target.execute(); }",
+        "  void again() { target.missing(); }",
+        "}",
+      ].join("\n"),
+      "Target.java": "class Target { void execute() {} }\n",
+    };
+    const evidence = [
+      { ...file("Caller.java"), line_start: 3, line_end: 3 },
+      { ...file("Caller.java"), line_start: 4, line_end: 4 },
+    ];
+    const flow = directFlow({ links: [directLink({ label: "execute(), missing()", evidence })] });
+    const claims = [
+      directClaim({ evidence: [evidence[0]!] }),
+      directClaim({
+        from: { path: "Caller.java", owner: "Caller", name: "again", arity: 0 },
+        to: { path: "Target.java", owner: "Target", name: "missing", arity: 0 },
+        evidence: [evidence[1]!],
+      }),
+    ];
+    const result = gateCandidate(contextFor(files), candidate(flow, claims));
+    expect(result.node.confidence).toBe("absent");
+    expect(result.finding).toContain("caller-target");
+  });
+
+  it("refuses an arrow that cites a call site no claim resolves", () => {
+    // The other half of the same rule. An arrow drawn over three call sites and
+    // claimed over two would assert a call nothing re-resolved, which is the
+    // "verified, not asserted" failure the whole gate exists to prevent.
+    const evidence = [
+      { ...file("Caller.java"), line_start: 3, line_end: 3 },
+      { ...file("Caller.java"), line_start: 4, line_end: 4 },
+    ];
+    const flow = directFlow({ links: [directLink({ evidence })] });
+    const result = gateCandidate(
+      contextFor(directFiles),
+      candidate(flow, [directClaim({ evidence: [evidence[0]!] })]),
+    );
+    expect(result.verdict).toBe("unresolved");
+    expect(result.node.confidence).toBe("absent");
+    expect(result.finding).toContain("differs from the evidence the gate was asked to resolve");
   });
 
   it("rejects dangling endpoints and duplicate ids before resolving claims", () => {
@@ -218,6 +270,15 @@ describe("Flow relationship resolvers", () => {
         '  return apiFetch(`/api/orders/${id}`, { method: "POST" });',
         "}",
       ].join("\n"),
+      // The declaration that closes `apiFetch` as an HTTP client of this subject.
+      // The gate re-derives that from the cited span rather than recognising the
+      // name, so a wrapper that rewrote the path could not smuggle a route through.
+      "api.ts": [
+        "export async function apiFetch(path: string, init?: RequestInit) {",
+        "  const url = `${API_BASE_URL}${path}`",
+        "  return fetch(url, init)",
+        "}",
+      ].join("\n"),
       "Controller.java": [
         '@RequestMapping("/api")',
         "class Controller {",
@@ -226,7 +287,7 @@ describe("Flow relationship resolvers", () => {
         "}",
       ].join("\n"),
     };
-    const evidence = [file("client.ts"), file("Controller.java")];
+    const evidence = [file("client.ts"), file("api.ts"), file("Controller.java")];
     const flow = directFlow({
       steps: [
         { id: "caller", node: "submitForm", evidence: file("client.ts") },
@@ -250,10 +311,18 @@ describe("Flow relationship resolvers", () => {
 
   it("quarantines a path match when the Spring HTTP method is wrong", () => {
     const files = {
-      "client.ts": 'apiFetch("/api/orders", { method: "POST" });\n',
+      "client.ts": 'function request() { return apiFetch("/api/orders", { method: "POST" }); }\n',
+      // Declared and cited so the ONLY disagreement left is the verb: without it
+      // the quarantine would be about an unrecognised callee and would prove
+      // nothing about method matching.
+      "api.ts": [
+        "export async function apiFetch(path: string, init?: RequestInit) {",
+        "  return fetch(path, init)",
+        "}",
+      ].join("\n"),
       "Controller.java": '@RequestMapping("/api")\nclass Controller { @GetMapping("/orders") void submit() {} }\n',
     };
-    const evidence = [file("client.ts"), file("Controller.java")];
+    const evidence = [file("client.ts"), file("api.ts"), file("Controller.java")];
     const flow = directFlow({
       steps: [
         { id: "caller", node: "request", evidence: file("client.ts") },
@@ -271,6 +340,94 @@ describe("Flow relationship resolvers", () => {
     const result = gateCandidate(contextFor(files), candidate(flow, [claim]));
     expect(result.verdict).toBe("overturned");
     expect(result.node.confidence).toBe("absent");
+  });
+
+  it("refuses a transport arrow whose callee is not a client this subject closes", () => {
+    // The narrow adapter's whole closure rule, re-derived on the gate's side. A
+    // helper the subject never declares as a fetch client could be rewriting the
+    // path, so the literal at the call site is not established to be the route -
+    // and an arrow drawn on a probable contract is what the atomic rule forbids.
+    const files = {
+      "client.ts": 'function request() { return post("/api/orders"); }\n',
+      "Controller.java":
+        '@RequestMapping("/api")\nclass Controller { @GetMapping("/orders") void submit() {} }\n',
+    };
+    const evidence = [file("client.ts"), file("Controller.java")];
+    const protocol = { method: "GET" as const, path: "/api/orders" };
+    const flow = directFlow({
+      steps: [
+        { id: "caller", node: "request", evidence: file("client.ts") },
+        { id: "target", node: "Controller.submit", evidence: file("Controller.java") },
+      ],
+      links: [directLink({ relation: "transport", label: "GET /api/orders", evidence })],
+    });
+    const claim = directClaim({
+      matcher: "spring_route",
+      from: { path: "client.ts", name: "request", protocol },
+      to: { path: "Controller.java", owner: "Controller", name: "submit", protocol },
+      evidence,
+    });
+    const result = gateCandidate(contextFor(files), candidate(flow, [claim]));
+    expect(result.verdict).toBe("overturned");
+    expect(result.node.confidence).toBe("absent");
+  });
+
+  it("refuses a transport arrow whose cited call builds its URL at run time", () => {
+    // A path assembled from an expression is not a route this engine can match,
+    // and the gate says so from the cited span alone - so a producer that
+    // resolved one anyway could not get it past this check.
+    const files = {
+      "client.ts": 'function request(id: string) { return fetch("/api/orders/" + id); }\n',
+      "Controller.java":
+        '@RequestMapping("/api")\nclass Controller { @GetMapping("/orders/{id}") void submit() {} }\n',
+    };
+    const evidence = [file("client.ts"), file("Controller.java")];
+    const protocol = { method: "GET" as const, path: "/api/orders/{}" };
+    const flow = directFlow({
+      steps: [
+        { id: "caller", node: "request", evidence: file("client.ts") },
+        { id: "target", node: "Controller.submit", evidence: file("Controller.java") },
+      ],
+      links: [directLink({ relation: "transport", label: "GET /api/orders/{}", evidence })],
+    });
+    const claim = directClaim({
+      matcher: "spring_route",
+      from: { path: "client.ts", name: "request", protocol },
+      to: { path: "Controller.java", owner: "Controller", name: "submit", protocol },
+      evidence,
+    });
+    expect(gateCandidate(contextFor(files), candidate(flow, [claim])).node.confidence).toBe(
+      "absent",
+    );
+  });
+
+  it("refuses a transport arrow whose cited call hands fetch an options variable", () => {
+    // `fetch(url)` with no options is a GET by specification, which both halves
+    // may read. `fetch(url, init)` states the method somewhere else entirely, so
+    // neither half may assume one.
+    const files = {
+      "client.ts": 'function request(init: RequestInit) { return fetch("/api/orders", init); }\n',
+      "Controller.java":
+        '@RequestMapping("/api")\nclass Controller { @GetMapping("/orders") void submit() {} }\n',
+    };
+    const evidence = [file("client.ts"), file("Controller.java")];
+    const protocol = { method: "GET" as const, path: "/api/orders" };
+    const flow = directFlow({
+      steps: [
+        { id: "caller", node: "request", evidence: file("client.ts") },
+        { id: "target", node: "Controller.submit", evidence: file("Controller.java") },
+      ],
+      links: [directLink({ relation: "transport", label: "GET /api/orders", evidence })],
+    });
+    const claim = directClaim({
+      matcher: "spring_route",
+      from: { path: "client.ts", name: "request", protocol },
+      to: { path: "Controller.java", owner: "Controller", name: "submit", protocol },
+      evidence,
+    });
+    expect(gateCandidate(contextFor(files), candidate(flow, [claim])).node.confidence).toBe(
+      "absent",
+    );
   });
 
   it("confirms a typed repository write", () => {

@@ -834,7 +834,8 @@
           "description": "Drives edge colour and dashed aside styling, never position."
         },
         "label": {
-          "type": "string"
+          "type": "string",
+          "description": "Edge label; `\\l` separates Graphviz lines, as in `FlowStep.detail`."
         },
         "evidence": {
           "type": "array",

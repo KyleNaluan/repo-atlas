@@ -22,6 +22,7 @@ import { unresolvedReferences } from "./library/unresolved-references.js";
 import { measuredScale } from "./library/measured-scale.js";
 import { flowJavaCli } from "./library/flow-java-cli.js";
 import { flowJavaSpringHttp } from "./library/flow-java-spring-http.js";
+import { flowTypescriptHttpClient } from "./library/flow-typescript-http-client.js";
 import { tunedConfigProperties } from "./library/tuned-config-properties.js";
 import { parseJava, type SyntaxNode } from "./java.js";
 import { detectToolchains, type Probe, type ProbeContext, type ProbeOutcome } from "./types.js";
@@ -31,9 +32,11 @@ import type { Harvest } from "../harvest/types.js";
 /**
  * #5's eight discovery probes, plus the node producers nothing else mints:
  * `unresolved-references` (#6 point 3), `measured-scale` (the stat tiles) and
- * the two Flow entry adapters (#35). Each Flow adapter is listed separately on
+ * the three Flow adapters (#35). Each Flow adapter is listed separately on
  * purpose: one entry family being absent must not read as another one finding
- * nothing.
+ * nothing - and the TypeScript client adapter is separate from the Spring one
+ * for the same reason, because "no frontend here" and "the frontend calls
+ * nothing this backend serves" are different findings.
  */
 export const PROBES: readonly Probe[] = [
   decidedButUnbuilt,
@@ -48,6 +51,7 @@ export const PROBES: readonly Probe[] = [
   measuredScale,
   flowJavaSpringHttp,
   flowJavaCli,
+  flowTypescriptHttpClient,
 ] as const;
 
 const git = (repo: string, args: string[]): string =>

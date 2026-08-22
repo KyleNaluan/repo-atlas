@@ -65,13 +65,13 @@ The boundaries that carry weight
 The decision trail
 The decision trail - absent from the record. No decision record with admissible evidence was found in this repository. Nothing here was reconstructed from commit messages: a commit message restating a ticket title is not a decision record.
 The deletion record (#)
+The longest narrative through this flow runs # landmarks deep, so it lays out as a strip rather than a readable figure. Diagram quality is bounded by how the flow is modelled, not by the layout engine; splitting it at a natural seam is a modelling decision.
 The real shape
 The record
 The record (#)
 The suite does not pass at this SHA. What is reported is what was observed; the diagnosis is in Honest edges.
 The suite, run at this commit. ./test.sh was run against this exact commit in a clean worktree.
 The thing worth being able to narrate at a whiteboard. Every box traces to a call site; every arrow is an edge the layout engine routed, not a line someone drew.
-This flow has # steps and lays out as a strip rather than a readable figure. Diagram quality is bounded by how the flow is modelled, not by the layout engine; splitting it at a natural seam is a modelling decision.
 Tradeoffs taken knowingly
 Type
 Unit
@@ -95,6 +95,7 @@ cut: no evidence
 cut: rank / budget
 evidence entries
 laid out by Graphviz - no coordinate in this file was written by hand
+network boundary
 no alternative recorded
 of #
 request path

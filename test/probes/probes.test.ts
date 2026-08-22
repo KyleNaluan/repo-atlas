@@ -114,12 +114,14 @@ describe("the probe manifest", () => {
     // `unresolved-references` is #6 point 3. `measured-scale` restates figures the
     // harvest already measured as Fact nodes - the stat tiles the reference
     // overview opens with, which no stage produced at all.
-    // The last four are #35's Flow adapters. They are four entries rather than one
-    // for the same reason the list is enumerated at all: "this subject runs no
-    // Spring", "this subject ships no runnable main", "this subject has no
-    // frontend calling it" and "this subject stores nothing it derives from" are
-    // different findings, and no one adapter can report another's absence.
-    expect(PROBES).toHaveLength(14);
+    // The last seven are #35's Flow adapters. They are seven entries rather than
+    // one for the same reason the list is enumerated at all: "this subject runs
+    // no Spring", "this subject ships no runnable main", "this subject has no
+    // frontend calling it", "this subject stores nothing it derives from", "this
+    // subject runs no batch work", "this subject consumes no messages" and "this
+    // subject ships no unit files" are different findings, and no one adapter can
+    // report another's absence.
+    expect(PROBES).toHaveLength(17);
     expect(PROBES.map((p) => p.id).sort()).toEqual([
       "ci-policy-guards",
       "decided-but-unbuilt",
@@ -128,6 +130,9 @@ describe("the probe manifest", () => {
       "flow-java-cli",
       "flow-java-shared-state",
       "flow-java-spring-http",
+      "flow-java-spring-message",
+      "flow-java-spring-scheduled",
+      "flow-systemd-unit",
       "flow-typescript-http-client",
       "measured-scale",
       "repeated-sql-predicates",
@@ -145,9 +150,15 @@ describe("the probe manifest", () => {
       "flow-java-cli",
       "flow-java-shared-state",
       "flow-java-spring-http",
+      "flow-java-spring-message",
+      "flow-java-spring-scheduled",
       "sealed-hierarchies",
       "throw-where-siblings-return",
     ]);
+    // The systemd adapter is `any` deliberately: a unit file is not source in any
+    // language, so the toolchain test cannot answer for it and the adapter answers
+    // its own applicability question instead (#35, PR 8).
+    expect(PROBES.find((p) => p.id === "flow-systemd-unit")!.toolchain).toBe("any");
   });
 
   it("reports an inapplicable probe BY NAME rather than passing silently", async () => {
@@ -161,17 +172,22 @@ describe("the probe manifest", () => {
       "flow-java-cli",
       "flow-java-shared-state",
       "flow-java-spring-http",
+      "flow-java-spring-message",
+      "flow-java-spring-scheduled",
+      "flow-systemd-unit",
       "flow-typescript-http-client",
       "sealed-hierarchies",
       "throw-where-siblings-return",
     ]);
     for (const o of skipped) {
-      // Two levels of the same rule. Five of these are absent TOOLCHAINS; the
-      // TypeScript client adapter has its toolchain and is still inapplicable,
-      // because this module calls nothing - a SUBJECT-level answer the toolchain
-      // test cannot give, which is what `Probe.applies` exists for.
+      // Two levels of the same rule. Seven of these are absent TOOLCHAINS; the
+      // TypeScript client adapter has its toolchain and is still inapplicable
+      // because this module calls nothing, and the systemd adapter has no
+      // toolchain to be absent at all and is inapplicable because the subject
+      // declares no unit file. Both are SUBJECT-level answers the toolchain test
+      // cannot give, which is what `Probe.applies` exists for.
       expect(o.status === "not_applicable" && o.reason).toMatch(
-        o.probe_id === "flow-typescript-http-client"
+        o.probe_id === "flow-typescript-http-client" || o.probe_id === "flow-systemd-unit"
           ? /not applicable to this subject/
           : /not applicable to this toolchain/,
       );

@@ -1,11 +1,13 @@
 /**
  * Entry-point detection: where an execution story is allowed to begin.
  *
- * Two adapters live here in this phase - Spring HTTP routes and real Java `main`
- * methods - and both read declarations, never text. That is not fastidiousness:
- * a raw `main` grep over the reference subject found four entries where two
- * exist, because two generated harnesses carry a `main` inside a Java text
- * block. A string that looks like an entry point is not an entry point.
+ * Four Java detectors live here - Spring HTTP routes, real `main` methods, clock
+ * triggers and message subscriptions - and every one reads declarations, never
+ * text. That is not fastidiousness: a raw `main` grep over the reference subject
+ * found four entries where two exist, because two generated harnesses carry a
+ * `main` inside a Java text block. A string that looks like an entry point is
+ * not an entry point. (The fifth entry surface, a systemd unit, is not source
+ * code and is read lexically in `unit.ts` instead.)
  *
  * Each detector reports what it found; whether the subject SUPPORTS it at all is
  * decided by the adapter's own applicability check, so "this subject runs no
@@ -13,6 +15,12 @@
  * (#5, and #6's refusal to communicate absence by silence).
  */
 import { normalizedRoute } from "./route.js";
+import {
+  ENABLE_SCHEDULING_ANNOTATION,
+  MESSAGE_ANNOTATIONS,
+  SCHEDULED_ANNOTATION,
+  type MessageAnnotation,
+} from "./trigger.js";
 import { annotationNamed, type JavaIndex, type MethodSymbol, type TypeSymbol } from "./symbols.js";
 
 export type HttpVerb = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
@@ -121,3 +129,72 @@ export const mainEntries = (index: JavaIndex): MainEntry[] => {
   }
   return out;
 };
+
+export interface ScheduledEntry {
+  kind: "scheduled";
+  type: TypeSymbol;
+  method: MethodSymbol;
+  /** The raw `@Scheduled` argument text, which is what the trigger is read from. */
+  args: string;
+}
+
+/**
+ * Every method the subject declares a clock trigger on.
+ *
+ * The declaring type is not filtered here: whether the container manages it, and
+ * whether scheduling is enabled at all, are findings the adapter reports BY NAME
+ * rather than absences it hides by returning a shorter list (#6). This reports
+ * what the tree declares; the adapter decides what that establishes.
+ */
+export const scheduledEntries = (index: JavaIndex): ScheduledEntry[] => {
+  const out: ScheduledEntry[] = [];
+  for (const type of index.types) {
+    for (const method of type.methods) {
+      const annotation = annotationNamed(method.annotations, SCHEDULED_ANNOTATION);
+      if (annotation) out.push({ kind: "scheduled", type, method, args: annotation.args });
+    }
+  }
+  return out;
+};
+
+export interface MessageEntry {
+  kind: "message";
+  type: TypeSymbol;
+  method: MethodSymbol;
+  annotation: MessageAnnotation;
+  args: string;
+}
+
+/**
+ * Every method the subject declares a message or event subscription on.
+ *
+ * One method carrying two listener annotations is reported once, under the first
+ * of the shared list: two subscriptions into one method body is one execution
+ * story with two triggers, and drawing it twice would put the same chain in the
+ * section budget twice.
+ */
+export const messageEntries = (index: JavaIndex): MessageEntry[] => {
+  const out: MessageEntry[] = [];
+  for (const type of index.types) {
+    for (const method of type.methods) {
+      for (const name of MESSAGE_ANNOTATIONS) {
+        const annotation = annotationNamed(method.annotations, name);
+        if (!annotation) continue;
+        out.push({ kind: "message", type, method, annotation: name, args: annotation.args });
+        break;
+      }
+    }
+  }
+  return out;
+};
+
+/**
+ * Where the subject turns scheduling on, if it does anywhere.
+ *
+ * Spring Boot autoconfigures the listener containers the message adapter reads,
+ * but it does not enable scheduling - so this declaration is load-bearing, and
+ * the scheduled adapter cites it as evidence rather than assuming it. Returning
+ * the declaring type (not a boolean) is what lets that citation exist.
+ */
+export const schedulingEnabledBy = (index: JavaIndex): TypeSymbol | null =>
+  index.types.find((type) => annotationNamed(type.annotations, ENABLE_SCHEDULING_ANNOTATION)) ?? null;

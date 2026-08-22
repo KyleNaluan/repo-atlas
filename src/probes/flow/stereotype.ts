@@ -28,3 +28,17 @@ export const SPRING_STEREOTYPES = [
   "RestControllerAdvice",
   "Configuration",
 ];
+
+/**
+ * Whether the subject runs Spring at all.
+ *
+ * The framework-level half of `Probe.applies`, shared by every Spring Flow
+ * adapter for the reason the list above is shared: three adapters keeping three
+ * copies of "does this subject import org.springframework" would eventually
+ * answer differently, and "no Spring here" would then mean one thing to the route
+ * adapter and another to the scheduled one. The toolchain test above it answers
+ * "does this subject have Java"; this answers the framework question, and each
+ * adapter still answers its own entry-family question by itself (#5, #6).
+ */
+export const declaresSpring = (paths: string[], read: (path: string) => string | null): boolean =>
+  paths.some((path) => /^\s*import\s+org\.springframework\./m.test(read(path) ?? ""));

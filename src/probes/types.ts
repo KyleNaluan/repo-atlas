@@ -117,6 +117,38 @@ export type FlowMatcher =
    * accepted either order would accept a swapped arrow.
    */
   | "data_lineage"
+  /**
+   * A CONTAINER TRIGGER: the subject declares that Spring itself starts this
+   * method, on a clock (#35, PR 8).
+   *
+   * It attaches to no arrow, because there is no caller in the tree to draw one
+   * from - which is exactly why it needs a claim of its own. What it asserts is
+   * everything the entry box says: the method carries `@Scheduled`, the trigger
+   * expression is the one printed, the declaring type is container-managed, and
+   * the subject writes `@EnableScheduling` somewhere. Drop the last of those and
+   * the figure would show an execution nothing starts.
+   */
+  | "scheduled_trigger"
+  /**
+   * A MESSAGE SUBSCRIPTION: the subject declares that a listener container hands
+   * this method a message or an event (#35, PR 8).
+   *
+   * It claims the subscription, never the publisher: a topic's producer may not
+   * be in this subject at all, and the in-process publisher stitch is its own
+   * piece of work. The same split PR 4 made for a Spring route before PR 6 had a
+   * caller to draw an arrow from.
+   */
+  | "message_listener"
+  /**
+   * A PROCESS LAUNCH: a systemd unit in the tree starts a program the subject
+   * declares (#35, PR 8).
+   *
+   * The one Flow arrow whose source is not source code. It leaves the process in
+   * the other direction from a transport arrow - it is what creates the process
+   * the rest of the story runs in - and the gate re-derives both halves from the
+   * blob: the unit's own `ExecStart`, and the `main` declaration it names.
+   */
+  | "process_launch"
   | "reachability";
 
 /**
@@ -152,6 +184,34 @@ export interface FlowClaim {
     member_count: number;
     /** How the tree names the branches this one arrow carries. */
     labels: string[];
+  };
+  /**
+   * What a `scheduled_trigger` or `message_listener` claim asserts BEYOND the
+   * method existing (#35, PR 8).
+   *
+   * The entry box for a container-triggered Flow prints the trigger, so the
+   * trigger is part of what the gate re-resolves: an annotation whose expression
+   * moved is a figure whose first box now says something the tree does not.
+   */
+  trigger?: {
+    /** The annotation's simple name, e.g. `Scheduled`, `KafkaListener`. */
+    annotation: string;
+    /** The attribute the subject wrote the expression under. */
+    attribute: string;
+    /** The expression exactly as declared, placeholders included. */
+    expression: string;
+  };
+  /**
+   * What a `process_launch` claim asserts BEYOND both ends existing (#35, PR 8).
+   *
+   * The fully-qualified class the unit's `ExecStart` names. The gate re-derives
+   * the unit's ExecStart from the blob with its own scanner and refuses a claim
+   * whose target that command does not name - proving the `main` exists says
+   * nothing about whether this unit is what starts it.
+   */
+  launch?: {
+    /** The fully-qualified class named on the command line. */
+    target: string;
   };
 }
 
@@ -214,7 +274,7 @@ export interface Probe {
   applies?: (ctx: ProbeContext) => { ok: true } | { ok: false; reason: string } | Promise<{ ok: true } | { ok: false; reason: string }>;
   /**
    * Async only because seven probes need a WASM parse tree - the three
-   * structural discovery probes and the four Flow adapters; nothing here
+   * structural discovery probes and the Flow adapters; nothing here
    * waits on the network or on a model, and every probe is deterministic.
    */
   run: (ctx: ProbeContext) => Candidate[] | Promise<Candidate[]>;

@@ -9,7 +9,13 @@
  * divergence.
  */
 import { isSourceFile } from "../harvest/tree.js";
-import { maskedJava, mentions } from "../probes/flow/reachability.js";
+import {
+  maskedJava,
+  mentions,
+  type ParenList,
+  readParenList,
+  withoutComments,
+} from "../probes/flow/reachability.js";
 import { normalizedRoute } from "../probes/flow/route.js";
 import {
   literalPredicates,
@@ -18,6 +24,17 @@ import {
   writeVerbName,
 } from "../probes/flow/sql.js";
 import { SPRING_STEREOTYPES } from "../probes/flow/stereotype.js";
+import { simpleTypeName } from "../probes/flow/symbols.js";
+import {
+  annotationArgsInText,
+  declaredDestination,
+  declaredTrigger,
+  ENABLE_SCHEDULING_ANNOTATION,
+  MESSAGE_ANNOTATIONS,
+  SCHEDULED_ANNOTATION,
+  type MessageAnnotation,
+} from "../probes/flow/trigger.js";
+import { execStart, launchClassTokens } from "../probes/flow/unit.js";
 import type { Candidate, FlowClaim, ProbeContext, SymbolRef } from "../probes/types.js";
 import type {
   Evidence,
@@ -50,6 +67,12 @@ const MATCHER_RELATIONS: Record<FlowClaim["matcher"], ReadonlySet<FlowRelation>>
   closed_dispatch: new Set(["dispatch"]),
   data_access: new Set(["read", "write"]),
   data_lineage: new Set(["read"]),
+  // A container trigger attaches to no arrow at all: nothing in the tree calls
+  // the method, which is the whole of what it claims. It is a caption-level claim
+  // like `reachability`, and an empty set is what refuses it a link.
+  scheduled_trigger: new Set(),
+  message_listener: new Set(),
+  process_launch: new Set(["transport"]),
   reachability: new Set(),
 };
 
@@ -1354,6 +1377,273 @@ const resolveReachability = (ctx: ProbeContext, claim: FlowClaim): FlowClaimReso
       };
 };
 
+/* ------------------------------- container triggers and process launches */
+
+/*
+ * The three claim kinds PR 8 adds share one problem and one rule.
+ *
+ * The problem: none of them has a caller in the tree. A `@Scheduled` method is
+ * reached because the container decided to, a listener because a broker did, and
+ * a `main` because something outside the process started it. There is no call
+ * site to re-resolve, so what the gate re-resolves instead is the DECLARATION
+ * that establishes the trigger, and everything the entry box prints about it.
+ *
+ * The rule: this is an independent derivation, not a second reading of the
+ * producer's answer. The producer took annotation nodes off a parse tree and
+ * `packageByPath` off an index; every check below re-derives the same facts by
+ * scanning the pinned blob, sharing only the vocabulary in `trigger.ts` and the
+ * `ExecStart` reader in `unit.ts` - exactly as `normalizedRoute` is shared while
+ * the two route derivations stay apart.
+ */
+
+/**
+ * The parameter list of a method this span declares, or null.
+ *
+ * The paren-balance and the top-level comma split are the shared `readParenList`,
+ * so a parameter carrying a parenthesised annotation (`@Header(name = "x")`) or a
+ * bracket inside a string literal (`@Header("a)b")`) is read whole - the gate and
+ * the producer cannot fail closed on different characters. `elements.length` is
+ * the arity, generic commas not counted, because `<>` counts toward depth.
+ */
+const declaredParams = (span: string, ref: SymbolRef): ParenList | null => {
+  const masked = maskedJava(span);
+  const name = simpleName(ref.name);
+  for (const open of masked.matchAll(new RegExp(`\\b${escaped(name)}\\s*\\(`, "g"))) {
+    const list = readParenList(span, open.index + open[0].length - 1, masked);
+    if (list === null) continue;
+    if (ref.arity === undefined || list.elements.length === ref.arity) return list;
+  }
+  return null;
+};
+
+/** The first parameter's declared type, which is what an `@EventListener` subscribes to. */
+const firstParameterType = (param: string): string | null => {
+  // A declared type name is code, never inside a string literal, so reading it off
+  // a length-preserving mask cannot lose it - while the mask stops a `)` inside a
+  // parameter annotation's string (`@Header("x)")`) from cutting the strip early.
+  const masked = maskedJava(param);
+  const first = masked.trim().replace(/^(?:final\s+|@\w+(?:\([^)]*\))?\s+)+/, "");
+  const type = first.split(/\s+/)[0];
+  return type === undefined || type === "" ? null : simpleTypeName(type);
+};
+
+const STEREOTYPE_ANNOTATION = new RegExp(`@(?:${SPRING_STEREOTYPES.join("|")})\\b`);
+
+/**
+ * A container trigger, re-derived from the cited spans.
+ *
+ * Three things have to hold, and each of them is something the figure asserts:
+ * the method really carries the annotation and declares the trigger the entry box
+ * prints; its declaring type really is container-managed, so something actually
+ * calls it; and, for a clock trigger, the subject really turns scheduling on.
+ * Spring Boot autoconfigures the listener containers but NOT `@Scheduled`, so
+ * dropping that last check would let a figure show an execution that never runs.
+ */
+const resolveContainerTrigger = (
+  claim: FlowClaim,
+  texts: Map<string, string[]>,
+  family: "scheduled" | "message",
+): FlowClaimResolution => {
+  const trigger = claim.trigger;
+  if (!trigger) {
+    return { verdict: "unresolved", finding: `a ${claim.matcher} claim needs the trigger its entry box prints` };
+  }
+  const known =
+    family === "scheduled"
+      ? trigger.annotation === SCHEDULED_ANNOTATION
+      : (MESSAGE_ANNOTATIONS as readonly string[]).includes(trigger.annotation);
+  if (!known) {
+    return {
+      verdict: "contradicted",
+      finding: `@${trigger.annotation} is not an annotation this matcher establishes a trigger from`,
+    };
+  }
+  // Comments blanked, string literals kept: the trigger EXPRESSION is a string
+  // the code declares, and `maskedJava` - which asks the opposite question -
+  // would report every cron expression as empty.
+  const spans = (texts.get(claim.from.path) ?? []).map(withoutComments);
+  let declared: { attribute: string; text: string } | null = null;
+  for (const span of spans) {
+    const args = annotationArgsInText(span, trigger.annotation);
+    if (args === null) continue;
+    const params = declaredParams(span, claim.from);
+    if (params === null) continue;
+    declared =
+      family === "scheduled"
+        ? declaredTrigger(args)
+        : declaredDestination(
+            trigger.annotation as MessageAnnotation,
+            args,
+            firstParameterType(params.elements[0] ?? ""),
+          );
+    if (declared !== null) break;
+  }
+  const found =
+    declared !== null &&
+    declared.attribute === trigger.attribute &&
+    declared.text === trigger.expression;
+  if (claim.expect === "absent") {
+    return found
+      ? { verdict: "contradicted", finding: `${claim.from.name} still declares @${trigger.annotation}` }
+      : {
+          verdict: "unresolved",
+          finding: "a cited annotation span is not a closed inventory and cannot establish absence",
+        };
+  }
+  if (!found) {
+    return {
+      verdict: "contradicted",
+      finding:
+        declared === null
+          ? `no cited span in ${claim.from.path} declares ${simpleName(claim.from.name)} under @${trigger.annotation}`
+          : `${simpleName(claim.from.name)} declares @${trigger.annotation} ${declared.attribute} = ${declared.text}, not ${trigger.attribute} = ${trigger.expression}`,
+    };
+  }
+  const owner = simpleName(claim.from.owner ?? "");
+  const managed = spans.some(
+    (span) =>
+      STEREOTYPE_ANNOTATION.test(span) &&
+      new RegExp(`\\b(?:class|record|enum)\\s+${escaped(owner)}\\b`).test(span),
+  );
+  if (!managed) {
+    return {
+      verdict: "contradicted",
+      finding: `the cited spans do not establish ${owner} as a container-managed bean, so nothing calls its @${trigger.annotation} method`,
+    };
+  }
+  if (family === "scheduled") {
+    const enabled = [...texts.values()]
+      .flat()
+      .some((span) => new RegExp(`@${ENABLE_SCHEDULING_ANNOTATION}\\b`).test(withoutComments(span)));
+    if (!enabled) {
+      return {
+        verdict: "contradicted",
+        finding: `nothing cited declares @${ENABLE_SCHEDULING_ANNOTATION}, and Spring Boot does not enable scheduling on its own`,
+      };
+    }
+  }
+  return {
+    verdict: "confirmed",
+    finding: `${owner}.${simpleName(claim.from.name)} is triggered by @${trigger.annotation} ${trigger.attribute} = ${trigger.expression}`,
+  };
+};
+
+/**
+ * Whether a span declares a real program entry `main`, re-derived to accept
+ * exactly what the producer's `mainEntries` accepts and no less.
+ *
+ * The modifiers are matched as a SET rather than in a fixed order: `static public
+ * void main` and `public static final void main` are both legal Java and both are
+ * what the producer draws, so hard-coding `public static void` would reject a
+ * launch the producer legitimately established. What is NOT relaxed is the
+ * requirement that both `public` and `static` are present and the return is
+ * `void` with a single `String[]`/`String...` parameter - that signature is what
+ * separates a program entry from a method named `main`. Scanned over a mask so a
+ * `main(...)` inside a string cannot match.
+ */
+const MAIN_MODIFIER = "public|protected|private|static|final|synchronized|strictfp|abstract|native|default";
+const declaresMainEntry = (span: string): boolean => {
+  const re = new RegExp(
+    `((?:\\b(?:${MAIN_MODIFIER})\\b\\s+)+)void\\s+main\\s*\\(\\s*(?:final\\s+)?String\\s*(?:\\[\\s*\\]|\\.\\.\\.)\\s*\\w+\\s*\\)`,
+    "g",
+  );
+  for (const m of maskedJava(span).matchAll(re)) {
+    const mods = m[1]!;
+    if (/\bpublic\b/.test(mods) && /\bstatic\b/.test(mods)) return true;
+  }
+  return false;
+};
+
+/**
+ * A process launch, re-derived from the unit blob and the `main` declaration.
+ *
+ * The unit is reread WHOLE rather than from the cited span, because `ExecStart`
+ * only means anything inside a `[Service]` section and a span could be cited
+ * around the directive while the section header sits above it. The cited span is
+ * then required to cover the directive this reader found, so the claim and the
+ * re-derivation are talking about the same line.
+ */
+const resolveProcessLaunch = (
+  ctx: ProbeContext,
+  claim: FlowClaim,
+  texts: Map<string, string[]>,
+): FlowClaimResolution => {
+  const to = claim.to;
+  const target = claim.launch?.target;
+  if (!to || target === undefined) {
+    return {
+      verdict: "unresolved",
+      finding: "a process_launch claim needs the class the unit names and the entry it lands on",
+    };
+  }
+  const unit = ctx.read(claim.from.path);
+  if (unit === null) {
+    return { verdict: "unresolved", finding: `${claim.from.path} does not exist at ${ctx.sha}` };
+  }
+  const exec = execStart(unit);
+  const names = exec === null ? [] : launchClassTokens(exec.command);
+  const found = names.includes(target);
+  if (claim.expect === "absent") {
+    return found
+      ? { verdict: "contradicted", finding: `${claim.from.path} still launches ${target}` }
+      : {
+          verdict: "unresolved",
+          finding: "one unit's ExecStart is not a closed inventory and cannot establish absence",
+        };
+  }
+  if (exec === null) {
+    return {
+      verdict: "contradicted",
+      finding: `${claim.from.path} declares no ExecStart in a [Service] section`,
+    };
+  }
+  if (!found) {
+    return {
+      verdict: "contradicted",
+      finding: `${claim.from.path}'s ExecStart names ${names.length === 0 ? "no fully-qualified class" : names.join(", ")}, not ${target}`,
+    };
+  }
+  const cites = claim.evidence.some(
+    (e) =>
+      e.path === claim.from.path &&
+      (e.line_start ?? 1) <= exec.line_start &&
+      (e.line_end ?? Number.MAX_SAFE_INTEGER) >= exec.line_end,
+  );
+  if (!cites) {
+    return {
+      verdict: "unresolved",
+      finding: `the launch link does not cite ${claim.from.path}:${exec.line_start}-${exec.line_end}, the ExecStart it resolves`,
+    };
+  }
+  const source = ctx.read(to.path);
+  if (source === null) {
+    return { verdict: "unresolved", finding: `${to.path} does not exist at ${ctx.sha}` };
+  }
+  const declaredPackage = /^\s*package\s+([\w.]+)\s*;/m.exec(maskedJava(source))?.[1] ?? "";
+  // `declaredMains` keys a nested `main` on its in-file qualified path
+  // (`Outer.Inner`), so the target is reconstructed from `to.owner` UNCHANGED
+  // rather than reduced to its last segment - reducing it would drop the enclosing
+  // class and contradict a launch the producer legitimately drew.
+  const inFileName = to.owner ?? to.name;
+  const qualified = declaredPackage === "" ? inFileName : `${declaredPackage}.${inFileName}`;
+  if (qualified !== target) {
+    return {
+      verdict: "contradicted",
+      finding: `the unit launches ${target}, but the arrow lands on ${qualified}`,
+    };
+  }
+  const declaresMain = (texts.get(to.path) ?? []).some((span) => declaresMainEntry(span));
+  return declaresMain
+    ? {
+        verdict: "confirmed",
+        finding: `${claim.from.path} starts ${target} through a real main declaration`,
+      }
+    : {
+        verdict: "contradicted",
+        finding: `the cited span in ${to.path} declares no public static void main(String[]) for ${inFileName}`,
+      };
+};
+
 export const resolveFlowClaim = (
   ctx: ProbeContext,
   link: FlowLink | undefined,
@@ -1388,6 +1678,15 @@ export const resolveFlowClaim = (
         return { verdict: "contradicted", finding: "data_lineage requires a typed read link" };
       }
       return resolveDataLineage(ctx, claim, checked.texts!);
+    case "scheduled_trigger":
+      return resolveContainerTrigger(claim, checked.texts!, "scheduled");
+    case "message_listener":
+      return resolveContainerTrigger(claim, checked.texts!, "message");
+    case "process_launch":
+      if (!link || link.relation !== "transport") {
+        return { verdict: "contradicted", finding: "process_launch requires a typed transport link" };
+      }
+      return resolveProcessLaunch(ctx, claim, checked.texts!);
     case "reachability":
       return resolveReachability(ctx, claim);
   }

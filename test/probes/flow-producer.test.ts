@@ -361,15 +361,23 @@ public class Echo {
     const candidate = only(await runAdapter("flow-java-spring-http", ctx));
     const flow = candidate.node as FlowNode;
     expect(flow.confidence).toBe("verified");
-    // The local-typed receiver and the repository read are both on the retained
-    // path; the static helper that goes nowhere is not drawn as an ending.
+    // The local-typed receiver still resolves - the repository read reached
+    // through it is on the retained path - but the service reached through a
+    // LOCAL is not a member the controller HOLDS, so it folds into the caller's
+    // box rather than standing alone; its method is still named in that box's
+    // detail so the arrow it makes keeps a named endpoint. The static helper that
+    // goes nowhere is not drawn as an ending.
     expect(flow.steps.map((s) => s.id)).toEqual([
       "mixedcontroller-read",
-      "attemptservice-lookup",
       "attemptrepository-findlatest",
       "echo-of",
     ]);
+    expect(flow.steps[0]!.detail).toContain("AttemptService.lookup()");
     expect(flow.links!.find((l) => l.to === "attemptrepository-findlatest")!.relation).toBe("read");
+    // The read claim is re-resolved from lookup's OWN source, not the folded box.
+    expect(candidate.flow_claims!.find((c) => c.matcher === "data_access")!.from.name).toBe(
+      "lookup",
+    );
     expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
   }, 60_000);
 
@@ -1260,6 +1268,117 @@ describe("the gate re-resolves the producer's claims rather than echoing them", 
     ) as Candidate;
     expect(gateCandidate(moved, repinned).node.confidence).toBe("absent");
   }, 60_000);
+
+  // The producer's localAccessor() rule admits ONE chained receiver: a bare
+  // accessor declared in the calling file, called with no receiver of its own
+  // (`svc().record(...)`), because the file states that accessor's return type
+  // and the gate re-reads exactly that. The gate must re-resolve it for a
+  // CONCRETE target the same way it already does for a dispatch, so a real chain
+  // is not traced-then-overturned. Both `verified` AND `confirmed` are the point:
+  // the bug produced verified-then-quarantined.
+  it("re-resolves a direct_call written on a local accessor to a bean", async () => {
+    const ctx = contextFor({
+      "src/main/java/app/web/AccessorController.java": `package app.web;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class AccessorController {
+  private final AttemptService service;
+
+  AccessorController(AttemptService service) {
+    this.service = service;
+  }
+
+  @PostMapping("/accessor")
+  public String submit(String body) {
+    return svc().record(body);
+  }
+
+  private AttemptService svc() {
+    return service;
+  }
+}
+`,
+      "src/main/java/app/web/AttemptService.java": `package app.web;
+
+import org.springframework.stereotype.Service;
+
+@Service
+public class AttemptService {
+  private final AttemptRepository attempts;
+
+  AttemptService(AttemptRepository attempts) {
+    this.attempts = attempts;
+  }
+
+  public String record(String body) {
+    return attempts.saveAttempt(body).toString();
+  }
+}
+`,
+      "src/main/java/app/web/AttemptRepository.java": `package app.web;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
+  Attempt saveAttempt(String body);
+}
+`,
+    });
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    const flow = candidate.node as FlowNode;
+    expect(flow.confidence).toBe("verified");
+    const direct = candidate.flow_claims!.find((c) => c.matcher === "direct_call")!;
+    expect(direct.from.name).toBe("submit");
+    expect(direct.to!.name).toBe("record");
+    const gated = gateCandidate(ctx, candidate);
+    expect(gated.verdict, gated.finding).toBe("confirmed");
+    expect(gated.node.confidence).toBe("verified");
+  }, 60_000);
+
+  it("re-resolves a data_access written on a local accessor to a repository", async () => {
+    const ctx = contextFor({
+      "src/main/java/app/web/RepoController.java": `package app.web;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class RepoController {
+  private final AttemptRepository attempts;
+
+  RepoController(AttemptRepository attempts) {
+    this.attempts = attempts;
+  }
+
+  @PostMapping("/repo")
+  public String submit(String body) {
+    return repo().saveAttempt(body).toString();
+  }
+
+  private AttemptRepository repo() {
+    return attempts;
+  }
+}
+`,
+      "src/main/java/app/web/AttemptRepository.java": `package app.web;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
+  Attempt saveAttempt(String body);
+}
+`,
+    });
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    expect((candidate.node as FlowNode).confidence).toBe("verified");
+    const data = candidate.flow_claims!.find((c) => c.matcher === "data_access")!;
+    expect(data.from.name).toBe("submit");
+    expect(data.to!.name).toBe("saveAttempt");
+    const gated = gateCandidate(ctx, candidate);
+    expect(gated.verdict, gated.finding).toBe("confirmed");
+    expect(gated.node.confidence).toBe("verified");
+  }, 60_000);
 });
 
 /* --------------------------------------------- adapters and absence */
@@ -1944,5 +2063,75 @@ public class OrderRepository {
     const gated = gateCandidate(ctx, blinded);
     expect(gated.node.confidence).toBe("absent");
     expect(gated.finding).toContain("do not agree with the rendered endpoint steps");
+  }, 60_000);
+
+  // A collaborator the handler CONSTRUCTS as a local (`new RepDeriver()`) is a
+  // new-ed value builder, not a member the type holds, so it folds into the box
+  // that builds it rather than standing beside it. Compression stays honest: the
+  // folded helper's method is named in the calling box's detail, and the arrow it
+  // makes is re-resolved from that method's own source. `heldReceiver` is narrowed
+  // to a declared field, a constructor-injected member, or a method parameter -
+  // the three the caller is HANDED - and an in-scope local is not one of them.
+  it("folds a locally constructed helper into the box that builds it", async () => {
+    const ctx = contextFor({
+      "src/main/java/app/web/BuilderController.java": `package app.web;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class BuilderController {
+  private final OrderRepository orders;
+
+  BuilderController(OrderRepository orders) {
+    this.orders = orders;
+  }
+
+  @PostMapping("/build")
+  public String place(@RequestBody String body) {
+    RepDeriver deriver = new RepDeriver(orders);
+    return deriver.derive(body);
+  }
+}
+`,
+      "src/main/java/app/web/RepDeriver.java": `package app.web;
+
+public class RepDeriver {
+  private final OrderRepository orders;
+
+  RepDeriver(OrderRepository orders) {
+    this.orders = orders;
+  }
+
+  String derive(String seed) {
+    orders.insert(seed);
+    return seed;
+  }
+}
+`,
+      "src/main/java/app/web/OrderRepository.java": `package app.web;
+
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class OrderRepository {
+  public void insert(String id) {}
+}
+`,
+    });
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    const flow = candidate.node as FlowNode;
+    expect(flow.confidence).toBe("verified");
+    // The new-ed helper does not stand alone: no box carries its type.
+    expect(flow.steps.map((s) => s.node)).toEqual(["POST /build", "OrderRepository"]);
+    // Its method is named in the box that built it, so the write arrow leaving
+    // that box still has a nameable endpoint.
+    expect(flow.steps.find((s) => s.node === "POST /build")!.detail).toContain(
+      "RepDeriver.derive(String)",
+    );
+    // And that write is re-resolved from derive's OWN source, not the folded box.
+    expect(candidate.flow_claims!.find((c) => c.matcher === "data_access")!.from.name).toBe(
+      "derive",
+    );
+    expect(gateCandidate(ctx, candidate).verdict).toBe("confirmed");
   }, 60_000);
 });

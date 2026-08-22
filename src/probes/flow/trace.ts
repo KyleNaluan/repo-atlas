@@ -140,14 +140,17 @@ export interface TraceEdge {
    */
   receiver?: TypeSymbol;
   /**
-   * Whether the call went through a member the calling type HOLDS - a field, or a
-   * constructor-injected dependency.
+   * Whether the call went through a member the calling type HOLDS - a declared
+   * field, a constructor-injected dependency, or a method parameter, or through a
+   * field access. A parameter counts because it is handed to the method the same
+   * way an injected dependency is handed to the type; an in-scope LOCAL does not,
+   * because the method builds it rather than being handed it.
    *
    * This is the difference between a collaborator and a helper, and it is the
    * subject's own wiring that states it: a type the caller is handed is a part of
-   * the design, while one it constructs or calls statically is an implementation
-   * detail of the caller. The rendered figure draws the first as its own box and
-   * folds the second into the box that uses it.
+   * the design, while one it constructs (`new RepDeriver()`) or calls statically is
+   * an implementation detail of the caller. The rendered figure draws the first as
+   * its own box and folds the second into the box that uses it.
    */
   heldReceiver: boolean;
 }
@@ -1125,7 +1128,8 @@ export const traceFrom = (
       const range = citedRange(invocation);
       const heldReceiver =
         receiverNode?.type === "identifier"
-          ? type.fieldsDeclared.has(receiverNode.text) || receivers.has(receiverNode.text)
+          ? type.fieldsDeclared.has(receiverNode.text) ||
+            method.params.some((param) => param.name === receiverNode.text)
           : receiverNode?.type === "field_access";
       const edgeBase = {
         from: key,

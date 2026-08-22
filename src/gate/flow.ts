@@ -448,7 +448,7 @@ const resolveDirectCall = (
       finding: `the tree does not declare ${simpleName(to.receiver)} as a ${simpleName(to.owner)}`,
     };
   }
-  const found = hasTypedCall(fromSource, spans, claim.from, to, isSubtype);
+  const found = hasTypedCall(fromSource, spans, claim.from, to, isSubtype, to.receiver ?? to.owner);
   if (claim.expect === "absent") {
     return found
       ? { verdict: "contradicted", finding: `${claim.from.name} still calls ${to.name}` }
@@ -814,7 +814,14 @@ const resolveDataAccess = (
   const typed =
     conventionMatches &&
     symbolExists(toSource, to) &&
-    hasTypedCall(fromSource, spans, claim.from, to, (sub, base) => declaresSubtype(ctx, sub, base));
+    hasTypedCall(
+      fromSource,
+      spans,
+      claim.from,
+      to,
+      (sub, base) => declaresSubtype(ctx, sub, base),
+      to.receiver ?? to.owner,
+    );
   const sql = sqlAccess(spans, to.name, relation);
   const found = typed || sql;
   if (claim.expect === "absent") {

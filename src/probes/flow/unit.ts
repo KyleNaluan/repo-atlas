@@ -37,6 +37,34 @@ export interface ExecStartDirective {
 export const unitName = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
 /**
+ * Join the `\`-continued lines of an ExecStart value that begins at `lines[i]`
+ * and normalize it, returning the command and the 1-based line it ends on.
+ *
+ * This is the ONE definition of "what an ExecStart directive's value is": the
+ * continuation join and the `-`, `+`, `!`, `@` prefix stripping systemd allows.
+ * Both the section-aware whole-file reader below and the span reader E2 uses go
+ * through it, so the audit, the producer and the gate cannot drift on how a
+ * wrapped directive reads. The prefixes are stripped because they modify how
+ * systemd runs the command rather than what the command is.
+ */
+const readExecStartValue = (
+  lines: string[],
+  i: number,
+  value: string,
+): { command: string; line_end: number } => {
+  let command = value;
+  let end = i;
+  while (command.endsWith("\\") && end + 1 < lines.length) {
+    end += 1;
+    command = `${command.slice(0, -1)} ${lines[end]!.trim()}`;
+  }
+  return {
+    command: command.replace(/^[-+!@]+/, "").replace(/\s+/g, " ").trim(),
+    line_end: end + 1,
+  };
+};
+
+/**
  * The `ExecStart=` a unit declares in its `[Service]` section, or null.
  *
  * The first one wins, which is systemd's own rule for a non-oneshot service and
@@ -44,9 +72,9 @@ export const unitName = (path: string): string => path.slice(path.lastIndexOf("/
  * program this returns the first of, and the gate re-derives the same first one
  * from the same blob, so the two sides cannot disagree about which.
  *
- * The `-`, `+`, `!` and `@` prefixes systemd allows on an ExecStart value are
- * stripped, because they modify how systemd runs the command rather than what
- * the command is.
+ * The section rule is load-bearing and is NOT shared with the span reader below:
+ * this reader sees the whole unit precisely so a directive in another section or
+ * behind a comment cannot be taken.
  */
 export const execStart = (source: string): ExecStartDirective | null => {
   const lines = source.split("\n");
@@ -62,17 +90,30 @@ export const execStart = (source: string): ExecStartDirective | null => {
     }
     const directive = /^ExecStart\s*=\s*(.*)$/.exec(trimmed);
     if (!directive || section !== "service") continue;
-    let command = directive[1]!;
-    let end = i;
-    while (command.endsWith("\\") && end + 1 < lines.length) {
-      end += 1;
-      command = `${command.slice(0, -1)} ${lines[end]!.trim()}`;
-    }
-    return {
-      command: command.replace(/^[-+!@]+/, "").replace(/\s+/g, " ").trim(),
-      line_start: i + 1,
-      line_end: end + 1,
-    };
+    const { command, line_end } = readExecStartValue(lines, i, directive[1]!);
+    return { command, line_start: i + 1, line_end };
+  }
+  return null;
+};
+
+/**
+ * The ExecStart command in an arbitrary span, continuations joined, or null.
+ *
+ * E2 (the audit's present-tense claim check) sees only the link's CITED EVIDENCE
+ * SPANS, not the whole unit file, so a span may not carry the `[Service]` header
+ * `execStart` requires - which is why this reader drops the section rule while
+ * still sharing the continuation join and normalization through
+ * `readExecStartValue`. Comment lines are dropped, the same as the whole-file
+ * reader; the first directive the span names wins.
+ */
+export const execStartInSpan = (span: string): string | null => {
+  const lines = span.split("\n");
+  for (let i = 0; i < lines.length; i += 1) {
+    const trimmed = lines[i]!.trim();
+    if (trimmed.startsWith("#") || trimmed.startsWith(";") || trimmed === "") continue;
+    const directive = /^ExecStart\s*=\s*(.*)$/.exec(trimmed);
+    if (!directive) continue;
+    return readExecStartValue(lines, i, directive[1]!).command;
   }
   return null;
 };

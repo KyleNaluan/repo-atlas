@@ -778,4 +778,26 @@ describe("the audit's static evidence gates read every new entry family", () => 
     expect(e2.outcome).toBe("failed");
     expect(JSON.stringify(e2.findings)).toContain("ExecStart");
   }, 60_000);
+
+  it("E2 PASSES a launch arrow whose ExecStart wraps the class onto a continuation line", async () => {
+    // The cited evidence span covers the whole `\`-continued directive, and the
+    // fully-qualified class lands on a continuation line. E2 reads the command
+    // through `execStartInSpan`, which joins continuations the same way the gate
+    // does, so the wrapped directive resolves rather than being read one line
+    // deep - the drift the reused reader closes.
+    const wrapped: Record<string, string> = {
+      ...LAUNCHED,
+      "deploy/cue.service": unitFile(
+        "ExecStart=/usr/bin/java \\\n  -cp /opt/app.jar \\\n  app.cli.Tool --once",
+      ),
+    };
+    const { ctx, result } = await gated(wrapped, "flow-java-cli");
+    expect(result.node.confidence).toBe("verified");
+    const e2 = presentTenseClaims({
+      artifact: "",
+      atlas: atlasWith(result.node as FlowNode, ctx.sha, ctx.clone),
+      clone: ctx.clone,
+    });
+    expect(e2.outcome, JSON.stringify(e2.findings)).toBe("passed");
+  }, 60_000);
 });

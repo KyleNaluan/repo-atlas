@@ -12,7 +12,7 @@ import { resolveComment, resolveIssue } from "../../harvest/cache.js";
 import type { IssueStore } from "../issue-store.js";
 import { flowTopologyProblems } from "../../gate/flow.js";
 import { READ_VERB, WRITE_VERB } from "../../probes/flow/sql.js";
-import { launchClassTokens } from "../../probes/flow/unit.js";
+import { execStartInSpan, launchClassTokens } from "../../probes/flow/unit.js";
 import type {
   Atlas,
   AtlasNode,
@@ -387,16 +387,19 @@ const linkProblem = (ctx: AuditContext, flow: FlowNode, link: FlowLink): string 
     // second way a subject writes one: a systemd unit whose `ExecStart` creates
     // the process the rest of the figure runs in. The check is the same shape as
     // the HTTP one - the cited evidence has to establish the endpoint the arrow
-    // lands on - and it reads the command through `launchClassTokens`, the same
-    // definition the producer and the gate resolve against, rather than a fourth
-    // copy that could drift the way the storage-verb list did.
-    const exec = /^\s*ExecStart\s*=\s*(.*)$/m.exec(texts.join("\n"));
-    if (!exec) {
+    // lands on - and it reads the command through `execStartInSpan` and
+    // `launchClassTokens`, the same definitions the producer and the gate resolve
+    // against, rather than a fourth copy that could drift the way the storage-verb
+    // list did. `execStartInSpan` joins `\`-continued lines the way `execStart`
+    // does, so a wrapped directive whose class lands on a continuation line reads
+    // the same here as it does in the gate.
+    const exec = execStartInSpan(texts.join("\n"));
+    if (exec === null) {
       return `${flow.id} link ${link.id} is transport but names neither an HTTP method and path nor a unit ExecStart`;
     }
     const target = flow.steps.find((step) => step.id === link.to);
     const landing = `${target?.node ?? ""} ${target?.detail ?? ""}`;
-    const launched = launchClassTokens(exec[1] ?? "").filter((token) =>
+    const launched = launchClassTokens(exec).filter((token) =>
       landing.includes(token.slice(token.lastIndexOf(".") + 1)),
     );
     return launched.length > 0

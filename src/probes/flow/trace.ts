@@ -480,6 +480,7 @@ const lambdaParameters = (
   index: JavaIndex,
   body: SyntaxNode,
   receivers: (callSite: SyntaxNode) => Map<string, ReceiverDecl>,
+  fromPath: string,
 ): Map<string, TypeSymbol | null> => {
   const names = new Map<string, TypeSymbol | null>();
   for (const lambda of findAll(body, "lambda_expression")) {
@@ -493,7 +494,7 @@ const lambdaParameters = (
     // Only a single-parameter lambda is typed from a collection: a two-parameter
     // one is a comparator or a reducer, where the element type is not the whole
     // story and guessing which parameter it belongs to would be inference.
-    const element = declared.length === 1 ? streamElementType(index, lambda, receivers) : null;
+    const element = declared.length === 1 ? streamElementType(index, lambda, receivers, fromPath) : null;
     for (const name of declared) {
       names.set(name, names.has(name) && names.get(name) !== element ? null : element);
     }
@@ -550,6 +551,7 @@ const streamElementType = (
   index: JavaIndex,
   lambda: SyntaxNode,
   receivers: (callSite: SyntaxNode) => Map<string, ReceiverDecl>,
+  fromPath: string,
 ): TypeSymbol | null => {
   let call: SyntaxNode | null = lambda.parent;
   while (call && call.type !== "method_invocation") call = call.parent;
@@ -559,7 +561,7 @@ const streamElementType = (
   const declared = receivers(lambda).get(root.text)?.declared;
   if (declared === undefined) return null;
   const element = injectedElementType(declared);
-  return element === null ? null : uniqueType(index, element);
+  return element === null ? null : uniqueType(index, element, fromPath);
 };
 
 type Resolved =
@@ -997,7 +999,7 @@ export const traceFrom = (
     const body = method.body;
     if (!body) return;
     const scope = receiverScope(type, method);
-    const lambdaNames = lambdaParameters(index, body, scope.at);
+    const lambdaNames = lambdaParameters(index, body, scope.at, type.path);
     const subjectRootedLambda = subjectRootedLambdaParameters(index, type, method, body, scope.at);
 
     const invocations: SyntaxNode[] = [];
@@ -1020,11 +1022,22 @@ export const traceFrom = (
           ? lambdaNames.get(receiverNode.text)
           : undefined;
       // A lambda parameter the injected collection's element type establishes is
-      // typed like any other receiver; one it does not is left to the foreign
-      // handler below, which names it rather than passing over it.
+      // typed so a call on it can be recognised, but marked gate-blind: the gate
+      // re-types a receiver only from the declarations in the calling file, and a
+      // lambda parameter is bound by the call site's functional interface rather
+      // than by any declaration there, so producer and gate must fail closed on
+      // the same line. The registry guard-skip runs before the blind check in
+      // `dispatchInto`, so a `supports()`-style closer still resolves; any other
+      // call becomes a named gap instead of an edge the gate would overturn. A
+      // lambda parameter it does not type is left to the foreign handler below,
+      // which names it rather than passing over it.
       const receiver: Resolved =
         lambdaType != null
-          ? { kind: "subject", type: lambdaType }
+          ? {
+              kind: "subject",
+              type: lambdaType,
+              blind: `a lambda parameter this phase types from the injected collection, but the gate re-types a receiver only from the declarations in the calling file`,
+            }
           : expressionType(index, type, method, receivers, receiverNode);
       // A receiver reached through a chained call is one this phase can type but
       // the gate usually cannot: it re-types a receiver only from named

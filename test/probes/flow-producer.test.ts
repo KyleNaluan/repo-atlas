@@ -938,6 +938,66 @@ public class PickRepository {
     expect(reason).toContain("PickService.pick");
   }, 60_000);
 
+  it("names a lambda parameter it types from the injected collection, rather than drawing an edge the gate cannot re-read", async () => {
+    const ctx = contextFor({
+      "src/main/java/app/web/NotifyController.java": `package app.web;
+
+import java.util.List;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class NotifyController {
+  private final List<Handler> handlers;
+  private final AuditRepository audit;
+
+  NotifyController(List<Handler> handlers, AuditRepository audit) {
+    this.handlers = handlers;
+    this.audit = audit;
+  }
+
+  @PostMapping("/notify")
+  public String notify(@RequestBody String event) {
+    handlers.forEach(h -> h.handle(event));
+    return audit.saveEvent(event);
+  }
+}
+`,
+      "src/main/java/app/web/Handler.java": `package app.web;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class Handler {
+  void handle(String event) {}
+}
+`,
+      "src/main/java/app/web/AuditRepository.java": `package app.web;
+
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class AuditRepository {
+  public String saveEvent(String value) { return value; }
+}
+`,
+    });
+    // `h` is a lambda parameter the injected `List<Handler>` element type lets this
+    // phase RECOGNISE, but the gate re-types a receiver only from the declarations
+    // in the calling file, and a lambda parameter has none there - it is bound by
+    // the call site's functional interface. Drawing an edge through it would be a
+    // real chain returning as a confusing quarantine (the gate overturns it), so
+    // the call is named as a gap instead. `saveEvent` reaches a durable write, so
+    // the entry does reach a terminal: without the blind mark this Flow would come
+    // back VERIFIED with the forEach drawn, then be overturned at the gate. The
+    // named cut is the honest form, and it pins both halves of the invariant.
+    const candidate = only(await runAdapter("flow-java-spring-http", ctx));
+    const reason = absentReason(candidate);
+    expect(reason).toMatch(/^unresolved_receiver_type:/);
+    expect(reason).toContain("calls handle on `h`");
+    expect(reason).toContain("lambda parameter");
+    expect(gateCandidate(ctx, candidate).node.confidence).toBe("absent");
+  }, 60_000);
+
   it("traces a direct call inherited from a subject supertype, and the gate re-resolves the inheritance itself", async () => {
     // The base-service pattern: a controller calls, through a field typed as the
     // subtype, a method the subtype INHERITS from a subject-owned base class.

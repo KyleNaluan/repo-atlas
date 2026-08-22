@@ -507,6 +507,45 @@ public record CueRaised(String day) {
     expect(result.node.confidence).toBe("verified");
   }, 60_000);
 
+  it("reads a @RabbitListener whose queue string carries an unbalanced paren", async () => {
+    // The gate balances the annotation's argument list over a length-preserving
+    // mask, so a `)` inside the queue string (`queues = "a)b"`) cannot close the
+    // list early and read the wrong destination. Reading the raw span would
+    // truncate at that quote and quarantine a Flow the producer drew off the tree.
+    const { candidate, result } = await gated(
+      {
+        "src/main/java/app/batch/CueRepository.java": REPOSITORY,
+        "src/main/java/app/batch/CueListener.java": `package app.batch;
+
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.stereotype.Service;
+
+@Service
+public class CueListener {
+  private final CueRepository cues;
+
+  CueListener(CueRepository cues) {
+    this.cues = cues;
+  }
+
+  @RabbitListener(queues = "a)b")
+  public void onCue(String payload) {
+    cues.saveCue("today");
+  }
+}
+`,
+      },
+      "flow-java-spring-message",
+    );
+    const claim = only((candidate.flow_claims ?? []).filter((c) => c.matcher === "message_listener"));
+    expect(claim.trigger).toEqual({
+      annotation: "RabbitListener",
+      attribute: "queues",
+      expression: "a)b",
+    });
+    expect(result.node.confidence).toBe("verified");
+  }, 60_000);
+
   it("RAN EMPTY: a Spring subject that subscribes to nothing", async () => {
     const ctx = contextFor({ "src/main/java/app/batch/CueRepository.java": REPOSITORY });
     const outcome = outcomeFor((await runProbes(ctx)).outcomes, "flow-java-spring-message");
@@ -772,6 +811,54 @@ public class Step${i} {
     const flow = candidate.node as FlowNode;
     expect(new Set(flow.steps.map((step) => step.id)).size).toBe(flow.steps.length);
     expect(new Set(flow.links!.map((link) => link.id)).size).toBe(flow.links!.length);
+  }, 60_000);
+
+  it("reads a main whose modifiers are written `static public`, in any order", async () => {
+    // The producer's `mainEntries` matches the modifiers as a set and checks void
+    // structurally, so `static public final void main` is a program entry it draws.
+    // The gate re-resolves the same set rather than a hard-coded `public static
+    // void`, or the two derivations fail on different inputs and quarantine a real
+    // launch.
+    const { result } = await gated(
+      {
+        ...LAUNCHED,
+        "src/main/java/app/cli/Tool.java": CLI_TOOL.replace(
+          "public static void main",
+          "static public final void main",
+        ),
+      },
+      "flow-java-cli",
+    );
+    expect(result.node.confidence).toBe("verified");
+  }, 60_000);
+
+  it("launches a `main` declared in a nested class, keyed by its full nested path", async () => {
+    // `declaredMains` keys a nested main on `pkg.Outer.Inner`, so the ExecStart
+    // names that whole path and the gate reconstructs it from `to.owner` unchanged
+    // rather than reducing it to `Inner` - which would drop the enclosing class and
+    // contradict a launch the producer drew.
+    const { candidate, result } = await gated(
+      {
+        "src/main/java/app/batch/CueRepository.java": REPOSITORY,
+        "src/main/java/app/cli/Outer.java": `package app.cli;
+
+public class Outer {
+  public static class Inner {
+    static app.batch.CueRepository CUES;
+
+    public static void main(String[] args) {
+      CUES.saveCue(args[0]);
+    }
+  }
+}
+`,
+        "deploy/cue.service": unitFile("ExecStart=/usr/bin/java app.cli.Outer.Inner --once"),
+      },
+      "flow-java-cli",
+    );
+    const claim = only((candidate.flow_claims ?? []).filter((c) => c.matcher === "process_launch"));
+    expect(claim.launch).toEqual({ target: "app.cli.Outer.Inner" });
+    expect(result.node.confidence).toBe("verified");
   }, 60_000);
 
   it("MUTANT: an ExecStart that moved to another program quarantines the whole Flow", async () => {

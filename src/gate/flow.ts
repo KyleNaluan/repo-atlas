@@ -9,7 +9,13 @@
  * divergence.
  */
 import { isSourceFile } from "../harvest/tree.js";
-import { maskedJava, mentions, withoutComments } from "../probes/flow/reachability.js";
+import {
+  maskedJava,
+  mentions,
+  type ParenList,
+  readParenList,
+  withoutComments,
+} from "../probes/flow/reachability.js";
 import { normalizedRoute } from "../probes/flow/route.js";
 import {
   literalPredicates,
@@ -1390,68 +1396,33 @@ const resolveReachability = (ctx: ProbeContext, claim: FlowClaim): FlowClaimReso
  * the two route derivations stay apart.
  */
 
-/** Arity as a declaration writes it, generic commas not counted as separators. */
-const declaredArity = (params: string): number => {
-  const text = params.trim();
-  if (text === "") return 0;
-  let depth = 0;
-  let count = 1;
-  for (const ch of text) {
-    if (ch === "<" || ch === "(") depth += 1;
-    else if (ch === ">" || ch === ")") depth -= 1;
-    else if (ch === "," && depth === 0) count += 1;
-  }
-  return count;
-};
-
-/** The parameter list of a method this span declares, or null. */
-const declaredParams = (span: string, ref: SymbolRef): string | null => {
-  // Balance parens over a length-preserving mask so a `)` inside a string literal
-  // in a parameter annotation (`@Header("a)b")`) cannot end the list early; the
-  // returned text is sliced from the ORIGINAL span at the same offsets, because a
-  // caller reads a declared type name out of it.
+/**
+ * The parameter list of a method this span declares, or null.
+ *
+ * The paren-balance and the top-level comma split are the shared `readParenList`,
+ * so a parameter carrying a parenthesised annotation (`@Header(name = "x")`) or a
+ * bracket inside a string literal (`@Header("a)b")`) is read whole - the gate and
+ * the producer cannot fail closed on different characters. `elements.length` is
+ * the arity, generic commas not counted, because `<>` counts toward depth.
+ */
+const declaredParams = (span: string, ref: SymbolRef): ParenList | null => {
   const masked = maskedJava(span);
   const name = simpleName(ref.name);
   for (const open of masked.matchAll(new RegExp(`\\b${escaped(name)}\\s*\\(`, "g"))) {
-    const start = open.index + open[0].length;
-    let depth = 1;
-    let end = -1;
-    for (let j = start; j < masked.length; j += 1) {
-      if (masked[j] === "(") depth += 1;
-      else if (masked[j] === ")") {
-        depth -= 1;
-        if (depth === 0) {
-          end = j;
-          break;
-        }
-      }
-    }
-    if (end === -1) continue;
-    if (ref.arity === undefined || declaredArity(masked.slice(start, end)) === ref.arity)
-      return span.slice(start, end);
+    const list = readParenList(span, open.index + open[0].length - 1, masked);
+    if (list === null) continue;
+    if (ref.arity === undefined || list.elements.length === ref.arity) return list;
   }
   return null;
 };
 
-/** The span up to the first top-level comma, so an annotation's own comma is not a separator. */
-const firstTopLevelParam = (params: string): string => {
-  let depth = 0;
-  for (let j = 0; j < params.length; j += 1) {
-    const ch = params[j];
-    if (ch === "<" || ch === "(") depth += 1;
-    else if (ch === ">" || ch === ")") depth -= 1;
-    else if (ch === "," && depth === 0) return params.slice(0, j);
-  }
-  return params;
-};
-
 /** The first parameter's declared type, which is what an `@EventListener` subscribes to. */
-const firstParameterType = (params: string): string | null => {
+const firstParameterType = (param: string): string | null => {
   // A declared type name is code, never inside a string literal, so reading it off
-  // a length-preserving mask cannot lose it - while the mask stops a `)` or `,`
-  // inside a parameter annotation's string from cutting the list at the wrong char.
-  const masked = maskedJava(params);
-  const first = firstTopLevelParam(masked).trim().replace(/^(?:final\s+|@\w+(?:\([^)]*\))?\s+)+/, "");
+  // a length-preserving mask cannot lose it - while the mask stops a `)` inside a
+  // parameter annotation's string (`@Header("x)")`) from cutting the strip early.
+  const masked = maskedJava(param);
+  const first = masked.trim().replace(/^(?:final\s+|@\w+(?:\([^)]*\))?\s+)+/, "");
   const type = first.split(/\s+/)[0];
   return type === undefined || type === "" ? null : simpleTypeName(type);
 };
@@ -1503,7 +1474,7 @@ const resolveContainerTrigger = (
         : declaredDestination(
             trigger.annotation as MessageAnnotation,
             args,
-            firstParameterType(params),
+            firstParameterType(params.elements[0] ?? ""),
           );
     if (declared !== null) break;
   }
@@ -1555,6 +1526,32 @@ const resolveContainerTrigger = (
     verdict: "confirmed",
     finding: `${owner}.${simpleName(claim.from.name)} is triggered by @${trigger.annotation} ${trigger.attribute} = ${trigger.expression}`,
   };
+};
+
+/**
+ * Whether a span declares a real program entry `main`, re-derived to accept
+ * exactly what the producer's `mainEntries` accepts and no less.
+ *
+ * The modifiers are matched as a SET rather than in a fixed order: `static public
+ * void main` and `public static final void main` are both legal Java and both are
+ * what the producer draws, so hard-coding `public static void` would reject a
+ * launch the producer legitimately established. What is NOT relaxed is the
+ * requirement that both `public` and `static` are present and the return is
+ * `void` with a single `String[]`/`String...` parameter - that signature is what
+ * separates a program entry from a method named `main`. Scanned over a mask so a
+ * `main(...)` inside a string cannot match.
+ */
+const MAIN_MODIFIER = "public|protected|private|static|final|synchronized|strictfp|abstract|native|default";
+const declaresMainEntry = (span: string): boolean => {
+  const re = new RegExp(
+    `((?:\\b(?:${MAIN_MODIFIER})\\b\\s+)+)void\\s+main\\s*\\(\\s*(?:final\\s+)?String\\s*(?:\\[\\s*\\]|\\.\\.\\.)\\s*\\w+\\s*\\)`,
+    "g",
+  );
+  for (const m of maskedJava(span).matchAll(re)) {
+    const mods = m[1]!;
+    if (/\bpublic\b/.test(mods) && /\bstatic\b/.test(mods)) return true;
+  }
+  return false;
 };
 
 /**
@@ -1623,19 +1620,19 @@ const resolveProcessLaunch = (
     return { verdict: "unresolved", finding: `${to.path} does not exist at ${ctx.sha}` };
   }
   const declaredPackage = /^\s*package\s+([\w.]+)\s*;/m.exec(maskedJava(source))?.[1] ?? "";
-  const owner = simpleName(to.owner ?? to.name);
-  const qualified = declaredPackage === "" ? owner : `${declaredPackage}.${owner}`;
+  // `declaredMains` keys a nested `main` on its in-file qualified path
+  // (`Outer.Inner`), so the target is reconstructed from `to.owner` UNCHANGED
+  // rather than reduced to its last segment - reducing it would drop the enclosing
+  // class and contradict a launch the producer legitimately drew.
+  const inFileName = to.owner ?? to.name;
+  const qualified = declaredPackage === "" ? inFileName : `${declaredPackage}.${inFileName}`;
   if (qualified !== target) {
     return {
       verdict: "contradicted",
       finding: `the unit launches ${target}, but the arrow lands on ${qualified}`,
     };
   }
-  const declaresMain = (texts.get(to.path) ?? []).some((span) =>
-    /\bpublic\s+static\s+void\s+main\s*\(\s*(?:final\s+)?String\s*(?:\[\s*\]|\.\.\.)\s*\w+\s*\)/.test(
-      maskedJava(span),
-    ),
-  );
+  const declaresMain = (texts.get(to.path) ?? []).some((span) => declaresMainEntry(span));
   return declaresMain
     ? {
         verdict: "confirmed",
@@ -1643,7 +1640,7 @@ const resolveProcessLaunch = (
       }
     : {
         verdict: "contradicted",
-        finding: `the cited span in ${to.path} declares no public static void main(String[]) for ${owner}`,
+        finding: `the cited span in ${to.path} declares no public static void main(String[]) for ${inFileName}`,
       };
 };
 

@@ -18,6 +18,8 @@
  * definition here, resolution split.
  */
 
+import { maskedJava, readParenList } from "./reachability.js";
+
 /** The annotation Spring reads a clock trigger from. */
 export const SCHEDULED_ANNOTATION = "Scheduled";
 
@@ -153,18 +155,17 @@ export const declaredDestination = (
  * parse-tree side does, and null when the annotation is not in the span at all.
  */
 export const annotationArgsInText = (span: string, name: string): string | null => {
-  const at = new RegExp(`@${name}\\b`).exec(span);
+  // Scan over a length-preserving mask so a bracket inside a string an annotation
+  // declares (`@RabbitListener(queues = "a)b")`) cannot close the argument list
+  // early, and so an `@Name` sitting inside a string or comment is not matched.
+  // The returned slice comes from the ORIGINAL span - the declared expression is a
+  // string the caller reads verbatim, which the mask would have blanked.
+  const masked = maskedJava(span);
+  const at = new RegExp(`@${name}\\b`).exec(masked);
   if (!at) return null;
   let i = at.index + at[0].length;
-  while (i < span.length && /\s/.test(span[i]!)) i += 1;
-  if (span[i] !== "(") return "";
-  let depth = 0;
-  for (let j = i; j < span.length; j += 1) {
-    if (span[j] === "(") depth += 1;
-    else if (span[j] === ")") {
-      depth -= 1;
-      if (depth === 0) return span.slice(i, j + 1);
-    }
-  }
-  return null;
+  while (i < masked.length && /\s/.test(masked[i]!)) i += 1;
+  if (masked[i] !== "(") return "";
+  const list = readParenList(span, i, masked);
+  return list === null ? null : span.slice(i, list.end + 1);
 };

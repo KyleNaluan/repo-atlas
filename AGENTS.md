@@ -87,7 +87,7 @@ A static helper or a `new`-ed value builder is an implementation detail of the c
 One box per TYPE, never per method, and every method an arrow touches is named in the box it touches - otherwise the gate's `stepNamesSymbol` check rightly refuses to match the claim to the rendered endpoint.
 
 What the reference subject yields is measured, not predicted: `test/fixtures/swe-prep.flow-producer.json` pins it, carries the command that regenerates it against a swe-prep clone, and is asserted by `test/run/parity.test.ts`.
-At `086c999` twenty of twenty-three routes verify, no candidate is cut at a dispatch, and the submission walkthrough #35 exists to recover is verified through the gate at 23 components and 49 independently re-resolved links.
+At `086c999` twenty of twenty-three routes verify, no candidate is cut at a dispatch, and the submission walkthrough #35 exists to recover is verified through the gate at 23 components and 53 independently re-resolved links.
 
 `assets/tree-sitter-java.wasm` is vendored deliberately. The only npm package shipping a prebuilt Java grammar bundles ~40 of them at 50 MB for one 430 KB file, which is not a defensible npx footprint. `web-tree-sitter` is pinned to the ABI that grammar was built against - **the two move together or not at all**.
 

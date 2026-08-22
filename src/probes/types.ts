@@ -213,8 +213,8 @@ export interface Probe {
    */
   applies?: (ctx: ProbeContext) => { ok: true } | { ok: false; reason: string } | Promise<{ ok: true } | { ok: false; reason: string }>;
   /**
-   * Async only because five probes need a WASM parse tree - the three
-   * structural discovery probes and the two Flow entry adapters; nothing here
+   * Async only because seven probes need a WASM parse tree - the three
+   * structural discovery probes and the four Flow adapters; nothing here
    * waits on the network or on a model, and every probe is deterministic.
    */
   run: (ctx: ProbeContext) => Candidate[] | Promise<Candidate[]>;

@@ -33,7 +33,7 @@ import type { Harvest } from "../harvest/types.js";
 /**
  * #5's eight discovery probes, plus the node producers nothing else mints:
  * `unresolved-references` (#6 point 3), `measured-scale` (the stat tiles) and
- * the three Flow adapters (#35). Each Flow adapter is listed separately on
+ * the four Flow adapters (#35). Each Flow adapter is listed separately on
  * purpose: one entry family being absent must not read as another one finding
  * nothing - and the TypeScript client adapter is separate from the Spring one
  * for the same reason, because "no frontend here" and "the frontend calls

@@ -211,15 +211,17 @@ describe("the two reference archetypes, both produced and both verified", () => 
 });
 
 describe("where the engine falls short, and by how much", () => {
-  it("has not re-run the end-to-end pipeline since the producer existed", () => {
-    // THE REMAINING SHORTFALL, and it is now a different one. The producer emits
-    // both archetypes and the gate verifies both (above), but the COMMITTED
-    // end-to-end artifact predates every Flow phase and still reports section 04
-    // absent. Refreshing it needs a credentialed model score run, which CI does
-    // not hold and which no Flow phase has taken on; this records that rather than
-    // letting a green suite imply the artifact moved.
-    expect(countByType(produced)["flow"]).toBeUndefined();
-    expect(produced.record.section_presence["flows"]).toBe("absent");
+  it("has re-run the end-to-end pipeline with the producer and a credentialed score", () => {
+    // THE SHORTFALL THIS RECORDED, closed. The producer emitted both archetypes
+    // and the gate verified both (above) since PR 7 (#35), but the committed
+    // end-to-end artifact predated every Flow phase and still reported section
+    // 04 absent because closing it needed a credentialed model score run, which
+    // CI does not hold (README's own statement of the gap, before this run). A
+    // real `repo-atlas run` against the pinned subject, with real write and
+    // score calls, now sits behind this fixture, and both flows the two-Flow-
+    // parity block above measures survive into the committed artifact.
+    expect(countByType(produced)["flow"]).toBe(2);
+    expect(produced.record.section_presence["flows"]).toBe("present");
   });
 
   it("records what the Flow producer now yields on this subject, rather than predicting it", () => {
@@ -382,10 +384,11 @@ describe("where the engine falls short, and by how much", () => {
     expect(countByType(reference)["boundary"]).toBe(4);
   });
 
-  it("produces fewer than half the reference's nodes, and the number is the finding", () => {
-    // Recorded so it moves visibly. 15 against 33: the decisions, deep dives,
-    // orientation figures and edges are there; the flows and boundaries are not.
-    expect(produced.nodes).toHaveLength(15);
+  it("produces roughly half the reference's nodes, and the number is the finding", () => {
+    // Recorded so it moves visibly. 18 against 33, now that flows are two of the
+    // eighteen: the decisions, deep dives, orientation figures, edges and flows
+    // are there; the boundaries above are still not.
+    expect(produced.nodes).toHaveLength(18);
     expect(reference.nodes).toHaveLength(33);
   });
 });

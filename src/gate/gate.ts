@@ -271,6 +271,12 @@ export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCan
   /** True once the tree confirms an absent-claim, settling `decided_not_built`. */
   let confirmedAbsent = false;
   if (claims.length === 0) {
+    // Nothing to re-resolve, so the candidate stands on its probe's own reading -
+    // which is exactly why #28 caps what such a candidate may claim before it
+    // ever arrives here (`clampConfidenceToReading`). The gate is not a second
+    // chance to earn `verified`: it never promotes, only confirms, demotes, or
+    // overturns, so a finding that reaches this branch carries whatever its
+    // reading supported and no more.
     return {
       probe_id: candidate.probe_id,
       node: candidate.node,

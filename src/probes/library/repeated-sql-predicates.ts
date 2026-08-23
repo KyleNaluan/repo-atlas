@@ -7,7 +7,10 @@
  * remembers to apply it - and a reader who only sees one query cannot tell.
  *
  * Grep-class, deliberately. #5 refuses to force a text question through a parse
- * tree, and "which predicate string recurs" is a text question.
+ * tree, and "which predicate string recurs" is a text question. What the finding
+ * ASSERTS - that the recurrence is an invariant enforced in SQL - is a judgement
+ * read out of those matches rather than the matches themselves, so it ships
+ * `attested` (#28). The reading is honest; it is simply not a verification.
  */
 import type { Candidate, Probe } from "../types.js";
 import { shortHash, slug } from "../id.js";
@@ -59,7 +62,12 @@ export const repeatedSqlPredicates: Probe = {
             line_end: s.line,
             sha: ctx.sha,
           })),
-          confidence: "verified",
+          // #28: grep-class. This probe's own reading cannot establish what the
+          // node asserts, and it hands the gate nothing to re-resolve, so it
+          // ships `attested`. `clampConfidenceToReading` enforces that for any
+          // probe that does not declare `reading: "direct"`; this literal is
+          // what the probe means, not what the clamp leaves behind.
+          confidence: "attested",
           interview_value: 0,
           probe_id: "repeated-sql-predicates",
         },

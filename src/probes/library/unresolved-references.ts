@@ -95,6 +95,14 @@ const find = async (ctx: ProbeContext): Promise<Candidate[]> => {
 
 export const unresolvedReferences: Probe = {
   id: "unresolved-references",
+  /**
+   * The citation IS the finding. `sourceIssueCitations` lifts a literal `#<n>`
+   * out of a comment and the node cites the line it was lifted from, so a reader
+   * who opens the citation sees the reference itself; the other half - that the
+   * record never resolves it - is a lookup over the harvested issues, not a text
+   * match (#28).
+   */
+  reading: "direct",
   finds: "source citing an issue number the record never explains (#6 point 3)",
   toolchain: "any",
   run: find,

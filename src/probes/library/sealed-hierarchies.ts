@@ -16,6 +16,8 @@ import { enclosingTypeNames, endLineOf, findAll, lineOf, nameOf } from "../java.
 
 export const sealedHierarchies: Probe = {
   id: "sealed-hierarchies",
+  /** The parse tree is the reading: a `sealed` modifier and its `permits` list (#28). */
+  reading: "direct",
   finds: "a sealed type and the closed set of implementations it permits",
   toolchain: "java",
   run: async (ctx) => {

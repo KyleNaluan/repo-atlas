@@ -250,10 +250,79 @@ export interface ExistenceClaim {
 
 export type Toolchain = "any" | "java" | "typescript" | "python";
 
+/**
+ * What a probe's OWN reading establishes, and therefore the highest confidence a
+ * candidate of its may carry when it hands the gate nothing to re-resolve (#28).
+ *
+ * #3 makes `verified` a claim the artifact makes about its own evidence, and #28
+ * found that claim being assigned by which parsing technique a probe happened to
+ * use rather than by what was established - a distinction the design does not
+ * intend. Six of the eight v1 probes emitted `verified` while carrying no claims,
+ * so nothing downstream ever re-read them. Three of those were text heuristics,
+ * and that is not a hypothetical hole: during the #19 build `ci-policy-guards`
+ * matched its policy vocabulary against any raw line, so a YAML COMMENT minted a
+ * `verified` mechanism asserting a CI step that was not there. The gate could not
+ * catch it, because the candidate carried no claim to catch.
+ *
+ * The line is not "parse tree versus regex". It is whether the probe asserts
+ * exactly what the bytes it cites say:
+ *
+ * - `direct`   - the reading IS the finding. A parse tree, an enumeration of the
+ *                tree at the pinned SHA, a captured command's own output, or a
+ *                literal token cited at the line it was read from. A reader who
+ *                follows the citation sees the asserted fact itself, and there is
+ *                nothing further a second read could establish.
+ * - `heuristic` - a pattern matched against source text STANDS IN for the finding,
+ *                so the assertion goes beyond what the cited bytes literally say.
+ *                "This line is a CI step that guards policy" is a judgement read
+ *                out of the text, not the text.
+ *
+ * `heuristic` is the DEFAULT, and deliberately so: a probe earns `direct` by
+ * declaring it, rather than every future grep-class probe having to remember to
+ * opt out. #28 rejected the alternative of relying on each new text probe being
+ * right first time, which is precisely what failed.
+ *
+ * The ceiling is not lowered, only unearned confidence removed: a `heuristic`
+ * probe that can state a checkable claim still reaches `verified`, because the
+ * existence gate then confirms it (or demotes it, or overturns it into a
+ * divergence). What it may no longer do is mint `verified` with nothing to check.
+ */
+export type Reading = "direct" | "heuristic";
+
+/**
+ * Hold a probe's candidates to what its own reading can support (#28).
+ *
+ * Applied once, where candidates are collected (`runProbes`), so the rule is a
+ * property of the probe contract rather than three local edits that a fourth
+ * grep-class probe would not inherit. A candidate that hands the gate something
+ * to re-resolve is left alone - `claims` for the generic gate, `flow_claims` for
+ * the atomic Flow gate (#35) - because the gate is then the authority on whether
+ * it stands, and it demotes an unresolved one to `attested` itself.
+ *
+ * Only `verified` moves, and only ever downwards. Nothing here promotes: raising
+ * a candidate's confidence would make this a second authority over what survives,
+ * which #2 and #5 reserve for the gate and the rank stage.
+ */
+export const clampConfidenceToReading = (probe: Probe, candidates: Candidate[]): Candidate[] => {
+  if ((probe.reading ?? "heuristic") === "direct") return candidates;
+  return candidates.map((c) => {
+    const gated = (c.claims?.length ?? 0) > 0 || (c.flow_claims?.length ?? 0) > 0;
+    if (gated || c.node.confidence !== "verified") return c;
+    return { ...c, node: { ...c.node, confidence: "attested" as const } };
+  });
+};
+
 export interface Probe {
   id: string;
   /** One line: the human judgement this probe encodes. */
   finds: string;
+  /**
+   * What this probe's own reading establishes (#28). Omitted means `heuristic`,
+   * which is the conservative answer and the one a new grep-class probe inherits
+   * without having to know this field exists. Declaring `direct` is a statement
+   * that a reader following the citation sees the asserted fact itself.
+   */
+  reading?: Reading;
   /**
    * The toolchains this probe understands. v1 implements the five code-level
    * probes for Java only, because both v1 subjects are Java; declaring it keeps

@@ -175,6 +175,12 @@ const find = async (ctx: ProbeContext): Promise<Candidate[]> => {
 
 export const measuredScale: Probe = {
   id: "measured-scale",
+  /**
+   * Every tile IS a captured command's output, which is #3's second leg of
+   * `verified` verbatim, and the count and the command are built from one
+   * `select` so they cannot select different sets (#28).
+   */
+  reading: "direct",
   finds: "the scale figures the harvest measured, each citing the command that produces it",
   toolchain: "any",
   run: find,

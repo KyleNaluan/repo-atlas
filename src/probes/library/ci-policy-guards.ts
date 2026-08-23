@@ -7,7 +7,12 @@
  * boundary someone decided to enforce mechanically, and that is a decision the
  * tree is keeping on the record's behalf.
  *
- * Grep-class: this is a question about what a workflow file says it is for.
+ * Grep-class: this is a question about what a workflow file says it is for. So
+ * its findings ship `attested`, never `verified` (#28) - a policy vocabulary
+ * matched against text is a judgement read OUT of the bytes, not the bytes, and
+ * this probe is where that distinction was found the hard way during the #19
+ * build: a YAML comment minted a `verified` mechanism asserting a CI step that
+ * did not exist, and the candidate carried no claim for the gate to catch it on.
  */
 import type { Candidate, Probe } from "../types.js";
 import { slug } from "../id.js";
@@ -34,8 +39,10 @@ export const ciPolicyGuards: Probe = {
       // First pass: find the matched policy STEPS, and the job each one sits in.
       // This probe asserts a guarding step exists, so it may only fire where it
       // has actually identified a step - a match on a bare line (a comment, a
-      // block of prose) would mint a "verified" node for a step that is not
-      // there, and ci-policy candidates carry no claims for the gate to re-check.
+      // block of prose) would assert a step that is not there, and ci-policy
+      // candidates carry no claims for the gate to re-check. #28 removed the
+      // second half of that defect (the finding no longer ships as `verified`);
+      // this is the first half, and precision here is still the probe's own job.
       // The job scopes the id, because GitHub step names are not required to be
       // unique - two jobs in one workflow commonly carry the same policy step -
       // and a duplicate id would corrupt the audit's element-id lookups.
@@ -77,7 +84,12 @@ export const ciPolicyGuards: Probe = {
             evidence: [
               { kind: "file", path, line_start: m.index + 1, line_end: m.index + 1, sha: ctx.sha },
             ],
-            confidence: "verified",
+            // #28: grep-class. This probe's own reading cannot establish what the
+            // node asserts, and it hands the gate nothing to re-resolve, so it
+            // ships `attested`. `clampConfidenceToReading` enforces that for any
+            // probe that does not declare `reading: "direct"`; this literal is
+            // what the probe means, not what the clamp leaves behind.
+            confidence: "attested",
             interview_value: 0,
             probe_id: "ci-policy-guards",
           },

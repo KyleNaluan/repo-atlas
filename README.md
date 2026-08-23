@@ -79,6 +79,10 @@ The figure is drawn at component granularity, one box per Spring bean, storage b
 It stops, by name, wherever the tree stops establishing the next step: an interface whose set nothing closes, a same-arity overload it cannot pick, a receiver it declines to type, a cycle, or a bound reached before a terminal.
 Every stop is an `absent` candidate carrying its reason rather than a shorter diagram, because a path that stops when resolution becomes difficult is not a flow.
 
+A probe may not mint `verified` for what its own reading did not establish ([#28](https://github.com/KyleNaluan/repo-atlas/issues/28)).
+A candidate reaches `verified` only when the reading *is* the finding - a parse tree, an enumeration of the tree, a captured command's output, or a literal token cited at the line it was read from - or when the gate confirms a claim it stated; everything else ships `attested`, however well grounded.
+This is a property of the probe contract: `Probe.reading` defaults to `heuristic`, so a new grep-class probe inherits the conservative answer without opting in, and the clamp only ever moves confidence downwards and never for a candidate that hands the gate a claim to re-resolve.
+
 Probes propose; they never decide. Every candidate goes to the existence gate, which resolves it against the tree at the pinned SHA and can **overturn the record in either direction**:
 
 > A stated decision is not evidence of implementation, and an open ticket is not evidence of absence.
@@ -182,7 +186,7 @@ The banner on that copy is a second line of defence, not the mechanism: a banner
 The rendered page is one view of it, which is what keeps a downstream consumer (an interview-prep tool) a separate project rather than a fork of this one.
 
 - **Six node types**: Decision, Mechanism, Boundary, Edge, Fact, Flow. Every node carries `id`, `title`, `evidence[]`, `confidence`, `interview_value`.
-- **Three confidence levels**, and the gate is hard: `verified` (a file at the SHA, or command output), `attested` (a primary issue/comment record), `absent` (cut outright - hedged prose is worse than absence).
+- **Three confidence levels**, and the gate is hard: `verified` (a file at the SHA, or command output), `attested` (a primary issue/comment record, or a text reading that stands behind a finding without establishing it), `absent` (cut outright - hedged prose is worse than absence). The level says what was established, never which parsing technique established it ([#28](https://github.com/KyleNaluan/repo-atlas/issues/28)).
 - **`rejected[]` uses explicit-absence semantics**: a Decision carries either a populated `rejected[]` or `rejected_absent_from_record`. "Decided without recording an alternative" and "no decision record at all" are different states and stay different.
 - **Semver, additive-only within a major**; consumers pin the major, and a document from a future major is refused rather than best-effort read.
 

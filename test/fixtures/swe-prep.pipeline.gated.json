@@ -709,7 +709,7 @@
             "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
           }
         ],
-        "confidence": "verified",
+        "confidence": "attested",
         "interview_value": 0,
         "probe_id": "ci-policy-guards"
       },
@@ -1068,7 +1068,7 @@
             "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
           }
         ],
-        "confidence": "verified",
+        "confidence": "attested",
         "interview_value": 0,
         "probe_id": "repeated-sql-predicates"
       },
@@ -1115,7 +1115,7 @@
             "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
           }
         ],
-        "confidence": "verified",
+        "confidence": "attested",
         "interview_value": 0,
         "probe_id": "repeated-sql-predicates"
       },
@@ -1155,7 +1155,7 @@
             "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
           }
         ],
-        "confidence": "verified",
+        "confidence": "attested",
         "interview_value": 0,
         "probe_id": "repeated-sql-predicates"
       },
@@ -1195,7 +1195,7 @@
             "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
           }
         ],
-        "confidence": "verified",
+        "confidence": "attested",
         "interview_value": 0,
         "probe_id": "repeated-sql-predicates"
       },

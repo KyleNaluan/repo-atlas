@@ -555,7 +555,7 @@
           "sha": "086c99998ba6eec1353988cd88989cbe836fe6a0"
         }
       ],
-      "confidence": "verified",
+      "confidence": "attested",
       "interview_value": 4,
       "probe_id": "ci-policy-guards"
     },
@@ -716,8 +716,8 @@
       "edges": "present"
     },
     "confidence_ledger": {
-      "verified": 7,
-      "attested": 8,
+      "verified": 6,
+      "attested": 9,
       "absent_cut": 0
     },
     "absent_cuts": [],

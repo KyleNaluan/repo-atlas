@@ -29,7 +29,13 @@ import { flowSystemdUnit } from "./library/flow-systemd-unit.js";
 import { flowTypescriptHttpClient } from "./library/flow-typescript-http-client.js";
 import { tunedConfigProperties } from "./library/tuned-config-properties.js";
 import { parseJava, type SyntaxNode } from "./java.js";
-import { detectToolchains, type Probe, type ProbeContext, type ProbeOutcome } from "./types.js";
+import {
+  clampConfidenceToReading,
+  detectToolchains,
+  type Probe,
+  type ProbeContext,
+  type ProbeOutcome,
+} from "./types.js";
 import type { AtlasNode } from "../schema/types.js";
 import type { Harvest } from "../harvest/types.js";
 
@@ -225,8 +231,18 @@ export const dedupeCandidateFindings = (
   return { outcomes: cleaned, collisions };
 };
 
+/**
+ * Run every probe and collect what they propose.
+ *
+ * `probes` is a parameter rather than a closed-over constant so #28's contract
+ * rule can be exercised through the real collection path: a test registers a
+ * synthetic grep-class probe and runs it exactly as the pipeline runs the
+ * library, instead of asserting the clamp in isolation and hoping it is wired in.
+ * The default is the register, so no caller in the pipeline chooses a probe set.
+ */
 export const runProbes = async (
   ctx: ProbeContext,
+  probes: readonly Probe[] = PROBES,
 ): Promise<{
   outcomes: ProbeOutcome[];
   idCollisions: CandidateIdCollision[];
@@ -234,7 +250,7 @@ export const runProbes = async (
 }> => {
   const toolchains = detectToolchains(ctx.paths);
   const out: ProbeOutcome[] = [];
-  for (const probe of PROBES) {
+  for (const probe of probes) {
     if (!toolchains.has(probe.toolchain)) {
       out.push({
         probe_id: probe.id,
@@ -252,7 +268,16 @@ export const runProbes = async (
       out.push({ probe_id: probe.id, status: "not_applicable", reason: applies.reason });
       continue;
     }
-    out.push({ probe_id: probe.id, status: "ran", candidates: await probe.run(ctx) });
+    // #28: a probe may not mint `verified` for a finding its own reading did not
+    // establish and that it hands the gate nothing to re-resolve. Applied HERE,
+    // once, where every candidate in the pipeline is collected, so the rule is
+    // part of the probe contract rather than three local edits a fourth
+    // grep-class probe would not inherit.
+    out.push({
+      probe_id: probe.id,
+      status: "ran",
+      candidates: clampConfidenceToReading(probe, await probe.run(ctx)),
+    });
   }
   const byId = dedupeCandidateIds(out);
   const byFinding = dedupeCandidateFindings(byId.outcomes);

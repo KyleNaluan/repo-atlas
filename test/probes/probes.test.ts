@@ -24,6 +24,7 @@ import {
   detectToolchains,
   type Candidate,
   type ExistenceClaim,
+  type Probe,
   type ProbeContext,
   type ProbeOutcome,
 } from "../../src/probes/types.js";
@@ -390,6 +391,172 @@ describe("library-wide naming invariants", () => {
 
 /* ------------------------------------------------ one fixture per probe */
 
+/* ------------------------------ #28: what a probe's own reading may claim */
+
+describe("a probe may not mint verified for what its reading did not establish", () => {
+  /**
+   * #28's contract rule, exercised through the REAL collection path.
+   *
+   * The three text probes now emit `attested` in their own source, so on its own
+   * that says nothing about a FOURTH grep-class probe written next year - and
+   * relying on every future one being right first time is option 1, the option
+   * #28 rejected because it is exactly what failed during the #19 build. These
+   * tests register a synthetic probe and run it through `runProbes`, so what is
+   * proved is that the contract holds for a probe nobody has reviewed.
+   */
+  const synthetic = (over: Partial<Probe>, candidate: Partial<Candidate> = {}): Probe => ({
+    id: "synthetic-grep-probe",
+    finds: "a line of text that looks like something",
+    toolchain: "any",
+    run: () => [
+      {
+        probe_id: "synthetic-grep-probe",
+        node: {
+          type: "fact",
+          id: "f-synthetic",
+          label: "a setting",
+          value: "10",
+          source: "file",
+          title: "A finding read out of a line of text",
+          evidence: [{ kind: "file", path: "notes.txt", line_start: 1, line_end: 1, sha: "" }],
+          confidence: "verified",
+          interview_value: 0,
+        },
+        ...candidate,
+      },
+    ],
+    ...over,
+  });
+
+  const ranCandidates = async (probe: Probe): Promise<Candidate[]> => {
+    const ctx = contextFor({ "notes.txt": "a line\n" });
+    const outcome = (await runProbes(ctx, [probe])).outcomes[0]!;
+    expect(outcome.status).toBe("ran");
+    return outcome.status === "ran" ? outcome.candidates : [];
+  };
+
+  it("holds a new grep-class probe to attested without it opting in", async () => {
+    // THE MUTANT. A probe that declares no reading and states no claim is the
+    // #19 defect class in its purest form: a text heuristic minting a confidence
+    // level nothing downstream re-checks. `heuristic` is the DEFAULT precisely so
+    // this needs no vigilance from whoever writes the probe.
+    const found = await ranCandidates(synthetic({}));
+    expect(found[0]!.node.confidence).toBe("attested");
+  }, 60_000);
+
+  it("leaves a probe alone when its own reading is the finding", async () => {
+    const found = await ranCandidates(synthetic({ reading: "direct" }));
+    expect(found[0]!.node.confidence).toBe("verified");
+  }, 60_000);
+
+  it("does not lower the ceiling: a grep-class probe that states a claim keeps verified", async () => {
+    // #28's cost is meant to be unearned confidence, not reachable confidence.
+    // A text probe that can say something checkable hands the gate an obligation,
+    // and the gate - not the clamp - then settles it.
+    const claims: ExistenceClaim[] = [
+      { description: "the tree carries notes.txt", expect: "present", paths: ["notes.txt"] },
+    ];
+    const found = await ranCandidates(synthetic({}, { claims }));
+    expect(found[0]!.node.confidence).toBe("verified");
+
+    const ctx = contextFor({ "notes.txt": "a line\n" });
+    expect(gateCandidate(ctx, found[0]!).verdict).toBe("confirmed");
+    expect(gateCandidate(ctx, found[0]!).node.confidence).toBe("verified");
+  }, 60_000);
+
+  it("still demotes a claim the gate cannot settle, so the claim is not a loophole", async () => {
+    // A claim exempts a candidate from the clamp because the GATE owns it from
+    // there. That is only true because the gate demotes what it cannot resolve;
+    // if it passed such a candidate through, stating an unreadable claim would be
+    // a way to buy back exactly the confidence #28 removed.
+    const claims: ExistenceClaim[] = [
+      { description: "something the tree cannot settle", expect: "present" },
+    ];
+    const found = await ranCandidates(synthetic({}, { claims }));
+    const gated = gateCandidate(contextFor({ "notes.txt": "a line\n" }), found[0]!);
+    expect(gated.verdict).toBe("unresolved");
+    expect(gated.node.confidence).toBe("attested");
+  }, 60_000);
+
+  it("only ever moves confidence downwards", async () => {
+    // The clamp is not a second authority over what survives (#2, #5): an
+    // `absent` candidate is the Flow producer's and the write stage's way of
+    // saying a finding was cut, and promoting one to `attested` here would put
+    // a cut finding back into the artifact behind the rank stage's back.
+    const found = await ranCandidates(
+      synthetic({
+        run: () => [
+          {
+            probe_id: "synthetic-grep-probe",
+            node: {
+              type: "fact",
+              id: "f-synthetic-absent",
+              label: "a setting",
+              value: "10",
+              source: "file",
+              title: "A finding with no admissible evidence",
+              evidence: [],
+              confidence: "absent",
+              interview_value: 0,
+            },
+          },
+        ],
+      }),
+    );
+    expect(found[0]!.node.confidence).toBe("absent");
+  }, 60_000);
+
+  it("records which library probes claim their reading is the finding", () => {
+    // The register is the decision record for #28's scope. The three text probes
+    // named in the issue take the default; the three structural ones and the two
+    // node producers whose reading IS a citation declare it, and each says why in
+    // its own source. A probe moving between these lists is a change of what the
+    // artifact asserts about its evidence, so it moves this test with it.
+    const reading = (id: string) => PROBES.find((p) => p.id === id)!.reading ?? "heuristic";
+    for (const id of ["ci-policy-guards", "repeated-sql-predicates", "tuned-config-properties"]) {
+      expect(reading(id), id).toBe("heuristic");
+    }
+    for (const id of [
+      "sealed-hierarchies",
+      "throw-where-siblings-return",
+      "dependency-asymmetry",
+      "measured-scale",
+      "unresolved-references",
+    ]) {
+      expect(reading(id), id).toBe("direct");
+    }
+  });
+
+  it("leaves the Flow adapters to the Flow gate, which earns verified for them", async () => {
+    // A Flow candidate reaches `verified` carrying `flow_claims`, so it is
+    // gate-obligated in the same way a claim-bearing candidate is - the atomic
+    // Flow gate re-resolves every arrow independently (#35) and quarantines the
+    // whole story otherwise. The clamp must not touch it, or the producer's
+    // verified chain would arrive demoted and the gate's re-resolution would be
+    // deciding something already decided.
+    const found = await ranCandidates(
+      synthetic({}, { flow_claims: [] }),
+    );
+    expect(found[0]!.node.confidence).toBe("attested");
+    const withClaim = await ranCandidates(
+      synthetic(
+        {},
+        {
+          flow_claims: [
+            {
+              expect: "present",
+              matcher: "direct_call",
+              from: { path: "notes.txt", name: "x" },
+              evidence: [],
+            },
+          ],
+        },
+      ),
+    );
+    expect(withClaim[0]!.node.confidence).toBe("verified");
+  }, 60_000);
+});
+
 describe("sealed-hierarchies", () => {
   it("finds a sealed type and its permitted set", async () => {
     const ctx = contextFor({
@@ -437,6 +604,8 @@ describe("throw-where-siblings-return", () => {
     const found = await candidatesFrom("throw-where-siblings-return", ctx);
     expect(found).toHaveLength(1);
     expect(found[0]!.node.title).toContain("run");
+    // Structural (#28): the parse tree is the reading, so this keeps verified.
+    expect(found[0]!.node.confidence).toBe("verified");
   }, 60_000);
 
   it("names each candidate's OWN enclosing type, not a text-matched sibling", async () => {
@@ -587,6 +756,9 @@ describe("dependency-asymmetry", () => {
     const found = await candidatesFrom("dependency-asymmetry", ctx);
     expect(found).toHaveLength(1);
     expect(found[0]!.node.title).toContain("Four holds no Runner");
+    // Structural (#28): the field declarations of each sibling ARE the reading,
+    // so this side of the split keeps verified.
+    expect(found[0]!.node.confidence).toBe("verified");
   }, 60_000);
 
   it("slugs a bracketed or qualified collaborator type into a selector-safe id", async () => {
@@ -659,6 +831,10 @@ describe("repeated-sql-predicates", () => {
     const found = await candidatesFrom("repeated-sql-predicates", ctx);
     expect(found).toHaveLength(1);
     expect(found[0]!.node.title).toContain("3 queries");
+    // Grep-class (#28): the recurrence is read out of the text, and nothing here
+    // hands the gate a claim, so the finding ships attested.
+    expect(found[0]!.node.confidence).toBe("attested");
+    expect(found[0]!.claims ?? []).toEqual([]);
   }, 60_000);
 
   it("mints distinct ids for two predicates sharing a 40-char prefix", async () => {
@@ -697,6 +873,10 @@ describe("tuned-config-properties", () => {
     const found = await candidatesFrom("tuned-config-properties", ctx);
     expect(found).toHaveLength(1);
     expect(found[0]!.node.title).toContain("timeout");
+    // Grep-class (#28): a comment saying a value was measured is not the
+    // measurement, so the finding ships attested.
+    expect(found[0]!.node.confidence).toBe("attested");
+    expect(found[0]!.claims ?? []).toEqual([]);
   }, 60_000);
 
   it("ignores a value with an ordinary comment", async () => {
@@ -781,6 +961,10 @@ describe("ci-policy-guards", () => {
     const found = await candidatesFrom("ci-policy-guards", ctx);
     expect(found).toHaveLength(1);
     expect(found[0]!.node.title).toContain("private content");
+    // The #19 defect class, closed at the contract (#28): even a correct match
+    // ships attested, because nothing downstream re-reads it.
+    expect(found[0]!.node.confidence).toBe("attested");
+    expect(found[0]!.claims ?? []).toEqual([]);
   }, 60_000);
 
   it("ignores a step that just runs the tests", async () => {

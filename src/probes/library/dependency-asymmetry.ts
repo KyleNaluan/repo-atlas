@@ -28,6 +28,8 @@ const directory = directoryOf;
 
 export const dependencyAsymmetry: Probe = {
   id: "dependency-asymmetry",
+  /** The parse tree is the reading: field declarations and their types (#28). */
+  reading: "direct",
   finds: "a type missing a collaborator every one of its siblings holds",
   toolchain: "java",
   run: async (ctx) => {

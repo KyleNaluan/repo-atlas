@@ -7,7 +7,9 @@
  * "found that" - those words mark a value someone earned rather than guessed,
  * and they are the cheapest decision records in any repository.
  *
- * Grep-class: this is entirely a question about what a comment says.
+ * Grep-class: this is entirely a question about what a comment says. A comment
+ * saying a value was measured is not the measurement, so the finding ships
+ * `attested` rather than `verified` (#28).
  */
 import type { Candidate, Probe } from "../types.js";
 import { pathSlug } from "../id.js";
@@ -73,7 +75,12 @@ export const tunedConfigProperties: Probe = {
             evidence: [
               { kind: "file", path, line_start: first + 1, line_end: index + 1, sha: ctx.sha, note: rationale.join(" ") },
             ],
-            confidence: "verified",
+            // #28: grep-class. This probe's own reading cannot establish what the
+            // node asserts, and it hands the gate nothing to re-resolve, so it
+            // ships `attested`. `clampConfidenceToReading` enforces that for any
+            // probe that does not declare `reading: "direct"`; this literal is
+            // what the probe means, not what the clamp leaves behind.
+            confidence: "attested",
             interview_value: 0,
             probe_id: "tuned-config-properties",
           },

@@ -21,8 +21,16 @@ export const SCHEMA_VERSION = "1.1.0";
  * The three-level confidence gate (#3).
  *
  * - `verified`: traces to a file at the pinned SHA, or to captured command output.
- * - `attested`: traces to a primary issue/comment record.
+ * - `attested`: traces to a primary issue/comment record, or to a reading that
+ *               stands behind the finding without establishing it.
  * - `absent`:   no admissible evidence. Cut outright at render, never hedged.
+ *
+ * The level says what was ESTABLISHED, never which parsing technique established
+ * it (#28). A probe reaches `verified` either because its own reading is the
+ * finding - a parse tree, an enumeration of the tree, a captured command's
+ * output - or because the existence gate confirmed a claim it stated. A text
+ * heuristic that hands the gate nothing to re-read reaches `attested`, however
+ * well grounded it happens to be; see `Reading` in `src/probes/types.ts`.
  */
 export type Confidence = "verified" | "attested" | "absent";
 

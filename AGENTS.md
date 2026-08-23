@@ -55,6 +55,14 @@ A probe is a **pure deterministic function** over harvest artifacts: no network,
 
 Probes emit **candidates**, never final nodes. The gate confirms, the rank stage accepts or deletes.
 
+**A probe may not mint `verified` for what its own reading did not establish** (#28).
+`Probe.reading` is the contract field and `heuristic` is its DEFAULT, so a new grep-class probe inherits the rule without opting in; `clampConfidenceToReading` (`src/probes/types.ts`) applies it once in `runProbes`, where every candidate is collected.
+A probe declares `reading: "direct"` only when the reading IS the finding - a parse tree, an enumeration of the tree, a captured command's output, or a literal token cited at the line it was read from - so a reader who follows the citation sees the asserted fact itself.
+Everything else ships `attested` unless it hands the gate something to re-resolve (`claims`, or a Flow's `flow_claims`), in which case the gate settles it and reaching `verified` is earned rather than assumed.
+The ceiling is not lowered, only unearned confidence removed, and the clamp only ever moves confidence DOWNWARDS: promoting would make it a second authority over what survives.
+The defect that closed this: during the #19 build `ci-policy-guards` matched policy vocabulary against any raw line, so a YAML comment minted a `verified` mechanism asserting a CI step that did not exist, and the candidate carried no claim for the gate to catch it on.
+#28 rejected both requiring a claim from every text probe (the gate re-deriving the same judgement from the same file is the self-report weakness #4 warns about) and trusting each future probe to be precise (which is what failed).
+
 The existence gate runs in **both directions** (#7 point 7), and the single-direction version is the one already found wrong on the reference subject: a stated decision is not evidence of implementation, and an open ticket is not evidence of absence. A confirmed contradiction becomes a `divergence` edge rather than being dropped. A claim nothing in the tree can settle is **demoted, never admitted as checked**.
 
 Flow is the atomic exception to that generic outcome path (#35): every links-based candidate needs at least one `flow_claims` entry per arrow and a claim for every line that arrow cites, and one unresolved, stale, or contradicted arrow quarantines the **whole** Flow as `absent` - never attested, partial, or converted to a subject divergence. Every matcher now resolves: direct-call, exact Spring-route, data-access, closed-dispatch, `data_lineage`, the closed negative `reachability`, and PR 8's three caller-less entries - `scheduled_trigger`, `message_listener` and `process_launch`. Legacy `calls_next` remains a render input only and cannot enter as a newly verified candidate.

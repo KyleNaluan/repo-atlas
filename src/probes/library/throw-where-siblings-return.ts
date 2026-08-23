@@ -116,6 +116,8 @@ const isSibling = (refuser: OwnerScope, returner: OwnerScope, declared: Set<stri
 
 export const throwWhereSiblingsReturn: Probe = {
   id: "throw-where-siblings-return",
+  /** The parse tree is the reading: a throw statement among sibling declarations (#28). */
+  reading: "direct",
   finds: "a method that refuses outright where its siblings return a value",
   toolchain: "java",
   run: async (ctx) => {

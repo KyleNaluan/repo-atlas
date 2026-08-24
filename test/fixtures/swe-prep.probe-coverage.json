@@ -1,0 +1,203 @@
+{
+  "note": "How far extraction reaches on the reference subject, measured node by node against the hand-made overview (#22). Every reference node is either covered by a named probe or unminted with a stated reason; nothing is left as an untracked aspiration.",
+  "regenerate": "npx tsx src/cli.ts probe --harvest test/fixtures/swe-prep.harvest.json --clone <swe-prep clone> -o out/candidates.json && npx tsx src/cli.ts gate --candidates out/candidates.json --harvest test/fixtures/swe-prep.harvest.json --clone <swe-prep clone> -o out/gated.json",
+  "subject_sha": "086c99998ba6eec1353988cd88989cbe836fe6a0",
+
+  "gate": {
+    "what": "Probe and gate against a real swe-prep clone at the pinned SHA, driven by the committed harvest fixture. This is the surface #22's coverage question is actually about: what a probe can establish and the gate can re-resolve, before ranking spends any of it.",
+    "candidates": 99,
+    "confirmed": 90,
+    "overturned": 0,
+    "unresolved": 9,
+    "unresolved_are": "nine Flow candidates the producer proposed as absent and the gate refused to promote - the atomic quarantine (#35), not a coverage regression. They are the same nine PR 8 measured.",
+    "confirmed_before_these_probes": 82,
+    "confirmed_after": 90
+  },
+
+  "reference": {
+    "nodes": 33,
+    "by_type": { "fact": 6, "decision": 6, "mechanism": 5, "boundary": 4, "edge": 10, "flow": 2 },
+    "covered": 22,
+    "unminted": 11
+  },
+
+  "covered": [
+    {
+      "reference_node": "f-loc-main",
+      "by": "measured-scale",
+      "candidate": "f-scale-lines",
+      "note": "16,488 lines of production source across every source language, where the reference tile counts backend/src/main/java alone. The engine's scope is the whole subject and it says so in the cited command."
+    },
+    {
+      "reference_node": "f-loc-test",
+      "by": "measured-scale",
+      "candidate": "f-scale-test-lines",
+      "note": "Added for this gap. harvest.scale carries production lines only, so this is the one tile the probe measures rather than restates - and it states no figure until the same helper reproduces scale.lines over the production selection."
+    },
+    {
+      "reference_node": "f-migrations",
+      "by": "measured-scale",
+      "candidate": "f-scale-migrations",
+      "note": "Added for this gap. 8, the same figure the reference tile carries, off the same one-select discipline as every other tile."
+    },
+    { "reference_node": "f-age", "by": "measured-scale", "candidate": "f-scale-history" },
+
+    {
+      "reference_node": "d-platform",
+      "by": "write",
+      "note": "The record half. The engine reads eight resolution comments into decisions and sends the ninth to the gate; the parity suite asserts the count against the reference separately."
+    },
+    { "reference_node": "d-abstraction", "by": "write" },
+    { "reference_node": "d-judging", "by": "write" },
+    { "reference_node": "d-licensing", "by": "write" },
+    { "reference_node": "d-scheduling", "by": "write" },
+    { "reference_node": "d-flyway-owns-schema", "by": "write" },
+
+    {
+      "reference_node": "m-second-language",
+      "by": "sealed-hierarchies, throw-where-siblings-return, ci-policy-guards, repeated-sql-predicates",
+      "note": "The mechanism section is at parity by count (5 against 5) and has been since #7. The engine selects its own five; they are not the reference's five, which is what an independent selection over the same tree looks like."
+    },
+    { "reference_node": "m-grader-runner-seam", "by": "sealed-hierarchies" },
+    { "reference_node": "m-content-boundary", "by": "ci-policy-guards" },
+    { "reference_node": "m-complexity-honesty", "by": "sealed-hierarchies" },
+    { "reference_node": "m-three-derivations", "by": "repeated-sql-predicates" },
+
+    {
+      "reference_node": "b-response-grading",
+      "by": "orthogonal-hierarchies",
+      "candidate": "b-orthogonal-backend-src-main-java-com-sweprep-backend-exercise-exercise-grading-response",
+      "note": "Two sealed hierarchies with no permitted type in common, and Exercise holding one of each, so all 16 pairings are expressible. The relationship is not a property of either declaration, which is why sealed-hierarchies reporting both closed sets could never carry it."
+    },
+    {
+      "reference_node": "b-grader-runner",
+      "by": "partitioned-implementations",
+      "candidate": "b-partition-backend-src-main-java-com-sweprep-backend-grader-grader-grader-com-sweprep-backend-runner",
+      "note": "1 of the 4 types implementing Grader holds a collaborator from the runner package; three hold none, and Grader declares no runner member. Not an odd-one-out, so dependency-asymmetry's held === siblings - 1 test could never see it."
+    },
+    {
+      "reference_node": "b-verdict-selfrating",
+      "by": "superset-enum",
+      "candidate": "b-superset-backend-src-main-java-com-sweprep-backend-attempt-submissionoutcome-submissionoutcome-verdict-outcome",
+      "note": "SubmissionOutcome declares every one of Verdict.Outcome's five constants plus SELF_RATED, so a value typed as a machine verdict structurally cannot carry it. The reference's second half - that every competence query filters on outcome = 'PASSED' - is repeated-sql-predicates' finding, minted separately rather than folded in here."
+    },
+
+    {
+      "reference_node": "e-content-never-in-ci",
+      "by": "self-disabling-tests",
+      "candidate": "e-self-disabling-backend-src-test-java-com-sweprep-backend-content-realcontentsmoketest",
+      "note": "Five of RealContentSmokeTest's five tests call JUnit's assumeTrue, which aborts rather than fails. They are the same five skips the reference records in its ./test.sh excerpt - reached from the tree instead of from a run."
+    },
+    {
+      "reference_node": "e-corpus-unauthored",
+      "by": "decided-but-unbuilt",
+      "candidate": "e-unbuilt-43, e-unbuilt-44",
+      "note": "The same two open authoring tickets the reference edge cites, both gate-confirmed absent from the tree. The committed pipeline artifact carries neither, because its live harvest was read later than the pinned fixture and the tracker had moved - which is a fact about the tracker, not about the probe."
+    },
+
+    {
+      "reference_node": "fl-submission",
+      "by": "flow-java-spring-http",
+      "candidate": "fl-http-attemptcontroller-submit-7633fd7a",
+      "note": "Verified through the gate at 25 components and 32 links, eight landmarks deep. Pinned in detail by swe-prep.flow-producer.json."
+    },
+    {
+      "reference_node": "fl-derivations",
+      "by": "flow-java-shared-state",
+      "candidate": "fl-record-submissionrepository-countsforattempts-c6f6f0b5"
+    }
+  ],
+
+  "unminted": [
+    {
+      "reference_node": "f-tests-backend",
+      "area": "facts",
+      "reason": "The tile's value is the outcome of a suite RUN - 466 tests, 1 failing, 5 skipped - and #5 makes a probe a pure deterministic function over harvest artifacts with no execution. The declared count is readable from the tree and the self-disabling edge prints its own share of it; the failure is not, and a tile carrying the count alone would drop what the reference tile is for.",
+      "would_need": "a stage that builds the subject, which v1 does not have and #5 forecloses for probes"
+    },
+    {
+      "reference_node": "f-packages",
+      "area": "facts",
+      "reason": "A package is a Java `package` declaration, and measured-scale is toolchain-neutral by construction: every tile's count and its cited grep are built from ONE shared path select, so the two cannot select different sets. A Java-only tile would have no such shared source, and a directory count is a different figure wearing the same label.",
+      "would_need": "a Java fact probe over `declared.ts`'s package clauses, which is buildable and was judged not worth a node type's worth of vocabulary drift here"
+    },
+    {
+      "reference_node": "b-engine-content",
+      "area": "boundaries",
+      "reason": "NOT a gap in what was established - ci-policy-guards already mints this exact finding, as the mechanism m-ci-guard-ci-yml-test-assert-no-private-content-is-committed, and it survives into the committed artifact. Recasting it as a boundary as well would be one finding minted twice in two vocabularies, which the register's candidate-finding guard exists to refuse.",
+      "would_need": "nothing; the finding is present under a different node type"
+    },
+    {
+      "reference_node": "e-suite-red",
+      "area": "edges",
+      "reason": "The statement is what ./test.sh printed, plus a diagnosis of why. A probe may not execute the build (#5), and the diagnosis - readiness reads the wall clock where every other date-sensitive service reads the injected one - is a comparison a grep can suggest and only a reader can settle.",
+      "would_need": "a build-running stage, which #5 forecloses for probes"
+    },
+    {
+      "reference_node": "e-issue-26-stale",
+      "area": "edges",
+      "reason": "The mechanism is built and is the one #7 point 7 requires: decided-but-unbuilt hands the gate `expect: \"absent\"` claims for open tickets and the gate overturns them where the tree says otherwise. The INSTANCE is gone - #26 is closed in the pinned harvest - so the subject no longer exhibits it. Producing it anyway would mean asserting an issue state the record does not carry.",
+      "would_need": "nothing; the producer exists and the subject moved"
+    },
+    {
+      "reference_node": "e-frontend-domain",
+      "area": "edges",
+      "reason": "The finding is that a resolution comment specifies a domain the tree does not carry. Locating that specification inside an argument that also names rejected alternatives is a prose judgement, and #2 gives reading a decision record to the write stage's model alone; its `decided_not_built` path is the producer. On this subject the model settled every decision it read as built.",
+      "would_need": "the write stage to reach this comment, not a new probe"
+    },
+    {
+      "reference_node": "e-interview-soon",
+      "area": "edges",
+      "reason": "Same shape as e-frontend-domain: a section of a resolution comment specifying work the tree does not carry, which only the write stage may read.",
+      "would_need": "the write stage to reach this comment, not a new probe"
+    },
+    {
+      "reference_node": "e-jpa-divergence",
+      "area": "edges",
+      "reason": "dependency-divergence compares the README against the declared build manifests, and swe-prep's README names neither JPA nor Lombok - the divergence lives in decision #2's resolution comment. Extending the probe to scan resolution comments for technology names would report a REJECTED alternative as a divergence, because telling the chosen stack from the rejected ones is exactly the prose judgement #2 reserves for the write stage. That is the #28 defect shape - vocabulary matched against raw lines - and the gate could not catch it, because it would confirm the manifest half of a claim whose record half nothing checked.",
+      "would_need": "the write stage, which already settles implementation claims against the tree"
+    },
+    {
+      "reference_node": "e-unsandboxed-runner",
+      "area": "edges",
+      "reason": "A tradeoff argued in a resolution comment, with a timeout property and a captured-output cap as corroboration. The constants are readable; that they add up to a deliberate decision not to sandbox is the record's argument, which only the write stage reads.",
+      "would_need": "the write stage to reach this comment, not a new probe"
+    },
+    {
+      "reference_node": "e-recompute-on-read",
+      "area": "edges",
+      "reason": "The finding is an argument made in javadoc across five services - that derived state is recomputed per request rather than stored. Recognising that from prose is a model judgement; a probe that matched the vocabulary would be asserting a design stance out of a comment, which is the defect #28 closed.",
+      "would_need": "the write stage, or a probe over the shared-state Flow producer's own reads, which would establish the reads and not the stance"
+    },
+    {
+      "reference_node": "e-surefire-pin",
+      "area": "edges",
+      "reason": "tuned-config-properties reads .yml/.properties/.toml/.ini/.conf/.json for a setting whose comment marks it as measured. This one is an XML <systemPropertyVariables> entry under a comment that carries no such marker - it explains a Testcontainers probe workaround without saying anything was measured or tuned. Adding XML alone would not reach it; widening the vocabulary until it did is the 'matched policy vocabulary against any raw line' failure #28 closed.",
+      "would_need": "a judgement about what a comment means, which is the write stage's, not a probe's"
+    }
+  ],
+
+  "beyond_the_reference": {
+    "what": "Boundaries the new probes establish that the hand-made overview does not carry. Parity is the bar, not the ceiling: an independent reading of the same tree finds its own seams.",
+    "candidates": [
+      {
+        "id": "b-partition-backend-src-main-java-com-sweprep-backend-grader-grader-grader-com-sweprep-backend-language",
+        "title": "Grader ⟂ language",
+        "note": "Only TestCaseGrader holds a language adapter; three graders hold none."
+      },
+      {
+        "id": "b-partition-backend-src-main-java-com-sweprep-backend-grader-grader-grader-com-sweprep-backend-sql",
+        "title": "Grader ⟂ sql",
+        "note": "Only SqlQueryGrader holds a SQL runner; three graders hold none."
+      }
+    ]
+  },
+
+  "committed_artifact": {
+    "what": "The committed end-to-end artifact (swe-prep.pipeline.atlas.json) predates these probes and still reports 18 nodes. It is NOT regenerated here, and the reason is a constraint rather than an omission.",
+    "why_not_regenerated": "rank refuses to run on an unscored node (MissingScoreError: 'an unscored node is not a zero, it is a node nobody judged'), so eight new gate-confirmed candidates cannot reach an artifact without a fresh `repo-atlas score` run - a credentialed model call this task did not make. Reassembling from the pinned score file would fail, correctly.",
+    "recommended_follow_up": "run `repo-atlas score` and then `repo-atlas run` against the pinned subject, refresh swe-prep.pipeline.{written,scores,gated,atlas}.json, and move the node-count pin to what that run measures.",
+    "nodes_now": 18,
+    "new_gate_confirmed_candidates_awaiting_a_score_run": 8
+  }
+}

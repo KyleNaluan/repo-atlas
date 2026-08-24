@@ -11,11 +11,23 @@
  * the pinned SHA. What CI checks is that the deterministic machinery still turns
  * the committed inputs into this artifact; what a refresh measures is whether the
  * engine still finds what it found.
+ *
+ * Two things are measured here, and they are not the same thing. The artifact's
+ * node count is what SHIPPED, and it moves only when a credentialed run is
+ * repeated. What the engine can ESTABLISH is a property of the probes and the
+ * gate, it moves whenever those do, and since #22's probe-coverage work it is
+ * measured node by node against the reference in its own fixture rather than
+ * inferred from the count. A coverage report that named only its wins would
+ * communicate its own limits by silence, which is the one thing #6 forbids
+ * everywhere else, so the fixture's second list - every reference node still
+ * unminted, with the standing decision that forecloses it - is the half that
+ * matters.
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Atlas, DecisionNode, EdgeNode } from "../../src/schema/types.js";
+import { PROBES } from "../../src/probes/registry.js";
 
 const read = <T>(name: string): T =>
   JSON.parse(readFileSync(fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url)), "utf8")) as T;
@@ -84,6 +96,56 @@ const measured = read<{
     reference_flows_unchanged: boolean;
   };
 }>("swe-prep.flow-producer.json");
+
+/** A reference node a named producer now reaches. */
+interface CoveredRow {
+  reference_node: string;
+  by: string;
+  candidate?: string;
+  note?: string;
+}
+
+/**
+ * A reference node nothing here mints, and why.
+ *
+ * `reason` and `would_need` are required in the shape for the same reason the
+ * audit's `not_applicable` carries a mandatory reason: an unreached node with no
+ * stated reason is absence communicated by silence (#6).
+ */
+interface UnmintedRow {
+  reference_node: string;
+  area: string;
+  reason: string;
+  would_need: string;
+}
+
+/**
+ * How far extraction reaches on this subject, measured node by node against the
+ * reference (#22). Like the Flow producer's yield, it needs a swe-prep clone and
+ * so is pinned rather than computed here; unlike a count, it is a LIST, because
+ * "18 against 33" says nothing about which fifteen or why.
+ */
+const coverage = read<{
+  subject_sha: string;
+  gate: {
+    candidates: number;
+    confirmed: number;
+    overturned: number;
+    unresolved: number;
+    confirmed_before_these_probes: number;
+    confirmed_after: number;
+  };
+  reference: { nodes: number; by_type: Record<string, number>; covered: number; unminted: number };
+  covered: CoveredRow[];
+  unminted: UnmintedRow[];
+  beyond_the_reference: { candidates: { id: string; title: string }[] };
+  committed_artifact: {
+    nodes_now: number;
+    new_gate_confirmed_candidates_awaiting_a_score_run: number;
+    why_not_regenerated: string;
+    recommended_follow_up: string;
+  };
+}>("swe-prep.probe-coverage.json");
 
 const countByType = (a: Atlas) =>
   a.nodes.reduce<Record<string, number>>((m, n) => ({ ...m, [n.type]: (m[n.type] ?? 0) + 1 }), {});
@@ -374,22 +436,170 @@ describe("where the engine falls short, and by how much", () => {
     expect(cli.cut_by_reason).toEqual({ no_terminal_reached: 1 });
   });
 
-  it("renders no boundaries, because the only probe that finds them finds test-file noise", () => {
-    // Also pinned rather than hidden. Three boundary candidates were produced and
-    // all three were cut at the floor, correctly: they are constructor-parameter
-    // asymmetries in test classes, and the reference's four are architectural
-    // seams. That is a probe-coverage gap, not a scoring one - rescoring noise
-    // does not turn it into a seam.
+  it("renders no boundaries, because the artifact predates the probes that find them", () => {
+    // THE SHORTFALL THIS RECORDED, closed at the producer and not yet in the
+    // document. It used to read "the only probe that finds them finds test-file
+    // noise": three boundary candidates were produced, all three cut at the floor,
+    // and all three constructor-parameter asymmetries in test classes, while the
+    // reference's four are architectural seams. That WAS a probe-coverage gap
+    // rather than a scoring one, and the coverage block above is where it is now
+    // measured: three of the reference's four boundaries have producers that read
+    // shapes no earlier probe could carry, and the fourth is already in this
+    // artifact as a mechanism.
+    //
+    // What is pinned here is the honest remainder. The committed artifact still
+    // carries no boundary, because reaching one means ranking eight newly
+    // gate-confirmed candidates and rank refuses to run on a node nobody scored.
+    // The number moves when a credentialed `repo-atlas score` run refreshes the
+    // pinned scores, not before - and saying so is the point of pinning it.
     expect(countByType(produced)["boundary"]).toBeUndefined();
     expect(countByType(reference)["boundary"]).toBe(4);
+    expect(coverage.committed_artifact.recommended_follow_up).toContain("repo-atlas score");
   });
 
   it("produces roughly half the reference's nodes, and the number is the finding", () => {
     // Recorded so it moves visibly. 18 against 33, now that flows are two of the
     // eighteen: the decisions, deep dives, orientation figures, edges and flows
     // are there; the boundaries above are still not.
+    //
+    // The count is a property of the SHIPPED ARTIFACT and it has not moved,
+    // because the artifact is the output of a credentialed run this branch did not
+    // repeat. What did move is the thing the count was standing in for - what the
+    // engine can establish - and that is measured directly above rather than
+    // inferred from this number. Twenty-two of the reference's thirty-three nodes
+    // now have a named producer and the other eleven have a stated reason; eight
+    // gate-confirmed candidates are waiting on a score run to reach a document.
     expect(produced.nodes).toHaveLength(18);
     expect(reference.nodes).toHaveLength(33);
+    expect(coverage.reference.covered).toBe(22);
+    expect(coverage.reference.unminted).toBe(11);
+    expect(coverage.committed_artifact.new_gate_confirmed_candidates_awaiting_a_score_run).toBe(8);
+  });
+});
+
+describe("how far extraction reaches, measured node by node against the reference", () => {
+  // #22's coverage question, pinned the way the Flow producer's yield and the
+  // scores are: measured by a real probe-and-gate run against a swe-prep clone at
+  // the pinned SHA, committed, and regenerated by the command the fixture carries.
+  // CI cannot run it - this suite deliberately has no swe-prep checkout - so what
+  // CI checks here is that the measurement still accounts for every reference node
+  // and still names a reason for each one it does not reach.
+  //
+  // The point of the fixture is the SECOND list. #6 refuses to communicate absence
+  // by silence, and a coverage report that named only its wins would be doing
+  // exactly that at the level of the engine's own capability.
+  const covered = coverage.covered;
+  const unminted = coverage.unminted;
+
+  it("accounts for every node the reference carries, exactly once", () => {
+    expect(coverage.subject_sha).toBe(reference.subject.sha);
+    const accounted = [...covered, ...unminted].map((e) => e.reference_node).sort();
+    const referenced = reference.nodes.map((n) => n.id).sort();
+    expect(accounted).toEqual(referenced);
+    expect(accounted).toHaveLength(reference.nodes.length);
+    expect(coverage.reference.by_type).toEqual(countByType(reference));
+    expect(coverage.reference.covered).toBe(covered.length);
+    expect(coverage.reference.unminted).toBe(unminted.length);
+  });
+
+  it("names a probe for everything it claims, and a reason for everything it does not", () => {
+    // The two halves are held to the same standard, which is the whole reason the
+    // second list exists. A "covered" row without a producer is an aspiration
+    // written as a result; an "unminted" row without a reason is silence.
+    for (const row of covered) expect(row.by, row.reference_node).toBeTruthy();
+    for (const row of unminted) {
+      expect(row.reason, row.reference_node).toBeTruthy();
+      expect(row.would_need, row.reference_node).toBeTruthy();
+      expect(row.area, row.reference_node).toBeTruthy();
+    }
+  });
+
+  it("closes the boundary section the shortfall named, with the fourth accounted for", () => {
+    // "That is a probe-coverage gap, not a scoring one", said the block below
+    // before this. Three of the reference's four boundaries now have producers,
+    // each reading a shape no existing probe could carry: a relationship between
+    // two sealed hierarchies, a partition of an implementation set, a difference
+    // between two enums.
+    const boundaries = reference.nodes.filter((n) => n.type === "boundary").map((n) => n.id);
+    expect(boundaries).toHaveLength(4);
+    const producers = new Map(covered.map((r) => [r.reference_node, r.by]));
+    expect(producers.get("b-response-grading")).toBe("orthogonal-hierarchies");
+    expect(producers.get("b-grader-runner")).toBe("partitioned-implementations");
+    expect(producers.get("b-verdict-selfrating")).toBe("superset-enum");
+    for (const probe of ["orthogonal-hierarchies", "partitioned-implementations", "superset-enum"]) {
+      expect(PROBES.map((p) => p.id), probe).toContain(probe);
+    }
+    // The fourth is NOT a hole: the finding is already in the artifact under
+    // another node type, and the reason says so rather than counting it as a win.
+    const fourth = unminted.find((r) => r.reference_node === "b-engine-content")!;
+    expect(fourth.reason).toContain("ci-policy-guards");
+    expect(fourth.reason).toContain("mechanism");
+  });
+
+  it("recovers the coverage gap a suite's own summary line hides", () => {
+    // The hand-made overview's sharpest edge about its own testing: five tests
+    // that abort themselves rather than fail, inside a suite that still reports
+    // success. Reached from the tree - a JUnit assumption call in an annotated
+    // method, plus the import that makes it JUnit's - rather than from a run.
+    const row = covered.find((r) => r.reference_node === "e-content-never-in-ci")!;
+    expect(row.by).toBe("self-disabling-tests");
+    expect(PROBES.map((p) => p.id)).toContain("self-disabling-tests");
+  });
+
+  it("states what the residual gap is made of, by area rather than as a number", () => {
+    // Eleven reference nodes are unminted and they are not eleven instances of one
+    // problem. Grouping them is what makes the residual an engineering fact: two
+    // need a stage that runs the build, six need the write stage's reading of a
+    // decision record, one is already present under another node type, one is a
+    // tracker instance that closed, and one is a deliberate refusal to widen a
+    // vocabulary until it matched.
+    const byArea = unminted.reduce<Record<string, number>>(
+      (m, r) => ({ ...m, [r.area]: (m[r.area] ?? 0) + 1 }),
+      {},
+    );
+    expect(byArea).toEqual({ facts: 2, boundaries: 1, edges: 8 });
+    // Every reason is grounded in a standing decision rather than in "not done
+    // yet": each names the rule that forecloses it or the stage that owns it.
+    for (const row of unminted) {
+      expect(
+        /#\d+|write stage|ci-policy-guards|tuned-config-properties|measured-scale|decided-but-unbuilt/.test(
+          row.reason,
+        ),
+        `${row.reference_node} must say what forecloses it`,
+      ).toBe(true);
+    }
+  });
+
+  it("has not paid for breadth out of what already worked", () => {
+    // The same discipline PR 8 applied to the Flow adapters: new producers must
+    // not move the numbers the earlier ones established. Every candidate the gate
+    // confirmed before these probes still confirms, and the nine unresolved are
+    // the same nine Flow quarantines PR 8 measured - not a regression dressed up
+    // as coverage.
+    expect(coverage.gate.confirmed_after - coverage.gate.confirmed_before_these_probes).toBe(
+      coverage.beyond_the_reference.candidates.length +
+        covered.filter((r) => /orthogonal-hierarchies|partitioned-implementations|superset-enum|self-disabling-tests/.test(r.by)).length +
+        covered.filter((r) => r.candidate === "f-scale-test-lines" || r.candidate === "f-scale-migrations").length,
+    );
+    expect(coverage.gate.overturned).toBe(0);
+    expect(coverage.gate.unresolved).toBe(9);
+    expect(coverage.gate.candidates).toBe(
+      coverage.gate.confirmed + coverage.gate.unresolved + coverage.gate.overturned,
+    );
+  });
+
+  it("says why the committed artifact does not yet carry any of it", () => {
+    // The honest half of this task's result. Eight new gate-confirmed candidates
+    // exist and none of them is in the shipped document, because rank refuses to
+    // run on a node nobody scored and refreshing the scores is a credentialed
+    // model call. Recorded here rather than left for a reader to discover from a
+    // node count that did not move.
+    expect(coverage.committed_artifact.nodes_now).toBe(produced.nodes.length);
+    expect(coverage.committed_artifact.new_gate_confirmed_candidates_awaiting_a_score_run).toBe(
+      coverage.gate.confirmed_after - coverage.gate.confirmed_before_these_probes,
+    );
+    expect(coverage.committed_artifact.why_not_regenerated).toContain("MissingScoreError");
+    expect(coverage.committed_artifact.recommended_follow_up).toContain("repo-atlas score");
   });
 });
 

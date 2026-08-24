@@ -261,7 +261,12 @@ const orderedKeys = (trace: TraceResult, keep: Set<string>, edges: TraceEdge[]):
  */
 const SEAM_PRIORITY: readonly GapKind[] = [
   "unresolved_dispatch",
+  // A registration performed at run time is the same shape of seam as a dispatch
+  // whose set nothing closes - a later phase could close either, and neither is
+  // the walk giving up on the calling file - so it sorts beside it (#52).
+  "runtime_registration",
   "unresolved_receiver_type",
+  "chained_call",
   "ambiguous_overload",
   "unprovable_data_access",
   "unresolved_target",
@@ -430,6 +435,18 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
 
   const component = componentOf(trace, keep);
   const crossing = keep.edges.filter((edge) => component.get(edge.from) !== component.get(edge.to));
+  // A figure with boxes and no arrow tells no execution story, and the gate would
+  // reject it as a malformed Flow - which reports a defect in the producer where
+  // the truth is an honest absence. It happens whenever landmark compression folds
+  // every reached method into the entry's own box: the entry does something the
+  // subject can point at, and nothing it does crosses a component boundary. That is
+  // a real finding about the subject and it says so by name (#6).
+  if (crossing.length === 0 && (input.callers ?? []).length === 0 && (input.launchers ?? []).length === 0) {
+    return absentCandidate(
+      input,
+      `no_arrow_drawn: every method this entry reaches belongs to its own component, so the story crosses no boundary the figure could draw`,
+    );
+  }
   const keys = orderedKeys(trace, keep.landmarks, keep.edges).filter((key) => component.get(key) === key);
 
   const storyOrder = orderedKeys(trace, keep.landmarks, keep.edges);
@@ -537,7 +554,7 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
     const key =
       relation === "dispatch"
         ? `${from}|${to}|${relation}|${edge.label}`
-        : `${from}|${to}|${relation}|${edge.lineage === true}`;
+        : `${from}|${to}|${relation}|${edge.lineage === true}|${edge.pipeline === undefined}`;
     groups.set(key, [...(groups.get(key) ?? []), edge]);
   }
 
@@ -619,11 +636,13 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
         expect: "present",
         matcher: lineage
           ? "data_lineage"
-          : relation === "read" || relation === "write"
-            ? "data_access"
-            : relation === "dispatch"
-              ? "closed_dispatch"
-              : "direct_call",
+          : edge.pipeline !== undefined
+            ? "declared_pipeline"
+            : relation === "read" || relation === "write"
+              ? "data_access"
+              : relation === "dispatch"
+                ? "closed_dispatch"
+                : "direct_call",
         from: lineage ? target : symbolRef(trace.landmarks.get(edge.from)!),
         to: lineage
           ? symbolRef(trace.landmarks.get(edge.from)!)
@@ -636,6 +655,9 @@ export const flowCandidate = (input: CandidateInput): Candidate => {
             fileEvidence(input.sha, guard.path, guard.line_start, guard.line_end),
           ),
         ],
+        ...(edge.pipeline === undefined
+          ? {}
+          : { pipeline: { from_key: edge.pipeline.fromKey, to_key: edge.pipeline.toKey } }),
         ...(edge.dispatch === undefined
           ? {}
           : {

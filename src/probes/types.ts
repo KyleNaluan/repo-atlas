@@ -149,6 +149,24 @@ export type FlowMatcher =
    * blob: the unit's own `ExecStart`, and the `main` declaration it names.
    */
   | "process_launch"
+  /**
+   * A DECLARED PIPELINE: the subject declares, in literals, that a framework runs
+   * one function after another (#52, D2).
+   *
+   * The arrows are not calls - `add_edge("sweep", "investigate")` says the
+   * framework will run `investigate` after `sweep`, and no line of subject code
+   * calls it - which is exactly why the matcher exists rather than the relation
+   * being widened: `FlowRelation` is a schema-level closed set, and widening it
+   * would touch the renderer, the audit's E2 and the goldens for one framework.
+   * The precedent for an arrow whose source is not subject code is
+   * `process_launch`.
+   *
+   * What it asserts is the whole of the topology the figure draws: both node keys
+   * are registered with a literal key and a bare function name, that function is
+   * declared in the same file, and the edge names both keys. The gate re-derives
+   * every one of those from the cited spans with its own reader.
+   */
+  | "declared_pipeline"
   | "reachability";
 
 /**
@@ -184,6 +202,22 @@ export interface FlowClaim {
     member_count: number;
     /** How the tree names the branches this one arrow carries. */
     labels: string[];
+  };
+  /**
+   * What a `declared_pipeline` claim asserts BEYOND both functions existing
+   * (#52, D2).
+   *
+   * Exactly one of the two shapes, and the resolver fails closed on anything else:
+   * an ARROW carries `from_key`/`to_key`, the two node keys the topology's own
+   * `add_edge` literal names; the caption-level ENTRY claim carries `entry_key`,
+   * the key `set_entry_point` (or an edge from `START`) declares the topology
+   * begins at. A figure whose first box is not the declared entry would be showing
+   * an execution the framework does not start there.
+   */
+  pipeline?: {
+    from_key?: string;
+    to_key?: string;
+    entry_key?: string;
   };
   /**
    * What a `scheduled_trigger` or `message_listener` claim asserts BEYOND the

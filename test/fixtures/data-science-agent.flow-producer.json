@@ -1,0 +1,151 @@
+{
+  "note": "What the Python Flow producer yields on this subject, measured rather than asserted (#52, D5).",
+  "regenerate": "npx tsx scripts/measure-python-flow.ts <clone> > test/fixtures/<subject>.flow-producer.json",
+  "subject_sha": "6986cd419cd7ddaffb93888ff874c57f8967b9b3",
+  "entry_inventory": {
+    "production_python_files": 45,
+    "modules": 45,
+    "classes": 40,
+    "fastapi_routes_with_a_literal_path": 9,
+    "fastapi_routes_refused": 0,
+    "program_entries": 1,
+    "declared_langgraph_topologies": 1,
+    "declared_langgraph_topologies_refused": 0,
+    "framework_callbacks_refused": 0
+  },
+  "survival": {
+    "candidates": 11,
+    "verified_by_the_gate": 8,
+    "overturned_by_the_gate": 0
+  },
+  "adapters": [
+    {
+      "probe_id": "flow-python-fastapi-http",
+      "status": "ran",
+      "candidates": 9,
+      "verified_by_the_gate": [
+        {
+          "title": "GET /, entry to terminal",
+          "steps": 3,
+          "links": 2,
+          "narrative_depth": 3,
+          "archetype": "request_response",
+          "components": [
+            "GET /",
+            "Store",
+            "store"
+          ]
+        },
+        {
+          "title": "GET /datasets, entry to terminal",
+          "steps": 3,
+          "links": 2,
+          "narrative_depth": 3,
+          "archetype": "request_response",
+          "components": [
+            "GET /datasets",
+            "Store",
+            "store"
+          ]
+        },
+        {
+          "title": "GET /runs/{}, entry to terminal",
+          "steps": 3,
+          "links": 2,
+          "narrative_depth": 3,
+          "archetype": "request_response",
+          "components": [
+            "GET /runs/{}",
+            "Store",
+            "store"
+          ]
+        },
+        {
+          "title": "GET /runs/{}/events, entry to terminal",
+          "steps": 3,
+          "links": 2,
+          "narrative_depth": 3,
+          "archetype": "request_response",
+          "components": [
+            "GET /runs/{}/events",
+            "Store",
+            "store"
+          ]
+        },
+        {
+          "title": "GET /runs/{}/report, entry to terminal",
+          "steps": 3,
+          "links": 2,
+          "narrative_depth": 3,
+          "archetype": "request_response",
+          "components": [
+            "GET /runs/{}/report",
+            "Store",
+            "store"
+          ]
+        },
+        {
+          "title": "POST /datasets, entry to terminal",
+          "steps": 2,
+          "links": 1,
+          "narrative_depth": 2,
+          "archetype": "request_response",
+          "components": [
+            "POST /datasets",
+            "Store"
+          ]
+        },
+        {
+          "title": "POST /runs, entry to terminal",
+          "steps": 3,
+          "links": 3,
+          "narrative_depth": 3,
+          "archetype": "request_response",
+          "components": [
+            "POST /runs",
+            "Store",
+            "store"
+          ]
+        }
+      ],
+      "cut_by_reason": {
+        "chained_call": 1,
+        "unresolved_receiver_type": 1
+      },
+      "overturned_by_the_gate": []
+    },
+    {
+      "probe_id": "flow-python-console-entry",
+      "status": "ran",
+      "candidates": 1,
+      "verified_by_the_gate": [],
+      "cut_by_reason": {
+        "no_terminal_reached": 1
+      },
+      "overturned_by_the_gate": []
+    },
+    {
+      "probe_id": "flow-python-langgraph-pipeline",
+      "status": "ran",
+      "candidates": 1,
+      "verified_by_the_gate": [
+        {
+          "title": "build_graph, declared pipeline entry to terminal",
+          "steps": 5,
+          "links": 4,
+          "narrative_depth": 5,
+          "archetype": "unknown",
+          "components": [
+            "ingest",
+            "sweep",
+            "investigate",
+            "report_assembly",
+            "deliver"
+          ]
+        }
+      ],
+      "cut_by_reason": {},
+      "overturned_by_the_gate": []
+    }
+  ]
+}

@@ -16,12 +16,15 @@ import {
   readParenList,
   withoutComments,
 } from "../probes/flow/reachability.js";
+import { maskedPython, pythonWithoutComments } from "../probes/flow/py-mask.js";
+import { dottedNamesOf, moduleOwnerName, packageDirsIn } from "../probes/flow/py-module.js";
 import { normalizedRoute } from "../probes/flow/route.js";
 import {
   literalPredicates,
   readVerbName,
   readsDurably,
   writeVerbName,
+  writesDurably,
 } from "../probes/flow/sql.js";
 import { SPRING_STEREOTYPES } from "../probes/flow/stereotype.js";
 import { simpleTypeName } from "../probes/flow/symbols.js";
@@ -73,6 +76,11 @@ const MATCHER_RELATIONS: Record<FlowClaim["matcher"], ReadonlySet<FlowRelation>>
   scheduled_trigger: new Set(),
   message_listener: new Set(),
   process_launch: new Set(["transport"]),
+  // A declared pipeline arrow keeps the `call` relation at the schema level; the
+  // matcher is what carries the distinction that no line of subject code calls
+  // the target (#52, D2). The caption-level ENTRY claim attaches to no arrow at
+  // all, and passes this table by carrying no link.
+  declared_pipeline: new Set(["call"]),
   reachability: new Set(),
 };
 
@@ -786,10 +794,18 @@ const resolveSpringRoute = (
   if (fromSource === null || toSource === null) {
     return { verdict: "unresolved", finding: "the caller or handler source could not be read" };
   }
-  const fromMatches = claim.from.path.endsWith(".java")
-    ? endpointEquals(springEndpoint(fromSource, claim.from), claim.from.protocol)
-    : clientEstablishes(claim, texts, claim.from.protocol);
-  const toMatches = endpointEquals(springEndpoint(toSource, to), to.protocol);
+  // Three readings, chosen by what the cited file IS: a Java handler's
+  // annotations, a Python handler's decorator, or a TypeScript client's call.
+  // The matcher's name is Java-flavoured history; what it asserts is that both
+  // ends establish the same verb and the same normalized path, and #52 fixes the
+  // new-matcher budget at one, so renaming it is its own decision.
+  const handlerEndpoint = (path: string, source: string, ref: SymbolRef) =>
+    path.endsWith(".py") ? pythonRouteEndpoint(ctx, claim, texts, ref) : springEndpoint(source, ref);
+  const fromMatches =
+    claim.from.path.endsWith(".java") || claim.from.path.endsWith(".py")
+      ? endpointEquals(handlerEndpoint(claim.from.path, fromSource, claim.from), claim.from.protocol)
+      : clientEstablishes(claim, texts, claim.from.protocol);
+  const toMatches = endpointEquals(handlerEndpoint(to.path, toSource, to), to.protocol);
   const found = fromMatches && toMatches;
   if (claim.expect === "absent") {
     return found
@@ -1644,6 +1660,941 @@ const resolveProcessLaunch = (
       };
 };
 
+
+/* ------------------------------------------- the Python halves (#52) */
+
+/*
+ * Four claim kinds get a Python re-derivation here: `direct_call`,
+ * `data_access`, `closed_dispatch` and the route half of `spring_route`, plus the
+ * one new matcher `declared_pipeline`. They are dispatched on the claim's own file
+ * extension, which is the same seam `resolveSpringRoute` already uses to tell a
+ * Java handler from a TypeScript caller.
+ *
+ * Everything below is this gate's OWN reading. It shares exactly two definitions
+ * with the producer and nothing else: `normalizedRoute` ("the same route") and
+ * `py-module.ts` ("what a file is importable as"). Both are shared for the reason
+ * `manifests.ts` is - two sides that disagreed about what a module is CALLED would
+ * quarantine correct arrows over spelling - while the resolutions stay split: the
+ * producer walks a parse tree, this rereads the blob with regexes over a
+ * length-preserving mask.
+ *
+ * Two things the Java resolvers check are deliberately NOT checked here:
+ *
+ * - **Arity.** Python has no overloading, and defaults plus keyword arguments make
+ *   a call-site comma count a poor discriminator: `query_rows(session_id)` and
+ *   `def query_rows(session_id, limit=50)` are the same function called two ways,
+ *   and refusing that would refuse correct arrows. The claim still carries the
+ *   number; nothing here rests on it.
+ * - **A global type namespace.** Java can ask "which subject type is called
+ *   `Store`"; Python cannot, because the answer is whatever the importing file
+ *   said. So every check below is anchored in the CALLER'S OWN import statements
+ *   and declarations, which is also exactly what a single blob can establish.
+ */
+
+const pyCache = new WeakMap<ProbeContext, Set<string>>();
+
+/** The subject's package directories, computed once per context. */
+const pyPackageDirs = (ctx: ProbeContext): Set<string> => {
+  const cached = pyCache.get(ctx);
+  if (cached) return cached;
+  const dirs = packageDirsIn(ctx.paths.filter((path) => path.endsWith("__init__.py")));
+  pyCache.set(ctx, dirs);
+  return dirs;
+};
+
+/** Whether a claim's target is a module-level `def` rather than a class member. */
+const isModuleOwned = (ref: SymbolRef): boolean =>
+  ref.owner === undefined || simpleName(ref.owner) === moduleOwnerName(ref.path);
+
+/** The block of source one `class` statement owns, by indentation. */
+const pyClassBody = (source: string, masked: string, className: string): string | null => {
+  const declaration = new RegExp(`^([ \\t]*)class[ \\t]+${escaped(className)}\\b`, "m").exec(masked);
+  if (!declaration) return null;
+  const indent = declaration[1]!.length;
+  const lines = source.split("\n");
+  const maskedLines = masked.split("\n");
+  const at = masked.slice(0, declaration.index).split("\n").length - 1;
+  const body: string[] = [];
+  for (let i = at + 1; i < lines.length; i += 1) {
+    const line = maskedLines[i] ?? "";
+    if (line.trim() === "") {
+      body.push(lines[i] ?? "");
+      continue;
+    }
+    const lead = /^[ \t]*/.exec(line)![0].length;
+    if (lead <= indent) break;
+    body.push(lines[i] ?? "");
+  }
+  return body.join("\n");
+};
+
+const PY_DEF = (name: string, indented: boolean): RegExp =>
+  new RegExp(`^${indented ? "[ \\t]+" : ""}(?:async[ \\t]+)?def[ \\t]+${escaped(name)}[ \\t]*\\(`, "m");
+
+/**
+ * Whether the blob says this file declares the claim's symbol.
+ *
+ * The two cases are told apart by comparing the claim's `owner` with the name the
+ * shared `moduleOwnerName` gives its PATH, rather than by the claim declaring
+ * which it is: a module-level `def` must sit at column zero, and a method must sit
+ * inside the block its class owns. Reading the module case as "a `def` anywhere"
+ * would let a closure nested in some unrelated function satisfy a module-level
+ * claim.
+ */
+const pyDeclaresSymbol = (source: string, ref: SymbolRef): boolean => {
+  const masked = maskedPython(source);
+  const name = simpleName(ref.name);
+  if (isModuleOwned(ref)) return PY_DEF(name, false).test(masked);
+  const owner = simpleName(ref.owner!);
+  const body = pyClassBody(source, masked, owner);
+  if (body === null) return false;
+  return PY_DEF(name, true).test(maskedPython(body));
+};
+
+/** Whether one cited SPAN declares a `def` by this name, at any indentation. */
+const pySpanDeclaresDef = (span: string, name: string): boolean =>
+  new RegExp(`(?:^|[ \\t])(?:async[ \\t]+)?def[ \\t]+${escaped(name)}[ \\t]*\\(`, "m").test(
+    maskedPython(span),
+  );
+
+/** Whether the blob says this file declares `sub` as a class with base `base`. */
+const pyDeclaresBase = (source: string, sub: string, base: string): boolean =>
+  new RegExp(
+    `^[ \\t]*class[ \\t]+${escaped(simpleName(sub))}[ \\t]*\\([^)]*\\b${escaped(simpleName(base))}\\b`,
+    "m",
+  ).test(maskedPython(source));
+
+/**
+ * The local names one file binds to another file, re-derived from its imports.
+ *
+ * Two answers, because the two mean different things at a call site: a MODULE
+ * binding makes `decision_logs.query_rows(...)` a call on a module-level `def`,
+ * while a SYMBOL binding makes `query_rows(...)` one. The symbol binding maps the
+ * local name to the imported NAME, so a call written on an alias (`from mod import
+ * run_job as go` then `go()`) is re-resolved to the def it names - the gate's half
+ * of the producer's `bound.name`. Both are read off the caller's own import
+ * statements, and the dotted names the target answers to come from the shared
+ * `py-module.ts` definition - so the two sides cannot disagree about what a module
+ * is called while still deriving the binding independently.
+ */
+const pyBindingsTo = (
+  ctx: ProbeContext,
+  fromPath: string,
+  fromSource: string,
+  targetPath: string,
+): { modules: Set<string>; symbolNames: Map<string, string> } => {
+  const modules = new Set<string>();
+  const symbolNames = new Map<string, string>();
+  const dotted = new Set(dottedNamesOf(targetPath, pyPackageDirs(ctx)));
+  const masked = maskedPython(fromSource);
+
+  // `from <module> import a as b, c` - one statement, which both #52 subjects
+  // write parenthesised over a dozen lines, so the list is read to its own
+  // terminator rather than to the end of the line. Reading it to the line end was
+  // the first draft, and it resolved none of ftb's module-qualified calls.
+  for (const match of masked.matchAll(/^[ \t]*from[ \t]+([.\w]+)[ \t]+import[ \t]+/gm)) {
+    const moduleText = match[1]!;
+    const after = match.index + match[0].length;
+    const list = pyImportList(masked, after);
+    const resolved = pyResolveModuleText(ctx, fromPath, moduleText);
+    const imported = list
+      .replace(/[()\\]/g, "")
+      .split(",")
+      .map((piece) => piece.trim())
+      .filter((piece) => piece.length > 0);
+    for (const piece of imported) {
+      const parts = /^([\w.]+)(?:[ \t]+as[ \t]+(\w+))?$/.exec(piece);
+      if (!parts) continue;
+      const name = parts[1]!;
+      const local = parts[2] ?? name;
+      // The imported name may itself be the target MODULE (`from webui import
+      // decision_logs`), which is the more specific reading and is tried first.
+      if (resolved !== null && dotted.has(`${resolved}.${name}`)) {
+        modules.add(local);
+        continue;
+      }
+      if (resolved !== null && dotted.has(resolved)) symbolNames.set(local, simpleName(name));
+    }
+  }
+
+  for (const match of masked.matchAll(/^[ \t]*import[ \t]+([\w.]+)(?:[ \t]+as[ \t]+(\w+))?/gm)) {
+    const moduleText = match[1]!;
+    const alias = match[2];
+    if (!dotted.has(moduleText)) continue;
+    if (alias !== undefined) modules.add(alias);
+    else if (!moduleText.includes(".")) modules.add(moduleText);
+  }
+  return { modules, symbolNames };
+};
+
+/**
+ * The imported-names list of a `from ... import ...` statement starting at `at`.
+ *
+ * Three spellings, all of them in the two #52 subjects: a parenthesised list over
+ * many lines, a backslash-continued list, and a plain one. A `*` import binds no
+ * name and reads as an empty list, which is what fails closed.
+ */
+const pyImportList = (masked: string, at: number): string => {
+  const rest = masked.slice(at);
+  const open = /^\s*\(/.exec(rest);
+  if (open) {
+    const start = at + open[0].length - 1;
+    const end = parenEnd(masked, start);
+    return end < 0 ? "" : masked.slice(start + 1, end);
+  }
+  let end = at;
+  for (;;) {
+    const newline = masked.indexOf("\n", end);
+    if (newline < 0) return masked.slice(at);
+    // A backslash before the newline continues the statement onto the next line.
+    if (!/\\[ \t]*$/.test(masked.slice(end, newline))) return masked.slice(at, newline);
+    end = newline + 1;
+  }
+};
+
+/**
+ * A `from`-import's module text resolved to a dotted name, relative imports
+ * included.
+ *
+ * A relative import states its own base - the importing file's package - so it is
+ * resolved on the path rather than through the dotted table, exactly as the
+ * producer resolves it.
+ */
+const pyResolveModuleText = (
+  ctx: ProbeContext,
+  fromPath: string,
+  moduleText: string,
+): string | null => {
+  const dots = /^\.+/.exec(moduleText)?.[0].length ?? 0;
+  if (dots === 0) return moduleText;
+  const pieces = fromPath.replace(/\.py$/, "").split("/");
+  const inPackage = pieces.slice(0, -1);
+  const base = inPackage.slice(0, inPackage.length - (dots - 1));
+  const tail = moduleText.slice(dots);
+  const asPath = [...base, ...(tail === "" ? [] : tail.split("."))].join("/");
+  const names = dottedNamesOf(`${asPath}.py`, pyPackageDirs(ctx));
+  const packaged = dottedNamesOf(`${asPath}/__init__.py`, pyPackageDirs(ctx));
+  return names[0] ?? packaged[0] ?? null;
+};
+
+/**
+ * The optional annotation wrapper before the named type, matching the producer's
+ * `TRANSPARENT` set (`annotationName`, `src/probes/python.ts`) exactly: `Optional`,
+ * `type`, `Type`, `Final`, `Annotated`, `ClassVar`, plus a leading `None |` for the
+ * union written in either order (`X | None` needs no prefix, since `X` is first),
+ * and a forward-reference quote. A CONTAINER (`list[X]`, `Sequence[X]`) is
+ * deliberately absent - the producer refuses to type a receiver as its element, so
+ * the gate must not either.
+ */
+const PY_TRANSPARENT_PREFIX = `(?:(?:Optional|type|Type|Final|Annotated|ClassVar)\\s*\\[\\s*|None\\s*\\|\\s*|"|')?`;
+
+/**
+ * The receiver expressions this file types as `owner`.
+ *
+ * Five declaration shapes, and every one of them is a line in the file being
+ * reread: an annotation, a construction, an annotated attribute, an attribute
+ * assigned a construction, and an attribute assigned an annotated parameter. The
+ * last is the shape `py-symbols.ts` calls the passthrough, and it is derived here
+ * in two independent steps - which names the annotation carries, then which
+ * attributes are assigned one of those names - rather than by trusting the
+ * producer's reconstruction.
+ *
+ * The owner's own simple name is in the set because a class name IS a receiver: a
+ * classmethod or a static call is written on it.
+ */
+const pyReceiverNames = (source: string, owner: string): Set<string> => {
+  const simple = simpleName(owner);
+  const masked = maskedPython(source);
+  const names = new Set<string>([simple]);
+  const annotated = new Set<string>();
+  const typed = new RegExp(
+    `(?:^|[(,\\s])(self\\s*\\.\\s*\\w+|\\w+)\\s*:\\s*${PY_TRANSPARENT_PREFIX}${escaped(simple)}\\b`,
+    "g",
+  );
+  for (const match of masked.matchAll(typed)) {
+    const bound = match[1]!.replace(/\s+/g, "");
+    names.add(bound);
+    if (!bound.startsWith("self.")) annotated.add(bound);
+  }
+  const constructed = new RegExp(
+    `(self\\s*\\.\\s*\\w+|\\w+)\\s*(?::[^=\\n]*)?=\\s*${escaped(simple)}\\s*\\(`,
+    "g",
+  );
+  for (const match of masked.matchAll(constructed)) names.add(match[1]!.replace(/\s+/g, ""));
+  if (annotated.size > 0) {
+    const passthrough = new RegExp(`(self\\s*\\.\\s*\\w+)\\s*=\\s*(\\w+)\\s*(?:$|[\\n#)])`, "gm");
+    for (const match of masked.matchAll(passthrough)) {
+      if (annotated.has(match[2]!)) names.add(match[1]!.replace(/\s+/g, ""));
+    }
+  }
+  return names;
+};
+
+type PyReceiver =
+  | { kind: "none" }
+  /** A dotted receiver expression, whitespace removed: `store`, `self._driver`. */
+  | { kind: "name"; receiver: string }
+  /** A chained receiver: the dotted callee text of the call before the dot. */
+  | { kind: "chained"; callee: string };
+
+/** The receiver written immediately before a `.name(` call at `nameStart`. */
+const pyReceiverBefore = (span: string, nameStart: number): PyReceiver => {
+  let dot = nameStart - 1;
+  while (dot >= 0 && /[ \t\r\n\\]/.test(span[dot]!)) dot -= 1;
+  if (dot < 0 || span[dot] !== ".") return { kind: "none" };
+  let before = dot - 1;
+  while (before >= 0 && /[ \t\r\n\\]/.test(span[before]!)) before -= 1;
+  if (before < 0) return { kind: "none" };
+  if (span[before] === ")") {
+    const open = parenStart(span, before);
+    if (open < 0) return { kind: "none" };
+    let callee = open - 1;
+    while (callee >= 0 && /[ \t\r\n\\]/.test(span[callee]!)) callee -= 1;
+    const dotted = pyDottedBefore(span, callee);
+    return dotted === null ? { kind: "none" } : { kind: "chained", callee: dotted };
+  }
+  const dotted = pyDottedBefore(span, before);
+  return dotted === null ? { kind: "none" } : { kind: "name", receiver: dotted };
+};
+
+/** The dotted identifier chain ending at `end`, whitespace removed, or null. */
+const pyDottedBefore = (span: string, end: number): string | null => {
+  let i = end;
+  const pieces: string[] = [];
+  for (;;) {
+    let start = i;
+    while (start >= 0 && /[\w$]/.test(span[start]!)) start -= 1;
+    const piece = span.slice(start + 1, i + 1);
+    if (!/^[A-Za-z_]\w*$/.test(piece)) return pieces.length === 0 ? null : pieces.join(".");
+    pieces.unshift(piece);
+    let back = start;
+    while (back >= 0 && /[ \t\r\n\\]/.test(span[back]!)) back -= 1;
+    if (back < 0 || span[back] !== ".") return pieces.join(".");
+    i = back - 1;
+    while (i >= 0 && /[ \t\r\n\\]/.test(span[i]!)) i -= 1;
+    if (i < 0) return pieces.join(".");
+  }
+};
+
+/**
+ * Whether one of the cited caller spans resolves a call to `to`.
+ *
+ * Every accepted receiver shape is one #52 report 4.2 measured as re-derivable
+ * within one file, and each is checked against the CALLER'S OWN source rather
+ * than believed: an import statement, an annotation, a construction, an
+ * `__init__` assignment, or a same-file `def` with a return annotation. A shape
+ * this reader cannot name resolves nothing, which quarantines the Flow - the same
+ * failure mode `hasTypedCall` has, and the reason the producer stops on the same
+ * lines.
+ */
+const pyResolvesCall = (
+  ctx: ProbeContext,
+  fromSource: string,
+  spans: string[],
+  from: SymbolRef,
+  to: SymbolRef,
+): boolean => {
+  const name = simpleName(to.name);
+  const bindings = pyBindingsTo(ctx, from.path, fromSource, to.path);
+  const sameFile = to.path === from.path;
+  const moduleTarget = isModuleOwned(to);
+  const receivers = moduleTarget ? new Set<string>() : pyReceiverNames(fromSource, to.owner!);
+  // A module-level def may be called through an import alias (`from mod import
+  // run_job as go` then `go()`), so the callee names searched include every local
+  // the caller binds to THIS def - the gate's half of the producer's `bound.name`.
+  const callNames = new Set<string>([name]);
+  if (moduleTarget) {
+    for (const [local, imported] of bindings.symbolNames) {
+      if (imported === name) callNames.add(local);
+    }
+  }
+  const call = new RegExp(`\\b(${[...callNames].map(escaped).join("|")})\\s*\\(`, "g");
+  // A `self`/`cls` call resolves only WITHIN one file: two unrelated classes that
+  // happen to share a simple name in two modules are not the same receiver, so the
+  // simple-name branch carries the same `sameFile` guard the inherited-base branch
+  // already does.
+  const selfResolves =
+    !moduleTarget &&
+    from.owner !== undefined &&
+    sameFile &&
+    (simpleName(from.owner) === simpleName(to.owner!) ||
+      pyDeclaresBase(fromSource, from.owner, to.owner!));
+  const accessors = moduleTarget ? new Set<string>() : pyAccessorsReturning(fromSource, to.owner!);
+
+  for (const span of spans) {
+    const masked = maskedPython(span);
+    for (const match of masked.matchAll(call)) {
+      // A `def` of this name is a declaration, not a call to it.
+      if (/(?:^|[ \t])def[ \t]+$/.test(masked.slice(Math.max(0, match.index - 12), match.index))) {
+        continue;
+      }
+      const shape = pyReceiverBefore(masked, match.index);
+      if (shape.kind === "none") {
+        const callee = match[1]!;
+        // Same-file calls use the def's own name; a cross-file call must reach it
+        // through an import that binds that exact name, alias or not.
+        if (
+          moduleTarget &&
+          ((sameFile && callee === name) || bindings.symbolNames.get(callee) === name)
+        ) {
+          return true;
+        }
+        continue;
+      }
+      if (shape.kind === "chained") {
+        if (!moduleTarget && accessors.has(shape.callee)) return true;
+        continue;
+      }
+      if (moduleTarget) {
+        if (bindings.modules.has(shape.receiver)) return true;
+        continue;
+      }
+      if (shape.receiver === "self" || shape.receiver === "cls") {
+        if (selfResolves) return true;
+        continue;
+      }
+      if (receivers.has(shape.receiver)) return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * Bare `def`s this file declares as returning `type` - the one chained receiver
+ * this gate can re-read, because the return annotation is written in the file it
+ * is rereading.
+ */
+const pyAccessorsReturning = (source: string, type: string): Set<string> => {
+  const names = new Set<string>();
+  const declarations = new RegExp(
+    `^(?:async[ \\t]+)?def[ \\t]+(\\w+)[ \\t]*\\([^\\n]*\\)[ \\t]*->[ \\t]*${PY_TRANSPARENT_PREFIX}${escaped(simpleName(type))}\\b`,
+    "gm",
+  );
+  for (const match of maskedPython(source).matchAll(declarations)) names.add(match[1]!);
+  return names;
+};
+
+const resolvePyDirectCall = (
+  ctx: ProbeContext,
+  claim: FlowClaim,
+  texts: Map<string, string[]>,
+): FlowClaimResolution => {
+  const to = claim.to;
+  if (!to) return { verdict: "unresolved", finding: "a direct_call claim names no target" };
+  const fromSource = ctx.read(claim.from.path);
+  const toSource = ctx.read(to.path);
+  if (fromSource === null || toSource === null) {
+    return { verdict: "unresolved", finding: "the caller or target source could not be read" };
+  }
+  if (!pyDeclaresSymbol(fromSource, claim.from)) {
+    return {
+      verdict: "contradicted",
+      finding: `${claim.from.path} no longer declares ${claim.from.name}`,
+    };
+  }
+  if (!pyDeclaresSymbol(toSource, to)) {
+    return { verdict: "contradicted", finding: `${to.path} no longer declares ${to.name}` };
+  }
+  const spans = texts.get(claim.from.path) ?? [];
+  if (spans.length === 0) {
+    return {
+      verdict: "unresolved",
+      finding: `no cited span in ${claim.from.path} can establish the call`,
+    };
+  }
+  const found = pyResolvesCall(ctx, fromSource, spans, claim.from, to);
+  if (claim.expect === "absent") {
+    return found
+      ? { verdict: "contradicted", finding: `${claim.from.name} still calls ${to.name}` }
+      : {
+          verdict: "unresolved",
+          finding: "a cited span is not a closed call graph and cannot establish absence",
+        };
+  }
+  return found
+    ? { verdict: "confirmed", finding: `${claim.from.name} resolves to ${to.name}` }
+    : {
+        verdict: "contradicted",
+        finding: `the cited caller span does not resolve ${claim.from.name} to ${to.name}`,
+      };
+};
+
+/**
+ * A Python data-access arrow, re-derived from the two spans it cites.
+ *
+ * The arrow asserts two things and both are checked from the blob: that the
+ * caller's cited line calls the target, and that the target's own DECLARATION
+ * writes durable SQL of the claimed relation. The second is why the arrow cites
+ * the target's declaration span - the SQL in that body is half of what the arrow
+ * says, exactly as a lineage arrow cites the read whose SELECT it rests on.
+ *
+ * A name convention is deliberately not consulted. `sql.ts` records why for Java
+ * and Python has no repository type to fall back on anyway: what makes
+ * `Store.get_run` a read is the `SELECT` in its body, and nothing else here would
+ * establish it.
+ */
+const resolvePyDataAccess = (
+  ctx: ProbeContext,
+  claim: FlowClaim,
+  texts: Map<string, string[]>,
+  relation: FlowRelation,
+): FlowClaimResolution => {
+  const to = claim.to!;
+  const fromSource = ctx.read(claim.from.path);
+  const toSource = ctx.read(to.path);
+  if (fromSource === null || toSource === null) {
+    return { verdict: "unresolved", finding: "the data caller or target source could not be read" };
+  }
+  if (!pyDeclaresSymbol(toSource, to)) {
+    return { verdict: "contradicted", finding: `${to.path} no longer declares ${to.name}` };
+  }
+  const targetSpans = texts.get(to.path) ?? [];
+  // The span is the METHOD, so only the `def` is looked for in it: the class the
+  // method belongs to was already checked against the whole file above, and
+  // demanding the `class` line inside a method's own span would refuse every
+  // correct citation.
+  const declared = targetSpans.filter((span) => pySpanDeclaresDef(span, simpleName(to.name)));
+  if (declared.length === 0) {
+    return {
+      verdict: "unresolved",
+      finding: `the arrow does not cite a span in ${to.path} that declares ${to.name}, so its durable access cannot be re-derived`,
+    };
+  }
+  const sql = declared.some((span) =>
+    relation === "read" ? readsDurably(span) : writesDurably(span),
+  );
+  const called = pyResolvesCall(ctx, fromSource, texts.get(claim.from.path) ?? [], claim.from, to);
+  const found = sql && called;
+  if (claim.expect === "absent") {
+    return found
+      ? { verdict: "contradicted", finding: `${claim.from.name} still ${relation}s ${to.name}` }
+      : {
+          verdict: "unresolved",
+          finding: "a cited data-access span is not a closed reachability proof of absence",
+        };
+  }
+  if (!sql) {
+    return {
+      verdict: "contradicted",
+      finding: `the cited declaration of ${to.name} writes no SQL that ${relation}s durable storage`,
+    };
+  }
+  return called
+    ? { verdict: "confirmed", finding: `${claim.from.name} ${relation}s ${to.name} through its own SQL` }
+    : {
+        verdict: "contradicted",
+        finding: `the cited caller span does not resolve ${claim.from.name} to ${to.name}`,
+      };
+};
+
+/**
+ * The `key: Value` pairs one module-level dict literal declares, or null.
+ *
+ * Read from the blob with this gate's own bracket balancing, so a registry whose
+ * member count moved is CONTRADICTED rather than accepted: proving one member
+ * exists says nothing about whether it is still the only thing the call can reach,
+ * which is the whole point of the check.
+ */
+const pyRegistryPairs = (
+  source: string,
+  name: string,
+): { key: string; value: string }[] | null => {
+  const masked = pythonWithoutComments(source);
+  const assignment = new RegExp(
+    `^${escaped(name)}[ \\t]*(?::[^=\\n]*)?=[ \\t]*\\{`,
+    "m",
+  ).exec(masked);
+  if (!assignment) return null;
+  const open = assignment.index + assignment[0].length - 1;
+  let depth = 0;
+  let close = -1;
+  const scan = maskedPython(source);
+  for (let i = open; i < scan.length; i += 1) {
+    const ch = scan[i];
+    if (ch === "{" || ch === "[" || ch === "(") depth += 1;
+    else if (ch === "}" || ch === "]" || ch === ")") {
+      depth -= 1;
+      if (depth === 0) {
+        close = i;
+        break;
+      }
+    }
+  }
+  if (close < 0) return null;
+  const inner = masked.slice(open + 1, close);
+  const guard = scan.slice(open + 1, close);
+  const pairs: { key: string; value: string }[] = [];
+  let level = 0;
+  let start = 0;
+  const ranges: { start: number; end: number }[] = [];
+  for (let i = 0; i < guard.length; i += 1) {
+    const ch = guard[i];
+    if (ch === "{" || ch === "[" || ch === "(") level += 1;
+    else if (ch === "}" || ch === "]" || ch === ")") level -= 1;
+    else if (ch === "," && level === 0) {
+      ranges.push({ start, end: i });
+      start = i + 1;
+    }
+  }
+  ranges.push({ start, end: guard.length });
+  for (const { start: s, end: e } of ranges) {
+    const piece = inner.slice(s, e);
+    if (piece.trim() === "") continue;
+    // The key/value split is found on the STRING-MASKED copy, so a colon inside a
+    // string key (`"http:get": Handler`) does not split the piece inside its own
+    // literal - the same masked copy the bracket balancing and comma splitting use.
+    const split = guard.slice(s, e).indexOf(":");
+    if (split < 0) return null;
+    pairs.push({ key: piece.slice(0, split).trim(), value: piece.slice(split + 1).trim() });
+  }
+  return pairs;
+};
+
+/**
+ * A Python closed dispatch, re-derived from the registry literal (#52 D3).
+ *
+ * v1 ships exactly one closure rule and this is its check. The set is a
+ * module-level dict literal, so the gate re-enumerates the whole literal from the
+ * blob and refuses a claim whose member count moved, refuses a label no key
+ * carries, and refuses a target no value names - then requires the caller's own
+ * cited spans to subscript that registry and call the method on what came out.
+ * Proving `SignalRecord.from_dict` exists says nothing about whether the four
+ * payload types are still the only things that call can reach.
+ */
+const resolvePyClosedDispatch = (
+  ctx: ProbeContext,
+  claim: FlowClaim,
+  texts: Map<string, string[]>,
+): FlowClaimResolution => {
+  const to = claim.to!;
+  const dispatch = claim.dispatch!;
+  if (dispatch.via !== "keyed_registry") {
+    return {
+      verdict: "unresolved",
+      finding: `a Python dispatch closed by ${dispatch.via} has no re-derivation in v1; #52 D3 ships the keyed registry alone`,
+    };
+  }
+  const registrySource = ctx.read(dispatch.base.path);
+  const fromSource = ctx.read(claim.from.path);
+  const toSource = ctx.read(to.path);
+  if (registrySource === null || fromSource === null || toSource === null) {
+    return { verdict: "unresolved", finding: "the registry, caller or target source could not be read" };
+  }
+  const registry = simpleName(dispatch.base.name);
+  const pairs = pyRegistryPairs(registrySource, registry);
+  if (pairs === null) {
+    return {
+      verdict: "contradicted",
+      finding: `${dispatch.base.path} no longer declares ${registry} as a module-level dict literal`,
+    };
+  }
+  if (pairs.length !== dispatch.member_count) {
+    return {
+      verdict: "contradicted",
+      finding: `${registry} now holds ${pairs.length} members, not the ${dispatch.member_count} this arrow closed the set at`,
+    };
+  }
+  const keys = new Set(pairs.map((pair) => pair.key));
+  const missing = dispatch.labels.filter((label) => !keys.has(label));
+  if (missing.length > 0) {
+    return {
+      verdict: "contradicted",
+      finding: `${registry} declares no key ${missing.join(", ")}`,
+    };
+  }
+  const owner = simpleName(to.owner ?? to.name);
+  if (!pairs.some((pair) => pair.value === owner)) {
+    return {
+      verdict: "contradicted",
+      finding: `${owner} is not among the ${pairs.length} members ${registry} holds`,
+    };
+  }
+  if (!pyDeclaresSymbol(toSource, to)) {
+    return { verdict: "contradicted", finding: `${to.path} no longer declares ${to.name}` };
+  }
+  const spans = texts.get(claim.from.path) ?? [];
+  if (spans.length === 0) {
+    return { verdict: "unresolved", finding: `no cited span in ${claim.from.path} can establish the dispatch` };
+  }
+  // The selection and the call are two lines, so the arrow cites both: one span
+  // subscripts the registry into a name, and one calls the method on that name.
+  const selected = new Set<string>();
+  const subscript = new RegExp(`(\\w+)[ \\t]*=[ \\t]*${escaped(registry)}[ \\t]*\\[`, "g");
+  for (const span of spans) {
+    for (const match of maskedPython(span).matchAll(subscript)) selected.add(match[1]!);
+  }
+  if (selected.size === 0) {
+    return {
+      verdict: "contradicted",
+      finding: `no cited span in ${claim.from.path} selects a member out of ${registry}`,
+    };
+  }
+  const name = simpleName(to.name);
+  const dispatched = spans.some((span) => {
+    const masked = maskedPython(span);
+    return [...masked.matchAll(new RegExp(`\\b${escaped(name)}\\s*\\(`, "g"))].some((match) => {
+      const shape = pyReceiverBefore(masked, match.index);
+      return shape.kind === "name" && selected.has(shape.receiver);
+    });
+  });
+  if (claim.expect === "absent") {
+    return {
+      verdict: "unresolved",
+      finding: "a dispatch arrow cannot express absence; a closed negative claim is a reachability check",
+    };
+  }
+  return dispatched
+    ? {
+        verdict: "confirmed",
+        finding: `${claim.from.name} dispatches ${name} into ${owner} through ${registry} (keyed_registry, ${pairs.length} members)`,
+      }
+    : {
+        verdict: "contradicted",
+        finding: `the cited caller span does not call ${name} on a member selected out of ${registry}`,
+      };
+};
+
+/**
+ * A declared pipeline arrow or entry, re-derived from the topology's own literals
+ * (#52, D2).
+ *
+ * Four things, and each is one of the four #52 report 5.1 names: the edge names
+ * both keys as string literals; each key was registered by an `add_node` carrying
+ * that literal and a bare identifier; that identifier is declared as a `def` in
+ * the same file; and the entry key came from `set_entry_point` or an edge out of
+ * `START`. The `def` is looked for anywhere in the file rather than at column zero,
+ * because the reference subject declares its node functions as closures inside the
+ * builder - which is the same question both sides ask, and deliberately not the
+ * module-level question `direct_call` asks.
+ */
+const resolveDeclaredPipeline = (
+  ctx: ProbeContext,
+  claim: FlowClaim,
+  texts: Map<string, string[]>,
+): FlowClaimResolution => {
+  const to = claim.to;
+  const pipeline = claim.pipeline;
+  if (!to || !pipeline) {
+    return { verdict: "unresolved", finding: "a declared_pipeline claim names no target or no node keys" };
+  }
+  if (claim.expect === "absent") {
+    return {
+      verdict: "unresolved",
+      finding: "a declared topology cannot express absence; a missing edge is simply not declared",
+    };
+  }
+  const isEntry = pipeline.entry_key !== undefined;
+  const isEdge = pipeline.from_key !== undefined && pipeline.to_key !== undefined;
+  if (isEntry === isEdge) {
+    return {
+      verdict: "unresolved",
+      finding: "a declared_pipeline claim must carry either an entry key or both edge keys, never both shapes and never neither",
+    };
+  }
+  if (claim.from.path !== to.path) {
+    return {
+      verdict: "contradicted",
+      finding: "a declared topology is one file's declaration, and this claim spans two",
+    };
+  }
+  const source = ctx.read(to.path);
+  if (source === null) {
+    return { verdict: "unresolved", finding: `${to.path} does not exist at ${ctx.sha}` };
+  }
+  const spans = (texts.get(to.path) ?? []).map(pythonWithoutComments);
+  if (spans.length === 0) {
+    return { verdict: "unresolved", finding: `no cited span in ${to.path} can establish the topology` };
+  }
+  const declaresDef = (name: string): boolean =>
+    new RegExp(`(?:^|[ \\t])(?:async[ \\t]+)?def[ \\t]+${escaped(name)}[ \\t]*\\(`, "m").test(
+      maskedPython(source),
+    );
+  const registered = (key: string, symbol: string): boolean =>
+    spans.some(
+      (span) =>
+        new RegExp(
+          `add_node\\s*\\(\\s*(['"])${escaped(key)}\\1\\s*,\\s*${escaped(symbol)}\\s*[,)]`,
+        ).test(span) ||
+        // The single-argument `add_node(<fn>)` form infers the key from the
+        // function name, so key and symbol are the one identifier - matched only
+        // when they agree, exactly as the producer derives the key.
+        (key === symbol &&
+          new RegExp(`add_node\\s*\\(\\s*${escaped(symbol)}\\s*[,)]`).test(span)),
+    );
+
+  if (isEntry) {
+    const key = pipeline.entry_key!;
+    const declaredEntry = spans.some(
+      (span) =>
+        new RegExp(`set_entry_point\\s*\\(\\s*(['"])${escaped(key)}\\1\\s*\\)`).test(span) ||
+        new RegExp(`add_edge\\s*\\(\\s*START\\s*,\\s*(['"])${escaped(key)}\\1\\s*\\)`).test(span),
+    );
+    if (!declaredEntry) {
+      return {
+        verdict: "contradicted",
+        finding: `no cited span in ${to.path} declares "${key}" as the topology's entry point`,
+      };
+    }
+    if (!registered(key, simpleName(to.name))) {
+      return {
+        verdict: "contradicted",
+        finding: `no cited span registers the node "${key}" as ${simpleName(to.name)}`,
+      };
+    }
+    if (!declaresDef(simpleName(to.name))) {
+      return {
+        verdict: "contradicted",
+        finding: `${to.path} declares no def ${simpleName(to.name)} for the node "${key}"`,
+      };
+    }
+    return {
+      verdict: "confirmed",
+      finding: `${to.path} declares "${key}" as its entry, registered as ${simpleName(to.name)}`,
+    };
+  }
+
+  const fromKey = pipeline.from_key!;
+  const toKey = pipeline.to_key!;
+  const drawn = spans.some((span) =>
+    new RegExp(
+      `add_edge\\s*\\(\\s*(['"])${escaped(fromKey)}\\1\\s*,\\s*(['"])${escaped(toKey)}\\2\\s*\\)`,
+    ).test(span),
+  );
+  if (!drawn) {
+    return {
+      verdict: "contradicted",
+      finding: `no cited span in ${to.path} declares an edge from "${fromKey}" to "${toKey}"`,
+    };
+  }
+  for (const [key, symbol] of [
+    [fromKey, simpleName(claim.from.name)],
+    [toKey, simpleName(to.name)],
+  ] as const) {
+    if (!registered(key, symbol)) {
+      return {
+        verdict: "contradicted",
+        finding: `no cited span registers the node "${key}" as ${symbol}`,
+      };
+    }
+    if (!declaresDef(symbol)) {
+      return {
+        verdict: "contradicted",
+        finding: `${to.path} declares no def ${symbol} for the node "${key}"`,
+      };
+    }
+  }
+  return {
+    verdict: "confirmed",
+    finding: `${to.path} declares the edge "${fromKey}" -> "${toKey}" between two registered node defs`,
+  };
+};
+
+const PY_VERBS = "get|post|put|patch|delete|head|options";
+
+/**
+ * The endpoint a FastAPI handler declares, composed with the prefix the subject's
+ * own wiring gives it - re-derived from the CITED SPANS and nothing else.
+ *
+ * The decorator is required to sit immediately above the `def` it names, which is
+ * what the language means by decorating it. The prefix is composed from the other
+ * spans the claim cites, and each is identified by what it IS rather than by the
+ * claim saying which is which: an `APIRouter(...)` span is the construction and an
+ * `include_router(...)` span is the mount. A `prefix=` that is not one string
+ * literal reads as no endpoint at all, which quarantines the Flow rather than
+ * admitting a route composed from a guess.
+ */
+/**
+ * The `local -> imported simple name` map one file's `from ... import` statements
+ * declare, so an aliased router (`from routes import router as r`) is compared by
+ * the name the producer resolved it to (`router`), not by the call-site alias.
+ * The producer resolves the same alias through the file's own bindings, so the two
+ * sides agree on which router a mount names.
+ */
+const pyImportAliases = (source: string): Map<string, string> => {
+  const out = new Map<string, string>();
+  const masked = maskedPython(source);
+  for (const match of masked.matchAll(/^[ \t]*from[ \t]+[.\w]+[ \t]+import[ \t]+/gm)) {
+    const after = match.index + match[0].length;
+    const list = pyImportList(masked, after);
+    for (const piece of list
+      .replace(/[()\\]/g, "")
+      .split(",")
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)) {
+      const parts = /^([\w.]+)(?:[ \t]+as[ \t]+(\w+))?$/.exec(piece);
+      if (!parts) continue;
+      out.set(parts[2] ?? parts[1]!, simpleName(parts[1]!));
+    }
+  }
+  return out;
+};
+
+const pythonRouteEndpoint = (
+  ctx: ProbeContext,
+  claim: FlowClaim,
+  texts: Map<string, string[]>,
+  ref: SymbolRef,
+): { method: string; path: string } | null => {
+  const spans = (texts.get(ref.path) ?? []).map(pythonWithoutComments);
+  const name = simpleName(ref.name);
+  let declared: { method: string; path: string; router: string } | null = null;
+  for (const span of spans) {
+    const decorator = new RegExp(
+      `@\\s*(\\w+)\\s*\\.\\s*(${PY_VERBS})\\s*\\(\\s*(['"])([^'"\\n]*)\\3[\\s\\S]*?\\)\\s*(?:@[^\\n]*\\s*)*(?:async[ \\t]+)?def[ \\t]+${escaped(name)}[ \\t]*\\(`,
+    ).exec(span);
+    if (!decorator) continue;
+    if (declared !== null) return null;
+    // The decorator names the router variable the route is written on; the prefix
+    // is only composed from spans that name THAT SAME router, so a module holding
+    // two routers cannot lend one's prefix to the other's routes.
+    declared = { method: decorator[2]!.toUpperCase(), path: decorator[4]!, router: decorator[1]! };
+  }
+  if (declared === null) return null;
+  const router = declared.router;
+
+  // The `prefix=` literal on a span: "" for none, or null when one is written but
+  // is not a single string literal - which quarantines the route, exactly as the
+  // producer cuts it `dynamic_route_prefix:` rather than composing a guess.
+  const prefixOf = (span: string): string | null => {
+    const literal = /(?:^|[(,\s])prefix\s*=\s*(['"])([^'"\n]*)\1/.exec(span);
+    if (literal !== null) return literal[2]!;
+    return /(?:^|[(,\s])prefix\s*=/.test(span) ? null : "";
+  };
+
+  let mount = "";
+  let construction = "";
+  for (const [mountPath, raw] of texts) {
+    // A bare-identifier router argument may be an alias, so it is resolved through
+    // the mounting file's own imports before the comparison - the same alias the
+    // producer resolved through the file's bindings.
+    const aliases = pyImportAliases(ctx.read(mountPath) ?? "");
+    for (const span of raw.map(pythonWithoutComments)) {
+      // The construction assigns `APIRouter(...)` to the router's own name; the
+      // mount passes that same name - bare `router`, an alias, or `<module>.router`
+      // - to `include_router`. A span naming a different router contributes nothing,
+      // which is how the gate re-derives the identity the producer resolved.
+      if (new RegExp(`\\b${escaped(router)}\\s*=\\s*APIRouter\\s*\\(`).test(span)) {
+        const literal = prefixOf(span);
+        if (literal === null) return null;
+        construction = literal;
+      }
+      const mounted = /\binclude_router\s*\(\s*([\w.]+)/.exec(span);
+      if (mounted !== null) {
+        const token = mounted[1]!;
+        const resolved = token.includes(".")
+          ? token.split(".").pop()!
+          : aliases.get(token) ?? token;
+        if (resolved === router) {
+          const literal = prefixOf(span);
+          if (literal === null) return null;
+          mount = literal;
+        }
+      }
+    }
+  }
+  return { method: declared.method, path: normalizedPath(`${mount}${construction}/${declared.path}`) };
+};
+
 export const resolveFlowClaim = (
   ctx: ProbeContext,
   link: FlowLink | undefined,
@@ -1663,16 +2614,26 @@ export const resolveFlowClaim = (
   }
   switch (claim.matcher) {
     case "direct_call":
-      return resolveDirectCall(ctx, claim, checked.texts!);
+      return claim.from.path.endsWith(".py")
+        ? resolvePyDirectCall(ctx, claim, checked.texts!)
+        : resolveDirectCall(ctx, claim, checked.texts!);
     case "spring_route":
       return resolveSpringRoute(ctx, claim, checked.texts!);
     case "data_access":
       if (!link || (link.relation !== "read" && link.relation !== "write")) {
         return { verdict: "contradicted", finding: "data_access requires a typed read or write link" };
       }
-      return resolveDataAccess(ctx, claim, checked.texts!, link.relation);
+      return claim.from.path.endsWith(".py")
+        ? resolvePyDataAccess(ctx, claim, checked.texts!, link.relation)
+        : resolveDataAccess(ctx, claim, checked.texts!, link.relation);
     case "closed_dispatch":
-      return resolveClosedDispatch(ctx, claim, checked.texts!);
+      // The Java resolver names its own refusals for a claim missing a target or a
+      // declared set, and a fixture asserts each of those sentences; the Python
+      // one is reached only when both are present.
+      if (!claim.from.path.endsWith(".py") || !claim.to || !claim.dispatch) {
+        return resolveClosedDispatch(ctx, claim, checked.texts!);
+      }
+      return resolvePyClosedDispatch(ctx, claim, checked.texts!);
     case "data_lineage":
       if (!link || link.relation !== "read") {
         return { verdict: "contradicted", finding: "data_lineage requires a typed read link" };
@@ -1687,6 +2648,8 @@ export const resolveFlowClaim = (
         return { verdict: "contradicted", finding: "process_launch requires a typed transport link" };
       }
       return resolveProcessLaunch(ctx, claim, checked.texts!);
+    case "declared_pipeline":
+      return resolveDeclaredPipeline(ctx, claim, checked.texts!);
     case "reachability":
       return resolveReachability(ctx, claim);
   }

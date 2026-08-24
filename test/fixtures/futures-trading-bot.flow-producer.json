@@ -1,0 +1,211 @@
+{
+  "note": "What the Python Flow producer yields on this subject, measured rather than asserted (#52, D5).",
+  "regenerate": "npx tsx scripts/measure-python-flow.ts <clone> > test/fixtures/<subject>.flow-producer.json",
+  "subject_sha": "3e4d369dede2892afda0a60cdfd00b09964eb64d",
+  "entry_inventory": {
+    "production_python_files": 126,
+    "modules": 126,
+    "classes": 313,
+    "fastapi_routes_with_a_literal_path": 14,
+    "fastapi_routes_refused": 0,
+    "program_entries": 17,
+    "declared_langgraph_topologies": 0,
+    "declared_langgraph_topologies_refused": 0,
+    "framework_callbacks_refused": 6
+  },
+  "survival": {
+    "candidates": 37,
+    "verified_by_the_gate": 11,
+    "overturned_by_the_gate": 0
+  },
+  "adapters": [
+    {
+      "probe_id": "flow-python-fastapi-http",
+      "status": "ran",
+      "candidates": 14,
+      "verified_by_the_gate": [
+        {
+          "title": "GET /, entry to terminal",
+          "steps": 4,
+          "links": 4,
+          "narrative_depth": 3,
+          "archetype": "request_response",
+          "components": [
+            "GET /",
+            "reports",
+            "validation_log",
+            "decision_logs"
+          ]
+        },
+        {
+          "title": "GET /acceptance, entry to terminal",
+          "steps": 2,
+          "links": 1,
+          "narrative_depth": 2,
+          "archetype": "request_response",
+          "components": [
+            "GET /acceptance",
+            "reports"
+          ]
+        },
+        {
+          "title": "GET /acceptance/{}, entry to terminal",
+          "steps": 2,
+          "links": 1,
+          "narrative_depth": 2,
+          "archetype": "request_response",
+          "components": [
+            "GET /acceptance/{}",
+            "reports"
+          ]
+        },
+        {
+          "title": "GET /config, entry to terminal",
+          "steps": 2,
+          "links": 1,
+          "narrative_depth": 2,
+          "archetype": "request_response",
+          "components": [
+            "GET /config",
+            "config_editor"
+          ]
+        },
+        {
+          "title": "GET /config/{}, entry to terminal",
+          "steps": 2,
+          "links": 2,
+          "narrative_depth": 2,
+          "archetype": "request_response",
+          "components": [
+            "GET /config/{}",
+            "config_editor"
+          ]
+        },
+        {
+          "title": "GET /decision-logs, entry to terminal",
+          "steps": 2,
+          "links": 1,
+          "narrative_depth": 2,
+          "archetype": "request_response",
+          "components": [
+            "GET /decision-logs",
+            "decision_logs"
+          ]
+        },
+        {
+          "title": "GET /decision-logs/{}, entry to terminal",
+          "steps": 8,
+          "links": 7,
+          "narrative_depth": 5,
+          "archetype": "request_response",
+          "components": [
+            "GET /decision-logs/{}",
+            "decision_logs",
+            "reader",
+            "DecisionRecord",
+            "SignalRecord",
+            "GateRecord",
+            "OrderEventRecord",
+            "OperatorEventRecord"
+          ]
+        },
+        {
+          "title": "GET /decision-logs/{}/signal/{}, entry to terminal",
+          "steps": 8,
+          "links": 7,
+          "narrative_depth": 5,
+          "archetype": "request_response",
+          "components": [
+            "GET /decision-logs/{}/signal/{}",
+            "decision_logs",
+            "reader",
+            "DecisionRecord",
+            "SignalRecord",
+            "GateRecord",
+            "OrderEventRecord",
+            "OperatorEventRecord"
+          ]
+        }
+      ],
+      "cut_by_reason": {
+        "chained_call": 1,
+        "no_arrow_drawn": 1,
+        "unresolved_dispatch": 3,
+        "unresolved_receiver_type": 1
+      },
+      "overturned_by_the_gate": []
+    },
+    {
+      "probe_id": "flow-python-console-entry",
+      "status": "ran",
+      "candidates": 23,
+      "verified_by_the_gate": [
+        {
+          "title": "data_tracer_backtest.main run as a program, entry to terminal",
+          "steps": 3,
+          "links": 2,
+          "narrative_depth": 2,
+          "archetype": "unknown",
+          "components": [
+            "data_tracer_backtest.main",
+            "catalog",
+            "instruments"
+          ]
+        },
+        {
+          "title": "diff.main run as a program, entry to terminal",
+          "steps": 7,
+          "links": 6,
+          "narrative_depth": 4,
+          "archetype": "unknown",
+          "components": [
+            "diff.main",
+            "reader",
+            "DecisionRecord",
+            "SignalRecord",
+            "GateRecord",
+            "OrderEventRecord",
+            "OperatorEventRecord"
+          ]
+        },
+        {
+          "title": "prop_eval_backtest.main run as a program, entry to terminal",
+          "steps": 14,
+          "links": 22,
+          "narrative_depth": 5,
+          "archetype": "unknown",
+          "components": [
+            "prop_eval_backtest.main",
+            "sessions",
+            "setup_v1_backtest",
+            "catalog",
+            "instruments",
+            "orb",
+            "TopstepConfig",
+            "PropEvalConfig",
+            "guards",
+            "orb_engine",
+            "FeatureContext",
+            "news",
+            "calendar_build",
+            "prop_eval"
+          ]
+        }
+      ],
+      "cut_by_reason": {
+        "chained_call": 1,
+        "framework_callback_unestablished": 6,
+        "no_arrow_drawn": 1,
+        "no_terminal_reached": 1,
+        "unresolved_dispatch": 6,
+        "unresolved_receiver_type": 5
+      },
+      "overturned_by_the_gate": []
+    },
+    {
+      "probe_id": "flow-python-langgraph-pipeline",
+      "status": "not_applicable",
+      "reason": "not applicable to this subject: no production Python source imports langgraph, so it declares no graph topology to read"
+    }
+  ]
+}

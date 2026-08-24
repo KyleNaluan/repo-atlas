@@ -640,3 +640,184 @@ describe("the artifact the run emitted was audited and shipped", () => {
     expect(gates.some((c) => c.outcome === "failed")).toBe(false);
   });
 });
+
+/**
+ * The second language, measured on its own two subjects (#52, D5).
+ *
+ * The Java producer is measured against one pinned subject with a regenerating
+ * command; #52's D5 pins BOTH Python subjects because they test different halves -
+ * futures-trading-bot exercises the tracer, and data-science-agent exercises the
+ * declared-pipeline adapter, which nothing else reaches. The cost is one extra
+ * fixture; the alternative is that half the adapter has no parity test.
+ *
+ * ftb is private, so its fixture is self-contained committed JSON and regenerating
+ * it requires access - the same constraint the Java fixture already carries, since
+ * that one needs a swe-prep clone.
+ *
+ * The number that matters most in these fixtures is `overturned_by_the_gate`. The
+ * producer and the gate are independent derivations - a parse tree against a blob
+ * reread - and the rule the whole adapter is built on is that they must fail closed
+ * on the SAME line. Every disagreement is a place where a real chain would return as
+ * a confusing quarantine, so the fixture counts them rather than trusting them to be
+ * zero.
+ */
+interface PythonAdapter {
+  probe_id: string;
+  status: string;
+  reason?: string;
+  candidates?: number;
+  verified_by_the_gate?: {
+    title: string;
+    steps: number;
+    links: number;
+    narrative_depth: number;
+    archetype: string;
+    components: string[];
+  }[];
+  cut_by_reason?: Record<string, number>;
+  overturned_by_the_gate?: string[];
+}
+
+interface PythonFixture {
+  subject_sha: string;
+  entry_inventory: Record<string, number>;
+  survival: { candidates: number; verified_by_the_gate: number; overturned_by_the_gate: number };
+  adapters: PythonAdapter[];
+}
+
+const dsa = read<PythonFixture>("data-science-agent.flow-producer.json");
+const ftb = read<PythonFixture>("futures-trading-bot.flow-producer.json");
+
+const adapterIn = (fixture: PythonFixture, id: string): PythonAdapter =>
+  fixture.adapters.find((adapter) => adapter.probe_id === id)!;
+
+const flowTitled = (fixture: PythonFixture, id: string, title: string) =>
+  adapterIn(fixture, id).verified_by_the_gate!.find((flow) => flow.title === title)!;
+
+describe("the Python adapter, measured on the two subjects #52 pins", () => {
+  it("is pinned to the SHAs the design record was read at", () => {
+    expect(dsa.subject_sha).toBe("6986cd419cd7ddaffb93888ff874c57f8967b9b3");
+    expect(ftb.subject_sha).toBe("3e4d369dede2892afda0a60cdfd00b09964eb64d");
+  });
+
+  it("inventories the entry families the design record counted", () => {
+    // These are the report's own section 3.1 counts, re-derived by the shipped
+    // detectors rather than by the scout's throwaway scripts. Every family agrees.
+    expect(dsa.entry_inventory).toMatchObject({
+      fastapi_routes_with_a_literal_path: 9,
+      program_entries: 1,
+      declared_langgraph_topologies: 1,
+      framework_callbacks_refused: 0,
+    });
+    expect(ftb.entry_inventory).toMatchObject({
+      fastapi_routes_with_a_literal_path: 14,
+      program_entries: 17,
+      declared_langgraph_topologies: 0,
+      framework_callbacks_refused: 6,
+    });
+  });
+
+  it("has the producer and the gate failing closed on the same lines", () => {
+    // The rule the whole adapter rests on, as a number. Not one candidate the
+    // producer proposed as a complete chain was overturned by the gate's own
+    // independent reread.
+    expect(dsa.survival.overturned_by_the_gate).toBe(0);
+    expect(ftb.survival.overturned_by_the_gate).toBe(0);
+    for (const fixture of [dsa, ftb]) {
+      for (const adapter of fixture.adapters) {
+        expect(adapter.overturned_by_the_gate ?? []).toEqual([]);
+      }
+    }
+  });
+
+  it("records the survival rate rather than predicting it (risk R1)", () => {
+    // PR 4's first Java measurement was 3 of 23 routes. The report deliberately
+    // declined to guess Python's, so this is the measured value: 15 of the 23
+    // routes across both subjects verify, plus three program entries and the one
+    // declared topology. dsa's `app` is declared in a `create_app()` factory, so
+    // its routes verify only once the host reader recognises a factory-scoped app
+    // (both producer and gate do); ftb's `prop_eval_backtest.main` joins on the
+    // direct-import process-launch fix.
+    const routes = (fixture: PythonFixture) =>
+      adapterIn(fixture, "flow-python-fastapi-http").verified_by_the_gate!.length;
+    expect(routes(dsa)).toBe(7);
+    expect(routes(ftb)).toBe(8);
+    expect(dsa.survival.verified_by_the_gate).toBe(8);
+    expect(ftb.survival.verified_by_the_gate).toBe(11);
+  });
+
+  it("verifies the flagship route the design record hand-walked", () => {
+    // Report section 5.1's first flagship, worked out step by step against the
+    // source before any code existed: eight boxes, narrative depth five,
+    // request/response. The producer reaches exactly that.
+    const flow = flowTitled(ftb, "flow-python-fastapi-http", "GET /decision-logs/{}, entry to terminal");
+    expect(flow.steps).toBe(8);
+    expect(flow.links).toBe(7);
+    expect(flow.narrative_depth).toBe(5);
+    expect(flow.archetype).toBe("request_response");
+    // The components the report predicted, in the story's own order.
+    expect(flow.components).toEqual([
+      "GET /decision-logs/{}",
+      "decision_logs",
+      "reader",
+      "DecisionRecord",
+      "SignalRecord",
+      "GateRecord",
+      "OrderEventRecord",
+      "OperatorEventRecord",
+    ]);
+  });
+
+  it("verifies the flagship topology the design record hand-walked", () => {
+    // Report section 5.1's second flagship, and the reason the pipeline adapter is
+    // not optional: EVERY dsa execution path funnels through a value the subject
+    // annotates `-> Any`, so the CLI story and every route that reaches it are
+    // quarantined. The topology is declared in literals ten lines apart, and it is
+    // #39-`unknown` because a declared topology carries no request signal.
+    const flow = flowTitled(
+      dsa,
+      "flow-python-langgraph-pipeline",
+      "build_graph, declared pipeline entry to terminal",
+    );
+    expect(flow.steps).toBe(5);
+    expect(flow.links).toBe(4);
+    expect(flow.archetype).toBe("unknown");
+    expect(flow.components).toEqual([
+      "ingest",
+      "sweep",
+      "investigate",
+      "report_assembly",
+      "deliver",
+    ]);
+  });
+
+  it("names every refusal by kind, so the record counts failures rather than sentences", () => {
+    // #6 forbids communicating absence by silence, and the kind token is what lets
+    // the record say WHICH failure this was. Every cut on both subjects carries one.
+    const kinds = new Set<string>();
+    for (const fixture of [dsa, ftb]) {
+      for (const adapter of fixture.adapters) {
+        for (const kind of Object.keys(adapter.cut_by_reason ?? {})) kinds.add(kind);
+      }
+    }
+    expect([...kinds].sort()).toEqual([
+      "chained_call",
+      "framework_callback_unestablished",
+      "no_arrow_drawn",
+      "no_terminal_reached",
+      "unresolved_dispatch",
+      "unresolved_receiver_type",
+    ]);
+    // D1's refusal is emitted, once per declared callback, rather than left as an
+    // absence: six on ftb, which is the count the report measured.
+    expect(
+      adapterIn(ftb, "flow-python-console-entry").cut_by_reason!["framework_callback_unestablished"],
+    ).toBe(6);
+  });
+
+  it("says by name that the second subject runs no LangGraph, rather than finding nothing", () => {
+    const adapter = adapterIn(ftb, "flow-python-langgraph-pipeline");
+    expect(adapter.status).toBe("not_applicable");
+    expect(adapter.reason).toContain("imports langgraph");
+  });
+});

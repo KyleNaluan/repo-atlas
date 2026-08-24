@@ -26,13 +26,13 @@ import { findReadme } from "../../harvest/tree.js";
  * `postgresql` also satisfies a README that says `postgres`.
  */
 const CLAIMED: { tech: string; aliases: string[] }[] = [
-  { tech: "postgres", aliases: ["postgresql", "postgres"] },
-  { tech: "mysql", aliases: ["mysql"] },
+  { tech: "postgres", aliases: ["postgresql", "postgres", "psycopg2", "psycopg", "asyncpg"] },
+  { tech: "mysql", aliases: ["mysql", "mysqlclient", "pymysql"] },
   { tech: "sqlite", aliases: ["sqlite"] },
   { tech: "redis", aliases: ["redis"] },
   { tech: "kafka", aliases: ["kafka"] },
   { tech: "rabbitmq", aliases: ["rabbitmq"] },
-  { tech: "mongodb", aliases: ["mongodb"] },
+  { tech: "mongodb", aliases: ["mongodb", "pymongo", "motor"] },
   { tech: "elasticsearch", aliases: ["elasticsearch"] },
   { tech: "docker", aliases: ["docker"] },
   { tech: "testcontainers", aliases: ["testcontainers"] },

@@ -1188,6 +1188,17 @@ describe("dependency-divergence", () => {
     });
     expect(await candidatesFrom("dependency-divergence", ctx)).toEqual([]);
   }, 60_000);
+
+  it("does not diverge when Postgres is declared through a Python driver package", async () => {
+    // Python names its Postgres driver `psycopg2`, not `postgres`. A calibration
+    // that only knew JVM/JS artifact naming would mint a false verified divergence
+    // here; the driver aliases keep the declaration recognized on both sides.
+    const ctx = contextFor({
+      "README.md": "Runs on PostgreSQL.\n",
+      "pyproject.toml": '[project]\ndependencies = ["psycopg2-binary>=2.9"]\n',
+    });
+    expect(await candidatesFrom("dependency-divergence", ctx)).toEqual([]);
+  }, 60_000);
 });
 
 describe("declaredIn: pyproject.toml", () => {

@@ -29,7 +29,12 @@ import {
   type ProbeOutcome,
 } from "../../src/probes/types.js";
 import type { DecisionNode } from "../../src/schema/types.js";
-import { SOURCE_EXTENSION_ERE, TEST_PATH_ERE } from "../../src/harvest/tree.js";
+import {
+  MIGRATION_EXTENSION_ERE,
+  MIGRATION_PATH_ERE,
+  SOURCE_EXTENSION_ERE,
+  TEST_PATH_ERE,
+} from "../../src/harvest/tree.js";
 import type { Harvest, HarvestedIssue } from "../../src/harvest/types.js";
 
 /* ---------------------------------------------------------- fixtures */
@@ -122,7 +127,17 @@ describe("the probe manifest", () => {
     // subject runs no batch work", "this subject consumes no messages" and "this
     // subject ships no unit files" are different findings, and no one adapter can
     // report another's absence.
-    expect(PROBES).toHaveLength(17);
+    // The last four close #22's probe-coverage gap: the reference overview's four
+    // architectural boundaries had no producer at all (the only boundary probe was
+    // `dependency-asymmetry`, whose findings on the reference subject were three
+    // test-class constructor asymmetries), and its "a green suite is not evidence
+    // a named test ran" coverage gap had none either. Three boundary probes rather
+    // than one for the same reason the Flow adapters are seven: "these two closed
+    // sets vary independently", "this abstraction does not require that package"
+    // and "this enum carries a value that one cannot" are three different findings
+    // about three different shapes, and no one of them can report another's
+    // absence.
+    expect(PROBES).toHaveLength(21);
     expect(PROBES.map((p) => p.id).sort()).toEqual([
       "ci-policy-guards",
       "decided-but-unbuilt",
@@ -136,8 +151,12 @@ describe("the probe manifest", () => {
       "flow-systemd-unit",
       "flow-typescript-http-client",
       "measured-scale",
+      "orthogonal-hierarchies",
+      "partitioned-implementations",
       "repeated-sql-predicates",
       "sealed-hierarchies",
+      "self-disabling-tests",
+      "superset-enum",
       "throw-where-siblings-return",
       "tuned-config-properties",
       "unresolved-references",
@@ -153,7 +172,11 @@ describe("the probe manifest", () => {
       "flow-java-spring-http",
       "flow-java-spring-message",
       "flow-java-spring-scheduled",
+      "orthogonal-hierarchies",
+      "partitioned-implementations",
       "sealed-hierarchies",
+      "self-disabling-tests",
+      "superset-enum",
       "throw-where-siblings-return",
     ]);
     // The systemd adapter is `any` deliberately: a unit file is not source in any
@@ -177,7 +200,11 @@ describe("the probe manifest", () => {
       "flow-java-spring-scheduled",
       "flow-systemd-unit",
       "flow-typescript-http-client",
+      "orthogonal-hierarchies",
+      "partitioned-implementations",
       "sealed-hierarchies",
+      "self-disabling-tests",
+      "superset-enum",
       "throw-where-siblings-return",
     ]);
     for (const o of skipped) {
@@ -1716,6 +1743,343 @@ describe("a decision the gate found is a decision the artifact may call built", 
   });
 });
 
+/* --------------------------- #22: the boundary and coverage-gap producers */
+
+describe("orthogonal-hierarchies", () => {
+  // The reference overview's `Response ⟂ Grading`. Two sealed hierarchies and a
+  // carrier holding one of each is a statement that the two vary independently -
+  // a relationship neither declaration carries on its own, which is why
+  // `sealed-hierarchies` reporting both closed sets could never mint it.
+  const subject = {
+    "e/Response.java": "package e;\nsealed interface Response permits Code, Choice, FreeText {}\n",
+    "e/Grading.java": "package e;\nsealed interface Grading permits TestCases, AnswerKey {}\n",
+    "e/Exercise.java": "package e;\nrecord Exercise(String id, Response response, Grading grading) {}\n",
+  };
+
+  it("finds two closed sets one type holds one of each of", async () => {
+    const found = await candidatesFrom("orthogonal-hierarchies", contextFor(subject));
+    expect(found).toHaveLength(1);
+    const node = found[0]!.node;
+    expect(node.type).toBe("boundary");
+    expect(node.title).toBe("Grading ⟂ Response");
+    // The product is arithmetic on two lengths read out of the tree, not a claim
+    // about design intent: 2 permitted graders times 3 permitted responses.
+    expect(node.type === "boundary" && node.enforced_by).toContain("all 6 pairings");
+    expect(node.type === "boundary" && node.enforced_by).toContain("Exercise holds one of each");
+    // Structural: two permits clauses and a record's own components (#28).
+    expect(node.confidence).toBe("verified");
+    // All three readings are cited, so a reader sees the relationship itself.
+    expect(node.evidence.map((e) => (e.kind === "file" ? e.path : ""))).toEqual([
+      "e/Grading.java",
+      "e/Response.java",
+      "e/Exercise.java",
+    ]);
+  }, 60_000);
+
+  it("draws nothing when no type holds one of each", async () => {
+    // Two closed sets that never meet decided nothing together. Emitting a
+    // boundary for every pair of sealed types in a subject would be the probe
+    // inventing the relationship rather than reading it.
+    const found = await candidatesFrom(
+      "orthogonal-hierarchies",
+      contextFor({
+        "e/Response.java": "package e;\nsealed interface Response permits Code, Choice {}\n",
+        "e/Grading.java": "package e;\nsealed interface Grading permits TestCases, AnswerKey {}\n",
+      }),
+    );
+    expect(found).toEqual([]);
+  }, 60_000);
+
+  it("refuses a pair where one hierarchy is a case of the other", async () => {
+    // `Outer permits Inner` and `Inner permits ...` is ONE design axis wearing two
+    // names. Calling it orthogonal would be exactly backwards, so the overlap and
+    // containment guards drop it even with a carrier holding both.
+    const found = await candidatesFrom(
+      "orthogonal-hierarchies",
+      contextFor({
+        "e/Outer.java": "package e;\nsealed interface Outer permits Inner, Other {}\n",
+        "e/Inner.java": "package e;\nsealed interface Inner extends Outer permits A, B {}\n",
+        "e/Holder.java": "package e;\nrecord Holder(Outer outer, Inner inner) {}\n",
+      }),
+    );
+    expect(found).toEqual([]);
+  }, 60_000);
+
+  it("does not count a collection of one side as holding one", async () => {
+    // A type holding `List<Response>` is not answered by one response, so the
+    // "every pairing is expressible" sentence would not follow from it. `holds`
+    // strips generics to the base name, which is `List`, not `Response`.
+    const found = await candidatesFrom(
+      "orthogonal-hierarchies",
+      contextFor({
+        "e/Response.java": "package e;\nsealed interface Response permits Code, Choice {}\n",
+        "e/Grading.java": "package e;\nsealed interface Grading permits TestCases, AnswerKey {}\n",
+        "e/Bundle.java": "package e;\nrecord Bundle(java.util.List<Response> responses, Grading grading) {}\n",
+      }),
+    );
+    expect(found).toEqual([]);
+  }, 60_000);
+
+  it("ignores a carrier that only exists in the tests", async () => {
+    // A fixture wiring two hierarchies together is a test's convenience, not a
+    // boundary the subject drew - the same discrimination that keeps the three
+    // test-class asymmetries out of this section.
+    const found = await candidatesFrom(
+      "orthogonal-hierarchies",
+      contextFor({
+        "e/Response.java": "package e;\nsealed interface Response permits Code, Choice {}\n",
+        "e/Grading.java": "package e;\nsealed interface Grading permits TestCases, AnswerKey {}\n",
+        "test/e/Fixture.java": "package e;\nrecord Fixture(Response response, Grading grading) {}\n",
+      }),
+    );
+    expect(found).toEqual([]);
+  }, 60_000);
+});
+
+describe("partitioned-implementations", () => {
+  // The reference overview's `Grader ⟂ Runner`. The finding is not that one
+  // implementation executes code - it is that the others hold NOTHING from the
+  // package that does, and the interface never asked them to.
+  const subject = {
+    "g/Grader.java": "package g;\ninterface Grader { void grade(); }\n",
+    "g/TestCaseGrader.java": "package g;\nclass TestCaseGrader implements Grader { private RunnerRegistry runners; public void grade() {} }\n",
+    "g/AnswerKeyGrader.java": "package g;\nclass AnswerKeyGrader implements Grader { private ObjectMapper mapper; public void grade() {} }\n",
+    "g/SelfCheckGrader.java": "package g;\nclass SelfCheckGrader implements Grader { public void grade() {} }\n",
+    "r/RunnerRegistry.java": "package r;\nclass RunnerRegistry {}\n",
+  };
+
+  it("splits an implementation set on a package rather than on a single field", async () => {
+    const found = await candidatesFrom("partitioned-implementations", contextFor(subject));
+    expect(found).toHaveLength(1);
+    const node = found[0]!.node;
+    expect(node.title).toBe("Grader ⟂ r");
+    expect(node.type === "boundary" && node.enforced_by).toContain("1 of the 3 types implementing Grader holds");
+    expect(node.type === "boundary" && node.enforced_by).toContain("AnswerKeyGrader, SelfCheckGrader hold nothing");
+    expect(node.confidence).toBe("verified");
+    // Every implementation is cited, so the partition can be checked either way.
+    const cited = node.evidence.map((e) => (e.kind === "file" ? e.path : "")).sort();
+    expect(cited).toContain("g/AnswerKeyGrader.java");
+    expect(cited).toContain("g/TestCaseGrader.java");
+  }, 60_000);
+
+  it("says nothing when the package is a requirement rather than a boundary", async () => {
+    // Every implementation holding something from the package means the
+    // abstraction requires it. That is a dependency, and a boundary drawn over it
+    // would assert a freedom the subject does not have.
+    const found = await candidatesFrom(
+      "partitioned-implementations",
+      contextFor({
+        "g/Grader.java": "package g;\ninterface Grader { void grade(); }\n",
+        "g/A.java": "package g;\nclass A implements Grader { private RunnerRegistry r; public void grade() {} }\n",
+        "g/B.java": "package g;\nclass B implements Grader { private RunnerRegistry r; public void grade() {} }\n",
+        "g/C.java": "package g;\nclass C implements Grader { private RunnerRegistry r; public void grade() {} }\n",
+        "r/RunnerRegistry.java": "package r;\nclass RunnerRegistry {}\n",
+      }),
+    );
+    expect(found).toEqual([]);
+  }, 60_000);
+
+  it("leaves a lone dissenter to dependency-asymmetry", async () => {
+    // Three of four holding and one not is the odd-one-out shape another probe
+    // already reports. Emitting it here too would be the same finding in two
+    // vocabularies, which the candidate-finding guard exists to catch.
+    const found = await candidatesFrom(
+      "partitioned-implementations",
+      contextFor({
+        "g/Grader.java": "package g;\ninterface Grader { void grade(); }\n",
+        "g/A.java": "package g;\nclass A implements Grader { private RunnerRegistry r; public void grade() {} }\n",
+        "g/B.java": "package g;\nclass B implements Grader { private RunnerRegistry r; public void grade() {} }\n",
+        "g/C.java": "package g;\nclass C implements Grader { public void grade() {} }\n",
+        "r/RunnerRegistry.java": "package r;\nclass RunnerRegistry {}\n",
+      }),
+    );
+    expect(found).toEqual([]);
+  }, 60_000);
+
+  it("needs three implementations before a split is a rule", async () => {
+    const found = await candidatesFrom(
+      "partitioned-implementations",
+      contextFor({
+        "g/Grader.java": "package g;\ninterface Grader { void grade(); }\n",
+        "g/A.java": "package g;\nclass A implements Grader { private RunnerRegistry r; public void grade() {} }\n",
+        "g/B.java": "package g;\nclass B implements Grader { public void grade() {} }\n",
+        "r/RunnerRegistry.java": "package r;\nclass RunnerRegistry {}\n",
+      }),
+    );
+    expect(found).toEqual([]);
+  }, 60_000);
+
+  it("does not draw a boundary against the abstraction's own package", async () => {
+    // Implementations holding a sibling from the package they live in have not
+    // crossed a line the subject drew.
+    const found = await candidatesFrom(
+      "partitioned-implementations",
+      contextFor({
+        "g/Grader.java": "package g;\ninterface Grader { void grade(); }\n",
+        "g/Helper.java": "package g;\nclass Helper {}\n",
+        "g/A.java": "package g;\nclass A implements Grader { private Helper h; public void grade() {} }\n",
+        "g/B.java": "package g;\nclass B implements Grader { public void grade() {} }\n",
+        "g/C.java": "package g;\nclass C implements Grader { public void grade() {} }\n",
+      }),
+    );
+    expect(found).toEqual([]);
+  }, 60_000);
+});
+
+describe("superset-enum", () => {
+  // The reference overview's `Machine verdict ⟂ self-rating`. The extra constant
+  // is a boundary written into the type system: a value typed as the narrower
+  // enum structurally cannot carry it.
+  const subject = {
+    "g/Verdict.java": "package g;\nclass Verdict { enum Outcome { PASSED, FAILED, ERROR } }\n",
+    "a/SubmissionOutcome.java":
+      "package a;\nimport g.Verdict;\nenum SubmissionOutcome { PASSED, FAILED, ERROR, SELF_RATED }\n",
+  };
+
+  it("names the constants one set has and the other cannot", async () => {
+    const found = await candidatesFrom("superset-enum", contextFor(subject));
+    expect(found).toHaveLength(1);
+    const node = found[0]!.node;
+    expect(node.title).toBe("SubmissionOutcome ⟂ Verdict.Outcome");
+    expect(node.type === "boundary" && node.enforced_by).toContain("1 more: SELF_RATED");
+    expect(node.type === "boundary" && node.enforced_by).toContain("can never carry SELF_RATED");
+    expect(node.confidence).toBe("verified");
+  }, 60_000);
+
+  it("refuses two enums that share a spelling but never meet in the source", async () => {
+    // Small vocabularies collide by accident: PASSED/FAILED/ERROR is a spelling
+    // many enums reach for. Without the wider enum's file naming the narrower one,
+    // the two decided nothing together and the superset is a coincidence.
+    const found = await candidatesFrom(
+      "superset-enum",
+      contextFor({
+        "g/Verdict.java": "package g;\nclass Verdict { enum Outcome { PASSED, FAILED, ERROR } }\n",
+        "a/SubmissionOutcome.java": "package a;\nenum SubmissionOutcome { PASSED, FAILED, ERROR, SELF_RATED }\n",
+      }),
+    );
+    expect(found).toEqual([]);
+  }, 60_000);
+
+  it("is not satisfied by a javadoc cross-reference alone", async () => {
+    // A comment mentioning the other enum is prose, not a declaration that the
+    // two are related - the same reason `reachability.ts` masks comments before
+    // deciding what a file can reach.
+    const found = await candidatesFrom(
+      "superset-enum",
+      contextFor({
+        "g/Verdict.java": "package g;\nclass Verdict { enum Outcome { PASSED, FAILED, ERROR } }\n",
+        "a/SubmissionOutcome.java":
+          "package a;\n/** A superset of g.Verdict.Outcome. */\nenum SubmissionOutcome { PASSED, FAILED, ERROR, SELF_RATED }\n",
+      }),
+    );
+    expect(found).toEqual([]);
+  }, 60_000);
+
+  it("says nothing about two sets that merely overlap", async () => {
+    const found = await candidatesFrom(
+      "superset-enum",
+      contextFor({
+        "g/Verdict.java": "package g;\nenum Outcome { PASSED, FAILED, ERROR }\n",
+        "a/Other.java": "package a;\nimport g.Outcome;\nenum Other { PASSED, FAILED, SKIPPED, PENDING }\n",
+      }),
+    );
+    expect(found).toEqual([]);
+  }, 60_000);
+});
+
+describe("self-disabling-tests", () => {
+  // The reference overview's "The real content is never verified in CI". A JUnit
+  // assumption aborts its test rather than failing it, so a suite reports the
+  // same colour whether the test exercised anything or not.
+  const guarded =
+    "package c;\n" +
+    "import static org.junit.jupiter.api.Assumptions.assumeTrue;\n" +
+    "import org.junit.jupiter.api.Test;\n" +
+    "class RealContentSmokeTest {\n" +
+    "    @Test\n" +
+    "    void everyRealExerciseSolves() {\n" +
+    "        Path dir = contentDir();\n" +
+    "        assumeTrue(Files.isDirectory(dir), \"no local content clone\");\n" +
+    "    }\n" +
+    "    @Test\n" +
+    "    void alwaysRuns() { assertTrue(true); }\n" +
+    "}\n";
+
+  it("names the tests that abort themselves, and how many of the class's tests they are", async () => {
+    const found = await candidatesFrom(
+      "self-disabling-tests",
+      contextFor({ "src/test/java/c/RealContentSmokeTest.java": guarded }),
+    );
+    expect(found).toHaveLength(1);
+    const node = found[0]!.node;
+    expect(node.type === "edge" && node.kind).toBe("coverage_gap");
+    expect(node.type === "edge" && node.statement).toContain("1 of RealContentSmokeTest's 2 tests");
+    expect(node.type === "edge" && node.statement).toContain("everyRealExerciseSolves");
+    // The unguarded test is not named as one that aborts.
+    expect(node.type === "edge" && node.statement).not.toContain("alwaysRuns");
+    expect(node.confidence).toBe("verified");
+    // The import is cited beside the guards: it is what makes the call JUnit's.
+    expect(node.evidence[0]!.kind === "file" && node.evidence[0]!.note).toContain("assumption import");
+  }, 60_000);
+
+  it("emits one candidate per class, not one per guarded test", async () => {
+    const both =
+      "package c;\n" +
+      "import static org.junit.jupiter.api.Assumptions.assumeTrue;\n" +
+      "import org.junit.jupiter.api.Test;\n" +
+      "class TwoGuarded {\n" +
+      "    @Test void a() { assumeTrue(here()); }\n" +
+      "    @Test void b() { assumeTrue(here()); }\n" +
+      "}\n";
+    const found = await candidatesFrom(
+      "self-disabling-tests",
+      contextFor({ "src/test/java/c/TwoGuarded.java": both }),
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]!.node.type === "edge" && found[0]!.node.statement).toContain("2 of TwoGuarded's 2 tests");
+    expect(found[0]!.node.type === "edge" && found[0]!.node.statement).toContain("all of them");
+  }, 60_000);
+
+  it("will not call a subject's own assumeTrue a JUnit guard", async () => {
+    // Without the import the identifier is one this subject could have declared,
+    // and "this test aborts" would be a judgement read out of a name rather than
+    // the name itself - the #28 defect exactly.
+    const own =
+      "package c;\n" +
+      "import org.junit.jupiter.api.Test;\n" +
+      "class OwnHelper {\n" +
+      "    @Test void a() { assumeTrue(here()); }\n" +
+      "    private static void assumeTrue(boolean b) {}\n" +
+      "}\n";
+    expect(
+      await candidatesFrom("self-disabling-tests", contextFor({ "src/test/java/c/OwnHelper.java": own })),
+    ).toEqual([]);
+  }, 60_000);
+
+  it("does not read an annotation out of a comment or a string", async () => {
+    // A raw-line scan for `@Test` matches both, which is how a YAML comment once
+    // minted a verified CI mechanism (#28). The annotation is read off the
+    // method's own modifiers instead.
+    const commented =
+      "package c;\n" +
+      "import static org.junit.jupiter.api.Assumptions.assumeTrue;\n" +
+      "class Commented {\n" +
+      "    // @Test void ghost() { assumeTrue(false); }\n" +
+      "    String doc = \"@Test\";\n" +
+      "    void helper() { assumeTrue(false); }\n" +
+      "}\n";
+    expect(
+      await candidatesFrom("self-disabling-tests", contextFor({ "src/test/java/c/Commented.java": commented })),
+    ).toEqual([]);
+  }, 60_000);
+
+  it("looks only at test paths", async () => {
+    expect(
+      await candidatesFrom("self-disabling-tests", contextFor({ "src/main/java/c/NotATest.java": guarded })),
+    ).toEqual([]);
+  }, 60_000);
+});
+
 describe("measured-scale", () => {
   // The stat tiles the reference overview opens with, which no stage produced.
   // Every figure was already measured by harvest; this restates them and cites
@@ -1736,6 +2100,56 @@ describe("measured-scale", () => {
     expect(ids).toContain("f-scale-files");
     expect(ids).toContain("f-scale-history");
     expect(ids).toContain("f-scale-tests");
+  });
+
+  it("states a test-line figure only after reconciling its reading with the harvest's", async () => {
+    // `harvest.scale` carries production lines only, so this is the one tile the
+    // probe MEASURES rather than restates - and measuring would break the
+    // module's guarantee unless the two readings of "a line" agree. They are
+    // checked against each other: the same helper over the production selection
+    // must reproduce `scale.lines`, or no test-line figure is stated at all.
+    const ctx = contextFor({
+      "src/main/java/A.java": "one\ntwo\nthree\n",
+      "src/test/java/ATest.java": "one\ntwo\n",
+    });
+    const reconciled = { ...ctx, harvest: { ...ctx.harvest, scale: { ...ctx.harvest.scale, lines: 3 } } };
+    const tile = (await candidatesFrom("measured-scale", reconciled)).find(
+      (c) => c.node.id === "f-scale-test-lines",
+    );
+    expect(tile!.node.type === "fact" && tile!.node.value).toBe("2");
+
+    // A harvest whose production figure this probe cannot reproduce means the two
+    // are not counting the same thing, and a second number counted the other way
+    // would be exactly the unreproducible tile this module exists to refuse.
+    const drifted = { ...ctx, harvest: { ...ctx.harvest, scale: { ...ctx.harvest.scale, lines: 999 } } };
+    const ids = (await candidatesFrom("measured-scale", drifted)).map((c) => c.node.id);
+    expect(ids).not.toContain("f-scale-test-lines");
+  });
+
+  it("counts schema migrations off one select, like every other tile", async () => {
+    const ctx = contextFor({
+      "db/migration/V1__baseline.sql": "create table a();\n",
+      "db/migration/V2__more.sql": "create table b();\n",
+      "db/migration/README.md": "not a migration\n",
+      "src/main/java/A.java": "class A {}\n",
+    });
+    const tile = (await candidatesFrom("measured-scale", ctx)).find(
+      (c) => c.node.id === "f-scale-migrations",
+    );
+    // The README in the same directory is not a migration; the extension test is
+    // what keeps it out, on both sides of the select.
+    expect(tile!.node.type === "fact" && tile!.node.value).toBe("2");
+    const ev = tile!.node.evidence[0]!;
+    const cmd = ev.kind === "command" ? ev.cmd : "";
+    expect(cmd).toContain(`grep -iE '${MIGRATION_PATH_ERE}'`);
+    expect(cmd).toContain(`grep -iE '${MIGRATION_EXTENSION_ERE}'`);
+  });
+
+  it("says nothing about migrations in a subject that has none", async () => {
+    // A "0 migrations" tile is a claim about a schema this subject may not have.
+    const ctx = contextFor({ "src/main/java/A.java": "class A {}\n" });
+    const ids = (await candidatesFrom("measured-scale", ctx)).map((c) => c.node.id);
+    expect(ids).not.toContain("f-scale-migrations");
   });
 
   it("cites the command that produces each figure, at the pinned SHA", async () => {

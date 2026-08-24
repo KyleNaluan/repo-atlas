@@ -87,6 +87,27 @@ export const TEST_PATH_ERE = TEST_PATH.source.replace(/\\\//g, "/");
 export const isSourceFile = (path: string): boolean =>
   hasSourceExtension(path) && !isTestPath(path);
 
+/**
+ * A schema-migration file: one that sits in a directory the ecosystem's own
+ * conventions name for them, and carries a migration's extension.
+ *
+ * Declared here beside the source and test filters, and exported as an ERE for
+ * the same reason they are: a tile that counts migrations must cite a `grep -iE`
+ * that selects exactly the set the predicate counted, and the only way that
+ * cannot drift is for both to be compiled from one source. `migration`,
+ * `migrations` and `migrate` cover Flyway, Liquibase, Rails, Django, Alembic's
+ * `versions` aside, and knex; the extension test is what keeps a README living in
+ * such a directory from counting as one.
+ */
+const MIGRATION_PATH = /(^|\/)(migrations?|migrate)(\/|$)/i;
+const MIGRATION_EXTENSION = /\.(sql|xml|ya?ml|py|rb|js|ts)$/i;
+
+export const MIGRATION_PATH_ERE = MIGRATION_PATH.source.replace(/\\\//g, "/");
+export const MIGRATION_EXTENSION_ERE = MIGRATION_EXTENSION.source;
+
+export const isMigrationFile = (path: string): boolean =>
+  MIGRATION_PATH.test(path) && MIGRATION_EXTENSION.test(path);
+
 /** A blob's text at a commit, or null when the path is absent at that SHA. */
 export const fileAt = (repo: string, sha: string, path: string): string | null => {
   try {
@@ -98,7 +119,17 @@ export const fileAt = (repo: string, sha: string, path: string): string | null =
 
 const blob = fileAt;
 
-const countLines = (text: string): number => {
+/**
+ * How many lines a blob has, counting a final line with no trailing newline.
+ *
+ * Exported because more than one stage now needs a line count and they must not
+ * disagree by one: `scale.lines` is this summed per file, and `measured-scale`
+ * reconciles its own reading against that figure before it will state a second
+ * one. A bare `wc -l` counts newline BYTES, so it under-reports by one for every
+ * file that does not end in a newline - which is why the command a tile cites
+ * pipes each blob through `awk 1` first.
+ */
+export const countLines = (text: string): number => {
   if (text.length === 0) return 0;
   const lines = text.split("\n");
   if (lines[lines.length - 1] === "") lines.pop();

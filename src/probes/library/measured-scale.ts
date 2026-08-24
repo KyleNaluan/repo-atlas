@@ -38,9 +38,13 @@
  * figure, not just per probe.
  */
 import {
+  MIGRATION_EXTENSION_ERE,
+  MIGRATION_PATH_ERE,
   SOURCE_EXTENSION_ERE,
   TEST_PATH_ERE,
+  countLines,
   hasSourceExtension,
+  isMigrationFile,
   isSourceFile,
   isTestPath,
 } from "../../harvest/tree.js";
@@ -95,6 +99,27 @@ const testFiles: PathFilter = {
   pipe: `grep -iE '${SOURCE_EXTENSION_ERE}' | grep -iE '${TEST_PATH_ERE}'`,
 };
 
+/**
+ * Schema migrations, from the same one-select discipline: `isMigrationFile` is
+ * the predicate and the pipeline is its two EREs, so the tile's number and the
+ * command a reader would run to check it cannot select different sets.
+ */
+const migrations: PathFilter = {
+  keep: isMigrationFile,
+  pipe: `grep -iE '${MIGRATION_PATH_ERE}' | grep -iE '${MIGRATION_EXTENSION_ERE}'`,
+};
+
+/**
+ * The line command for a selection, matching `countLines` exactly.
+ *
+ * `awk 1` re-emits every record newline-terminated before `wc -l` counts, which
+ * is what makes a bare `wc -l` reproduce `countLines` for a file with no trailing
+ * newline. See this module's header: the command is fixed to match the measured
+ * figure, never the other way round.
+ */
+const lineCommand = (sha: string, listing: string): string =>
+  `${listing} | xargs -I{} sh -c 'git cat-file -p ${sha}:{} | awk 1' | wc -l`;
+
 /** The matching paths and the listing command that selects exactly them. */
 const select = (
   ctx: ProbeContext,
@@ -117,7 +142,7 @@ const find = async (ctx: ProbeContext): Promise<Candidate[]> => {
         "lines of production source",
         thousands(scale.lines),
         "How much code there is",
-        `${source.listing} | xargs -I{} sh -c 'git cat-file -p ${ctx.sha}:{} | awk 1' | wc -l`,
+        lineCommand(ctx.sha, source.listing),
         `${thousands(scale.lines)} lines across ${thousands(source.paths.length)} production source files`,
       ),
     );
@@ -166,6 +191,57 @@ const find = async (ctx: ProbeContext): Promise<Candidate[]> => {
         "How much of it is tested",
         tests.listing,
         `${thousands(tests.paths.length)} test files alongside ${thousands(source.paths.length)} production files`,
+      ),
+    );
+  }
+
+  // The test-line figure is the one tile this probe MEASURES rather than
+  // restates, because `harvest.scale` carries production lines only - and the
+  // reference overview opens with both halves, since "how much of this is test
+  // code" is a different question from "how big is it".
+  //
+  // Measuring it here would break the module's own guarantee unless the reading
+  // is reconciled first, so it is: the same `lines` helper is run over the
+  // PRODUCTION selection and must reproduce `scale.lines`, the figure the harvest
+  // established independently. Where the two disagree, this probe's reading of a
+  // line is not the harvest's, and it states no line figure it cannot ground - it
+  // does not publish a second number and leave a reader to discover the two were
+  // counted differently.
+  const lines = (paths: string[]): number =>
+    paths.reduce((n, p) => n + countLines(ctx.read(p) ?? ""), 0);
+
+  if (tests.paths.length > 0 && lines(source.paths) === scale.lines) {
+    const testLines = lines(tests.paths);
+    if (testLines > 0) {
+      out.push(
+        fact(
+          "f-scale-test-lines",
+          "lines of test source",
+          thousands(testLines),
+          "How much of it is test code",
+          lineCommand(ctx.sha, tests.listing),
+          `${thousands(testLines)} lines of test source against ${thousands(scale.lines)} of production source`,
+        ),
+      );
+    }
+  }
+
+  const schema = select(ctx, migrations);
+  if (schema.paths.length > 0) {
+    // Versioned migrations are the shape of a schema that was grown rather than
+    // generated, and the count is the number of times it changed on purpose.
+    const first = schema.paths[0];
+    const last = schema.paths[schema.paths.length - 1];
+    out.push(
+      fact(
+        "f-scale-migrations",
+        `schema migration${schema.paths.length === 1 ? "" : "s"}`,
+        thousands(schema.paths.length),
+        "How the schema got here",
+        schema.listing,
+        schema.paths.length === 1
+          ? `1 migration file: ${first}`
+          : `${thousands(schema.paths.length)} migration files, ${first} through ${last}`,
       ),
     );
   }

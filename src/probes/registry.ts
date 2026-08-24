@@ -20,6 +20,10 @@ import { sealedHierarchies } from "./library/sealed-hierarchies.js";
 import { throwWhereSiblingsReturn } from "./library/throw-where-siblings-return.js";
 import { unresolvedReferences } from "./library/unresolved-references.js";
 import { measuredScale } from "./library/measured-scale.js";
+import { orthogonalHierarchies } from "./library/orthogonal-hierarchies.js";
+import { partitionedImplementations } from "./library/partitioned-implementations.js";
+import { selfDisablingTests } from "./library/self-disabling-tests.js";
+import { supersetEnum } from "./library/superset-enum.js";
 import { flowJavaCli } from "./library/flow-java-cli.js";
 import { flowJavaSharedState } from "./library/flow-java-shared-state.js";
 import { flowJavaSpringHttp } from "./library/flow-java-spring-http.js";
@@ -61,6 +65,10 @@ export const PROBES: readonly Probe[] = [
   sealedHierarchies,
   throwWhereSiblingsReturn,
   dependencyAsymmetry,
+  orthogonalHierarchies,
+  partitionedImplementations,
+  supersetEnum,
+  selfDisablingTests,
   repeatedSqlPredicates,
   tunedConfigProperties,
   unresolvedReferences,

@@ -123,7 +123,7 @@ interface UnmintedRow {
  * How far extraction reaches on this subject, measured node by node against the
  * reference (#22). Like the Flow producer's yield, it needs a swe-prep clone and
  * so is pinned rather than computed here; unlike a count, it is a LIST, because
- * "18 against 33" says nothing about which fifteen or why.
+ * "27 against 33" says nothing about which six or why.
  */
 const coverage = read<{
   subject_sha: string;

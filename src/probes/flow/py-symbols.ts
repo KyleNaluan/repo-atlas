@@ -382,7 +382,19 @@ const moduleAttributeTypes = (
       callee?.type === "identifier" && bindings.get(callee.text)?.kind === "symbol"
         ? callee.text
         : null;
-    const type = annotated ?? constructed;
+    // A module-level attribute built by a foreign call - `CONN = sqlite3.connect(...)`
+    // - is FOREIGN, recorded for the same reason `attributeTypesOf` records a class
+    // attribute foreign: left out of the map it reads as "an attribute no declaration
+    // establishes", which is a hole, and a call on somebody else's connection is not
+    // a hole in the subject's story. Both readers of the three-shape rule must agree
+    // on the foreign shape, or a cross-module `mod.CONN.execute(...)` gaps here where
+    // it would not on a class.
+    const foreign =
+      constructed === null && callee !== null && (() => {
+        const root = calleeRoot(callee);
+        return root !== null && bindings.get(root)?.kind === "foreign";
+      })();
+    const type = annotated ?? constructed ?? (foreign ? FOREIGN_ATTRIBUTE : null);
     if (type === null) continue;
     const previous = seen.get(left.text);
     if (previous !== undefined && previous !== type) conflicting.add(left.text);
@@ -483,7 +495,10 @@ const bindingsIn = (
       : 0;
     const moduleText = moduleNode?.text ?? "";
     const base = relativeDots > 0 ? relativeBase(relativeDots, moduleText.replace(/^\.+/, "")) : null;
-    const dottedModule = relativeDots > 0 ? null : moduleText;
+    // Absolute-import module name. Every relative import (`relativeDots > 0`)
+    // returns inside the loop below before this is read, so it is only consulted
+    // when `relativeDots === 0`, where it is exactly `moduleText`.
+    const dottedModule = moduleText;
     for (const child of namedChildren(statement)) {
       // The module node is identified by its SOURCE SPAN, not by text+type: for
       // `from app import app` the imported name shares both with the module_name,
@@ -519,10 +534,6 @@ const bindingsIn = (
             ? { kind: "ambiguous", dotted: `${moduleText}.${imported}` }
             : { kind: "symbol", path: owner, name: imported },
         );
-        continue;
-      }
-      if (dottedModule === null) {
-        out.set(local, { kind: "ambiguous", dotted: `${moduleText}.${imported}` });
         continue;
       }
       // `from webui import decision_logs` binds a SUBMODULE when one exists, and a

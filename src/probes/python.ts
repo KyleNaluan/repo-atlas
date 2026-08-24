@@ -323,8 +323,19 @@ export const annotationName = (node: SyntaxNode | null): string | null => {
     // a missing `DecisionRecord.append` - a hole in a story that has none, and the
     // exact false gap this distinction exists to prevent. A container therefore
     // reduces to the container, which resolves as somebody else's type.
+    //
+    // `Annotated` is the one wrapper whose FIRST element is the object and whose
+    // remaining elements are metadata: `Annotated[Store, Depends(get_store)]` - the
+    // FastAPI dependency-injection idiom - denotes a `Store`, so it is unwrapped to
+    // its first element regardless of how many it carries. Every other transparent
+    // wrapper keeps the single-element rule, because a second element there would
+    // mean it is not the shape this reader thinks it is.
     const inner = elements[0];
-    if (TRANSPARENT.has(container) && elements.length === 1 && inner !== undefined) {
+    if (
+      TRANSPARENT.has(container) &&
+      inner !== undefined &&
+      (container === "Annotated" || elements.length === 1)
+    ) {
       return annotationName(inner);
     }
     return container;

@@ -21,7 +21,10 @@ import { gateCandidate } from "../../src/gate/gate.js";
 import { resolveFlowClaim } from "../../src/gate/flow.js";
 import { flowArchetype } from "../../src/rank/flow.js";
 import { dottedNamesOf, moduleOwnerName, packageDirsIn } from "../../src/probes/flow/py-module.js";
-import { pythonIndex } from "../../src/probes/flow/py-symbols.js";
+import { methodNamed, pythonIndex } from "../../src/probes/flow/py-symbols.js";
+import { pyTraceFrom } from "../../src/probes/flow/py-trace.js";
+import type { TypeSymbol } from "../../src/probes/flow/symbols.js";
+import type { TraceResult } from "../../src/probes/flow/trace.js";
 import type { Candidate, FlowClaim, ProbeOutcome } from "../../src/probes/types.js";
 import type { FlowNode } from "../../src/schema/types.js";
 
@@ -895,5 +898,377 @@ class BookStrategy(Generic[T], Strategy):
     const reason = only(cutReasons(candidates));
     expect(reason).toContain("framework_callback_unestablished:");
     expect(reason).toContain("BookStrategy(Strategy).on_bar");
+  }, 60_000);
+});
+
+/* ------------------------------------ review round 2: execution-path and parity fixes */
+
+/** Trace one entry directly, so a tracer-internal distinction can be asserted. */
+const traceEntry = async (
+  files: Record<string, string>,
+  path: string,
+  className: string | null,
+  methodName: string,
+): Promise<TraceResult> => {
+  const index = await pythonIndex(contextFor(files));
+  const type: TypeSymbol =
+    className === null
+      ? index.modules.get(path)!
+      : (index.classesByPath.get(path) ?? []).find((t) => t.name === className)!;
+  return pyTraceFrom(index, type, methodNamed(type, methodName)!);
+};
+
+describe("the tracer only walks the calls that execute", () => {
+  it("does not attribute a call inside a nested def to the method that defines it", async () => {
+    // `helper` never runs when `render` runs - the closure only defines it - so its
+    // call on an `Any`-typed value must not gap and quarantine the whole Flow.
+    const trace = await traceEntry(
+      {
+        "app/__init__.py": INIT,
+        "app/mod.py": `from typing import Any
+
+from app.store import Store
+
+
+def render(record_id: str, thing: Any) -> str:
+    def helper() -> None:
+        thing.mystery()
+
+    store = Store()
+    return store.read_record(record_id)
+`,
+        "app/store.py": STORE,
+      },
+      "app/mod.py",
+      null,
+      "render",
+    );
+    expect(trace.gaps).toEqual([]);
+    expect([...trace.landmarks.values()].some((l) => l.method.name === "read_record")).toBe(true);
+  }, 60_000);
+});
+
+describe("a call on one element of a subject collection is unresolved_dispatch, per D3", () => {
+  it("reaches the stop for `for r in self.records`, not only a bare identifier", async () => {
+    const trace = await traceEntry(
+      {
+        "app/__init__.py": INIT,
+        "app/rec.py": `class Rec:
+    def process(self) -> None:
+        pass
+`,
+        "app/svc.py": `from app.rec import Rec
+
+
+class Service:
+    def __init__(self, records: list[Rec]) -> None:
+        self.records: list[Rec] = records
+
+    def run(self) -> None:
+        for r in self.records:
+            r.process()
+`,
+      },
+      "app/svc.py",
+      "Service",
+      "run",
+    );
+    // Before the fix `self.records` typed to the container `list` (foreign) and the
+    // call on `r` was silently skipped; now the subject element is named, so v1's
+    // refusal to close a set through a collection quarantines the Flow.
+    expect(trace.gaps.some((g) => g.kind === "unresolved_dispatch")).toBe(true);
+  }, 60_000);
+});
+
+describe("a module-level foreign attribute is not a hole across modules", () => {
+  it("reads `other_mod.CONN.execute(...)` as foreign, not a gap", async () => {
+    const trace = await traceEntry(
+      {
+        "app/__init__.py": INIT,
+        "app/db.py": `import sqlite3
+
+CONN = sqlite3.connect("x.db")
+`,
+        "app/svc.py": `from app import db
+
+
+def run() -> None:
+    db.CONN.execute("select 1")
+`,
+      },
+      "app/svc.py",
+      null,
+      "run",
+    );
+    // The module reader records `CONN = sqlite3.connect(...)` FOREIGN, exactly as the
+    // class reader records `self._conn`, so a call on it is somebody else's rather
+    // than an attribute no declaration establishes.
+    expect(trace.gaps).toEqual([]);
+  }, 60_000);
+});
+
+describe("an open() keyword argument is not read as a write mode", () => {
+  it("classifies `open(path, encoding=...)` as a durable read, not a filesystem write", async () => {
+    const trace = await traceEntry(
+      {
+        "app/__init__.py": INIT,
+        "app/io.py": `def load_config() -> str:
+    return open("cfg", encoding="ascii").read()
+`,
+      },
+      "app/io.py",
+      null,
+      "load_config",
+    );
+    const entry = trace.landmarks.get(trace.entry)!;
+    // The `a` in `ascii` and the `w` in `newline` are not a mode; only a positional
+    // string literal is, so the box stays a read rather than flipping to a write.
+    expect(entry.externalEffect).toBeUndefined();
+    expect(entry.dataAccess?.relation).toBe("read");
+  }, 60_000);
+});
+
+describe("a bare subprocess call is a process launch", () => {
+  it("marks `Popen(...)` from `from subprocess import Popen` a process effect", async () => {
+    const trace = await traceEntry(
+      {
+        "app/__init__.py": INIT,
+        "app/launch.py": `from subprocess import Popen
+
+
+def launch() -> None:
+    Popen(["ls"])
+`,
+      },
+      "app/launch.py",
+      null,
+      "launch",
+    );
+    // The bare callee is resolved through its import binding to `subprocess`, so it
+    // is the same launch `subprocess.Popen(...)` names.
+    expect(trace.landmarks.get(trace.entry)!.externalEffect).toBe("process");
+  }, 60_000);
+});
+
+describe("the gate does not throw on a targetless Python direct_call claim", () => {
+  it("quarantines rather than dereferencing a missing target", async () => {
+    const ctx = contextFor({
+      "app/__init__.py": INIT,
+      "app/a.py": `class Store:
+    def handle(self, record_id: str) -> str:
+        return "x"
+`,
+    });
+    const claim: FlowClaim = {
+      expect: "present",
+      matcher: "direct_call",
+      from: { path: "app/a.py", name: "handle", owner: "Store", arity: 1 },
+      evidence: [{ kind: "file", path: "app/a.py", line_start: 1, line_end: 3, sha: ctx.sha }],
+    };
+    expect(resolveFlowClaim(ctx, undefined, claim).verdict).toBe("unresolved");
+  }, 60_000);
+});
+
+describe("a receiver annotated with the FastAPI DI idiom binds its first element", () => {
+  it("types `Annotated[Store, Depends(get_store)]` as Store and the gate confirms", async () => {
+    const subject = {
+      "app/__init__.py": INIT,
+      "app/main.py": `from typing import Annotated
+from fastapi import Depends, FastAPI
+
+from app.store import Store
+
+app = FastAPI()
+
+
+def get_store() -> Store:
+    return Store()
+
+
+@app.get("/records/{record_id}")
+def show_record(record_id: str, store: Annotated[Store, Depends(get_store)]) -> str:
+    return store.read_record(record_id)
+`,
+      "app/store.py": STORE,
+    };
+    const { candidate, result } = await gated(subject, "flow-python-fastapi-http");
+    // Annotated carries metadata after its object, so the single-element rule cannot
+    // apply to it; its first element is the type the receiver is.
+    expect(flowOf(candidate).steps.some((step) => step.node === "Store")).toBe(true);
+    expect(result.verdict).toBe("confirmed");
+  }, 60_000);
+});
+
+describe("a handler carrying two route decorators declares two routes", () => {
+  it("emits an entry for each distinct verb, not only the first", async () => {
+    const candidates = await runAdapter(
+      "flow-python-fastapi-http",
+      contextFor({
+        "app/__init__.py": INIT,
+        "app/main.py": `from fastapi import FastAPI
+
+from app import records
+
+app = FastAPI()
+
+
+@app.get("/records/{record_id}")
+@app.post("/records/{record_id}")
+def show_record(record_id: str) -> str:
+    return records.render(record_id)
+`,
+        "app/records.py": RECORDS,
+        "app/store.py": STORE,
+      }),
+    );
+    // Before the fix the loop broke after the first decorator, dropping the rest in
+    // the silence #6 forbids.
+    expect(verifiedOnly(candidates).map((c) => flowOf(c).steps[0]!.node).sort()).toEqual([
+      "GET /records/{}",
+      "POST /records/{}",
+    ]);
+  }, 60_000);
+});
+
+describe("a router mounted on another router is a named cut, not a shorter path", () => {
+  it("refuses `nested_mount:` rather than asserting a path missing the outer prefix", async () => {
+    const candidates = await runAdapter(
+      "flow-python-fastapi-http",
+      contextFor({
+        "app/__init__.py": INIT,
+        "app/routes.py": `from fastapi import APIRouter
+
+from app import records
+
+inner = APIRouter()
+
+
+@inner.get("/records/{record_id}")
+def show(record_id: str) -> str:
+    return records.render(record_id)
+`,
+        "app/main.py": `from fastapi import APIRouter, FastAPI
+
+from app import routes
+
+app = FastAPI()
+outer = APIRouter()
+outer.include_router(routes.inner, prefix="/inner")
+app.include_router(outer, prefix="/api")
+`,
+        "app/records.py": RECORDS,
+        "app/store.py": STORE,
+      }),
+    );
+    expect(verifiedOnly(candidates)).toHaveLength(0);
+    expect(only(cutReasons(candidates))).toContain("nested_mount:");
+  }, 60_000);
+});
+
+describe("the gate resolves an aliased mount to the router the producer named", () => {
+  it("confirms `from routes import router as r; app.include_router(r, ...)`", async () => {
+    const subject = {
+      "app/__init__.py": INIT,
+      "app/routes.py": `from fastapi import APIRouter
+
+from app import records
+
+router = APIRouter(prefix="/records")
+
+
+@router.get("/{record_id}")
+def show(record_id: str) -> str:
+    return records.render(record_id)
+`,
+      "app/main.py": `from fastapi import FastAPI
+
+from app.routes import router as r
+
+app = FastAPI()
+app.include_router(r, prefix="/api")
+`,
+      "app/records.py": RECORDS,
+      "app/store.py": STORE,
+    };
+    const { candidate, result } = await gated(subject, "flow-python-fastapi-http");
+    expect(flowOf(candidate).steps[0]!.node).toBe("GET /api/records/{}");
+    // Before the fix the gate compared the call-site alias `r` to the router name
+    // `router` and contradicted a real route; it now resolves the alias first.
+    expect(result.verdict).toBe("confirmed");
+  }, 60_000);
+});
+
+describe("a single-argument add_node infers its key from the function name (#52 D2)", () => {
+  it("reads `graph.add_node(ingest)` and the gate re-derives it the same way", async () => {
+    const subject = {
+      "app/__init__.py": INIT,
+      "app/graph.py": `from langgraph.graph import END, StateGraph
+
+
+def ingest(state: dict) -> dict:
+    return state
+
+
+def deliver(state: dict) -> dict:
+    return state
+
+
+def build() -> object:
+    graph = StateGraph(dict)
+    graph.add_node(ingest)
+    graph.add_node(deliver)
+    graph.set_entry_point("ingest")
+    graph.add_edge("ingest", "deliver")
+    graph.add_edge("deliver", END)
+    return graph.compile()
+`,
+    };
+    const { candidate, result } = await gated(subject, "flow-python-langgraph-pipeline");
+    expect(flowOf(candidate).steps.map((s) => s.node).sort()).toEqual(["deliver", "ingest"]);
+    expect(result.verdict).toBe("confirmed");
+  }, 60_000);
+});
+
+describe("a topology built outside a titleable def is named, not passed over", () => {
+  it("cuts `import_time_topology:` for a module-scope StateGraph", async () => {
+    const candidates = await runAdapter(
+      "flow-python-langgraph-pipeline",
+      contextFor({
+        "app/__init__.py": INIT,
+        "app/graph.py": `from langgraph.graph import END, StateGraph
+
+
+def ingest(state: dict) -> dict:
+    return state
+
+
+graph = StateGraph(dict)
+graph.add_node("ingest", ingest)
+graph.set_entry_point("ingest")
+graph.add_edge("ingest", END)
+`,
+      }),
+    );
+    // The topology is real and declared, so passing it over would be the #6 silence
+    // this cut exists to prevent.
+    expect(verifiedOnly(candidates)).toHaveLength(0);
+    expect(only(cutReasons(candidates))).toContain("import_time_topology:");
+  }, 60_000);
+});
+
+describe("an absolute from-import binds its symbol without the removed dead branch", () => {
+  it("binds a def imported by its absolute module path as a symbol", async () => {
+    const index = await pythonIndex(
+      contextFor({
+        "app/__init__.py": INIT,
+        "app/work.py": "def run_job() -> None:\n    pass\n",
+        "app/cli.py": "from app.work import run_job\n",
+      }),
+    );
+    expect(index.bindingsByPath.get("app/cli.py")?.get("run_job")).toEqual({
+      kind: "symbol",
+      path: "app/work.py",
+      name: "run_job",
+    });
   }, 60_000);
 });

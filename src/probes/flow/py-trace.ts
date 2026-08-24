@@ -43,14 +43,18 @@ import {
   endLineOf,
   findAll,
   lineOf,
+  nameOf,
   namedChildren,
   parametersOf,
+  positionalArguments,
   receiverRoot,
+  stringLiteral,
 } from "../python.js";
 import { readsDurably, writesDurably } from "./sql.js";
 import { keyedRegistriesIn, type KeyedRegistry } from "./py-dispatch.js";
 import {
   classIn,
+  FOREIGN_ATTRIBUTE,
   methodNamed,
   methodOnClass,
   RETURN_UNREADABLE,
@@ -152,6 +156,7 @@ const WRITE_MODE = /[wax+]/;
  */
 const outsideEffectOf = (
   method: MethodSymbol,
+  bindings: Map<string, Binding> | undefined,
 ): { external?: "process" | "filesystem"; durable?: "read" | "write" } => {
   if (!method.body) return {};
   let external: "process" | "filesystem" | undefined;
@@ -178,14 +183,30 @@ const outsideEffectOf = (
     if (name === undefined) return;
     const root = receiverRoot(callee.type === "attribute" ? callee.childForFieldName("object") : null);
     const rootName = root?.type === "identifier" ? root.text : undefined;
-    if (PROCESS_CALLS.has(name) && rootName !== undefined && PROCESS_MODULES.has(rootName)) {
-      external = "process";
-      return;
+    if (PROCESS_CALLS.has(name)) {
+      const viaModule = rootName !== undefined && PROCESS_MODULES.has(rootName);
+      // A bare `Popen(...)` from `from subprocess import Popen` is the same launch
+      // written without the module qualifier. It is resolved through the file's own
+      // import binding - the way the sibling filesystem branches match a bare callee
+      // name - but through the BINDING, so a subject's own `def run()` is not mistaken
+      // for `subprocess.run`.
+      const bound = callee.type === "identifier" ? bindings?.get(name) : undefined;
+      const viaImport =
+        bound?.kind === "foreign" && PROCESS_MODULES.has(bound.dotted.split(".")[0]!);
+      if (viaModule || viaImport) {
+        external = "process";
+        return;
+      }
     }
     if (name === "open") {
-      const args = namedChildren(node.childForFieldName("arguments") ?? node);
-      const mode = args[1]?.text ?? "";
-      if (WRITE_MODE.test(mode)) external = external ?? "filesystem";
+      // Only a POSITIONAL string-literal second argument is the mode. A keyword
+      // like `encoding="ascii"` or `newline=""` is not one, and reading its text as
+      // a mode flipped the box to a filesystem WRITE on a stray `a`/`w`/`x` in the
+      // keyword name, changing the box's effect, its edge relation and whether it is
+      // a terminal.
+      const positional = positionalArguments(node);
+      const mode = positional[1] !== undefined ? stringLiteral(positional[1]) : null;
+      if (mode !== null && WRITE_MODE.test(mode)) external = external ?? "filesystem";
       else durable = durable ?? "read";
       return;
     }
@@ -449,6 +470,98 @@ const namedType = (frame: Frame, name: string | null): Resolved => {
   return declared === null ? FOREIGN : { kind: "subject", type: declared };
 };
 
+/** The `class_definition` node a class pseudo-type came from, or null. */
+const classNodeOf = (index: PythonIndex, type: TypeSymbol): SyntaxNode | null => {
+  const root = index.treesByPath.get(type.path);
+  if (!root) return null;
+  for (const declaration of findAll(root, "class_definition")) {
+    const enclosing: string[] = [];
+    for (let cur = declaration.parent; cur; cur = cur.parent) {
+      if (cur.type !== "class_definition") continue;
+      const outer = nameOf(cur);
+      if (outer) enclosing.unshift(outer);
+    }
+    const name = nameOf(declaration);
+    if (name !== null && [...enclosing, name].join(".") === type.qualified) return declaration;
+  }
+  return null;
+};
+
+/** The ELEMENT type a `self.<attribute>` annotation names, re-read from the class. */
+const selfAttributeElement = (frame: Frame, attribute: string): string | null => {
+  const body = classNodeOf(frame.index, frame.type)?.childForFieldName("body");
+  if (!body) return null;
+  // A class-body annotation - `records: list[DecisionRecord] = []`.
+  for (const statement of namedChildren(body)) {
+    const assignment =
+      statement.type === "assignment"
+        ? statement
+        : statement.type === "expression_statement"
+          ? namedChildren(statement).find((child) => child.type === "assignment") ?? null
+          : null;
+    const left = assignment?.childForFieldName("left");
+    if (left?.type === "identifier" && left.text === attribute) {
+      const element = annotationElement(assignment!.childForFieldName("type"));
+      if (element !== null) return element;
+    }
+  }
+  // A `self.records: list[DecisionRecord]` annotation inside any method.
+  for (const assignment of findAll(body, "assignment")) {
+    const left = assignment.childForFieldName("left");
+    if (left?.type !== "attribute") continue;
+    if (left.childForFieldName("object")?.text !== "self") continue;
+    if (left.childForFieldName("attribute")?.text !== attribute) continue;
+    const element = annotationElement(assignment.childForFieldName("type"));
+    if (element !== null) return element;
+  }
+  return null;
+};
+
+/**
+ * The subject element type an iterated collection NAMES, or null.
+ *
+ * Reads the element off the same three shapes the tracer types a receiver from -
+ * a local, `self.<attr>`, and a same-file `def`'s return - so a call on a `for`
+ * target reaches D3's `unresolved_dispatch:` whatever the collection is written as,
+ * not only when it is a bare identifier. Every branch recovers the annotation NODE
+ * and reads its element with `annotationElement`, because the reduced type in the
+ * symbol index has already dropped the element (`list[DecisionRecord]` -> `list`).
+ * A foreign or unreadable collection returns null and the call stays foreign, so
+ * iterating somebody else's list is never reported as a hole.
+ */
+const iteratedElementType = (
+  frame: Frame,
+  values: Map<string, ValueDecl>,
+  init: SyntaxNode,
+): string | null => {
+  if (init.type === "identifier") {
+    return annotationElement(values.get(init.text)?.annotation ?? null);
+  }
+  const root = receiverRoot(init);
+  if (
+    init.type === "attribute" &&
+    root?.type === "identifier" &&
+    root.text === "self" &&
+    frame.type !== frame.module
+  ) {
+    const attribute = init.childForFieldName("attribute")?.text;
+    return attribute === undefined ? null : selfAttributeElement(frame, attribute);
+  }
+  if (init.type === "call") {
+    const callee = init.childForFieldName("function");
+    const bound = callee?.type === "identifier" ? frame.bindings.get(callee.text) : undefined;
+    if (bound?.kind === "symbol") {
+      const owning = frame.index.modules.get(bound.path);
+      const method = owning === undefined ? null : methodNamed(owning, bound.name);
+      const definition = method?.body?.parent;
+      if (definition?.type === "function_definition") {
+        return annotationElement(definition.childForFieldName("return_type"));
+      }
+    }
+  }
+  return null;
+};
+
 /**
  * The subject type an expression evaluates to, when one file establishes one.
  *
@@ -491,17 +604,17 @@ const expressionType = (
       // closes no set through such a collection (#52, D3), so this is a named
       // stop; a collection the subject names no element for stays whatever its
       // own expression resolves to, which is foreign for somebody else's list.
-      // The element is read off the iterated NAME's annotation, exactly as Java's
-      // `streamElementType` reads it off a field's declaration and stops when the
-      // collection is rooted in a call instead.
-      if (value.element === true && value.init?.type === "identifier") {
-        const iterated = values.get(value.init.text);
-        const element = annotationElement(iterated?.annotation ?? null);
+      // The element is read off the iterated collection's own declaration - a
+      // local, `self.<attr>`, or a same-file call - exactly as Java's
+      // `streamElementType` reads it off a field, so `for r in self.records:` and
+      // `for x in get_items():` reach the same stop as `for r in records:`.
+      if (value.element === true && value.init !== null) {
+        const element = iteratedElementType(frame, values, value.init);
         if (element !== null && namedType(frame, element).kind === "subject") {
           return {
             kind: "unestablished",
             kindToken: "unresolved_dispatch",
-            why: `\`${expr.text}\` is one element of \`${value.init.text}\`, declared over ${element}, and no declaration closes that set`,
+            why: `\`${expr.text}\` is one element of \`${value.init.text.split("\n")[0]}\`, declared over ${element}, and no declaration closes that set`,
           };
         }
       }
@@ -547,6 +660,10 @@ const expressionType = (
         why: `\`${expr.text}\` reads an attribute no declaration in ${owner.type.path} establishes`,
       };
     }
+    // A foreign attribute is somebody else's value wherever it is held, so a call
+    // on it is foreign rather than a hole - and unlike a subject receiver the gate
+    // has nothing to re-type, so the calling-scope limit below does not apply to it.
+    if (declared === FOREIGN_ATTRIBUTE) return FOREIGN;
     if (!inCallingScope) {
       return {
         kind: "unestablished",
@@ -690,6 +807,37 @@ const insideReturn = (call: SyntaxNode, body: SyntaxNode): boolean => {
   return false;
 };
 
+/**
+ * Every call that EXECUTES when this body runs, in tree order.
+ *
+ * A call inside a nested `def` or `lambda` body does NOT run when the enclosing
+ * method runs - the closure only defines it - so descending into those bodies
+ * would attribute a step to a method that never reaches it: a nested gap would
+ * quarantine a Flow the entry never enters, and a nested clean call would draw an
+ * execution edge the gate re-confirms from the same span for code that never runs.
+ * A comprehension body DOES execute and is still collected; only the two deferred
+ * scopes are skipped, and only their body - a nested `def`'s decorators and default
+ * arguments run in this scope and are kept.
+ */
+const executedCalls = (body: SyntaxNode): SyntaxNode[] => {
+  const out: SyntaxNode[] = [];
+  const descend = (node: SyntaxNode): void => {
+    if (node.type === "call" && !isDecoratorCall(node)) out.push(node);
+    const deferred =
+      node.type === "function_definition" || node.type === "lambda"
+        ? node.childForFieldName("body")
+        : null;
+    for (let i = 0; i < node.childCount; i += 1) {
+      const child = node.child(i);
+      if (!child) continue;
+      if (deferred !== null && sameNode(child, deferred)) continue;
+      descend(child);
+    }
+  };
+  descend(body);
+  return out;
+};
+
 /** Whether a call node is a decorator's own call rather than a step of a body. */
 const isDecoratorCall = (call: SyntaxNode): boolean => {
   for (let cur: SyntaxNode | null = call; cur; cur = cur.parent) {
@@ -761,7 +909,7 @@ export const pyTraceFrom = (
   };
 
   const landmarkOf = (type: TypeSymbol, method: MethodSymbol): TraceLandmark => {
-    const outside = outsideEffectOf(method);
+    const outside = outsideEffectOf(method, index.bindingsByPath.get(method.path));
     const key = methodKey(type, method);
     // Leaving the program IS an ending, and so is reading or writing a durable
     // record. #35's terminal set names all three, and without this a method that
@@ -812,10 +960,7 @@ export const pyTraceFrom = (
     };
     const scope = valueScope(definition, body);
 
-    const calls: SyntaxNode[] = [];
-    walk(body, (node) => {
-      if (node.type === "call" && !isDecoratorCall(node)) calls.push(node);
-    });
+    const calls = executedCalls(body);
 
     for (const call of calls) {
       const callee = call.childForFieldName("function");

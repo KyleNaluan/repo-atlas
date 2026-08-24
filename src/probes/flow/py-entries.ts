@@ -33,7 +33,7 @@ import {
 } from "../python.js";
 import { isTomlTable, parseToml } from "../toml.js";
 import { normalizedRoute } from "./route.js";
-import { methodNamed, type PythonIndex } from "./py-symbols.js";
+import { methodNamed, type Binding, type PythonIndex } from "./py-symbols.js";
 import type { HttpVerb } from "./entries.js";
 import type { MethodSymbol, TypeSymbol } from "./symbols.js";
 
@@ -145,6 +145,17 @@ interface RouterMount {
   prefix: string | null;
   dynamicPrefix: boolean;
   span: CitedSpan;
+  /**
+   * True when the object this mount is written on is a subject-declared FastAPI
+   * app - `app.include_router(...)`.
+   *
+   * A mount written on another router (`router_b.include_router(router_a, ...)`) is
+   * one whose serving prefix depends on where `router_b` is itself mounted, a chain
+   * this v1 reader does not resolve; and one written on an object this reader cannot
+   * identify pins no host at all. Both are `false`, so the consumer refuses to
+   * compose a path from them rather than asserting one missing the outer prefixes.
+   */
+  appHost: boolean;
 }
 
 /**
@@ -159,6 +170,29 @@ interface RouterMount {
  */
 const routerMountsIn = (index: PythonIndex): RouterMount[] => {
   const out: RouterMount[] = [];
+  // Every module-level app/router across the subject, so a mount's HOST can be
+  // classified: `X.include_router(...)` is an app-mount only where `X` is a FastAPI
+  // app the subject declares.
+  const hostsByPath = new Map<string, Map<string, RouteHost>>();
+  for (const [path, root] of index.treesByPath) hostsByPath.set(path, routeHostsIn(root, path));
+  const hostKindOf = (
+    bindings: Map<string, Binding>,
+    path: string,
+    hostNode: SyntaxNode | null,
+  ): RouteHost["kind"] | null => {
+    if (hostNode?.type === "identifier") {
+      return hostsByPath.get(path)?.get(hostNode.text)?.kind ?? null;
+    }
+    // `mod.app.include_router(...)`: the app is declared in the imported module.
+    if (hostNode?.type === "attribute" && hostNode.childForFieldName("object")?.type === "identifier") {
+      const bound = bindings.get(hostNode.childForFieldName("object")!.text);
+      const attribute = hostNode.childForFieldName("attribute")?.text;
+      if (bound?.kind === "module" && attribute !== undefined) {
+        return hostsByPath.get(bound.path)?.get(attribute)?.kind ?? null;
+      }
+    }
+    return null;
+  };
   for (const [path, root] of index.treesByPath) {
     const bindings = index.bindingsByPath.get(path);
     if (!bindings) continue;
@@ -168,6 +202,7 @@ const routerMountsIn = (index: PythonIndex): RouterMount[] => {
       if (callee.childForFieldName("attribute")?.text !== "include_router") continue;
       const first = positionalArguments(call)[0];
       if (first === undefined) continue;
+      const hostKind = hostKindOf(bindings, path, callee.childForFieldName("object"));
       // Both shapes name the router by its OWN identity in the declaring module:
       // `mod.router_v2` by the attribute, and `router_a` by the imported binding's
       // original name. Anything else - a router in a list, one a factory returns -
@@ -198,6 +233,7 @@ const routerMountsIn = (index: PythonIndex): RouterMount[] => {
         prefix,
         dynamicPrefix: prefixNode !== null && prefix === null,
         span: { path, line_start: lineOf(statement), line_end: endLineOf(statement) },
+        appHost: hostKind === "app",
       });
     }
   }
@@ -242,6 +278,10 @@ export const pyHttpEntries = (index: PythonIndex): { entries: PyHttpEntry[]; cut
       // Only a module-level handler: a route registered on a nested `def` is one
       // whose declaration the gate's own module-level reader would not find.
       if (!method) continue;
+      // Each decorator is its own (verb, path): a handler carrying two route
+      // decorators declares two routes, so every branch below `continue`s to the
+      // next decorator rather than stopping at the first - a `break` here dropped
+      // the rest in the silence #6 forbids.
       for (const decorator of decorated.decorators) {
         const call = decoratorCall(decorator);
         if (!call) continue;
@@ -255,7 +295,7 @@ export const pyHttpEntries = (index: PythonIndex): { entries: PyHttpEntry[]; cut
             type: module,
             method,
           });
-          break;
+          continue;
         }
         if (host.dynamicPrefix) {
           cuts.push({
@@ -263,7 +303,7 @@ export const pyHttpEntries = (index: PythonIndex): { entries: PyHttpEntry[]; cut
             type: module,
             method,
           });
-          break;
+          continue;
         }
         const composition: CitedSpan[] = [];
         let prefix = host.prefix ?? "";
@@ -278,7 +318,20 @@ export const pyHttpEntries = (index: PythonIndex): { entries: PyHttpEntry[]; cut
               type: module,
               method,
             });
-            break;
+            continue;
+          }
+          // A mount written on anything but a subject FastAPI app - another router
+          // (a nested mount whose outer prefix this v1 reader does not compose) or
+          // an object it cannot identify - pins no serving prefix, so the composed
+          // path would be missing the outer segments. Cut it by name rather than
+          // asserting the shorter path.
+          if (mounted.some((mount) => !mount.appHost)) {
+            cuts.push({
+              reason: `nested_mount: ${path}'s router ${host.name} is mounted on an object that is not a subject FastAPI app, so this v1 reader cannot compose the served path`,
+              type: module,
+              method,
+            });
+            continue;
           }
           if (mounted.some((mount) => mount.dynamicPrefix)) {
             cuts.push({
@@ -286,7 +339,7 @@ export const pyHttpEntries = (index: PythonIndex): { entries: PyHttpEntry[]; cut
               type: module,
               method,
             });
-            break;
+            continue;
           }
           const prefixes = [...new Set(mounted.map((mount) => mount.prefix ?? ""))];
           if (prefixes.length > 1) {
@@ -295,7 +348,7 @@ export const pyHttpEntries = (index: PythonIndex): { entries: PyHttpEntry[]; cut
               type: module,
               method,
             });
-            break;
+            continue;
           }
           prefix = `${prefixes[0] ?? ""}${prefix}`;
           for (const mount of mounted) composition.push(mount.span);
@@ -307,7 +360,6 @@ export const pyHttpEntries = (index: PythonIndex): { entries: PyHttpEntry[]; cut
           protocol: { method: verb, path: normalizedRoute(`${prefix}/${literal}`) },
           composition,
         });
-        break;
       }
     }
   }
@@ -568,7 +620,18 @@ export const pyPipelines = (
       if (callee?.type !== "identifier" || !GRAPH_CONSTRUCTORS.has(callee.text)) continue;
       const holder = left.text;
       const enclosing = enclosingBuilder(index, path, assignment);
-      if (enclosing === null) continue;
+      if (enclosing === null) {
+        // A topology built at import time in the module body, or inside a def this
+        // reader cannot title the Flow by, is a REAL declared topology with no
+        // builder to name it. #6 forbids passing it over in silence, so it is a
+        // named cut rather than a `continue`.
+        cuts.push({
+          reason: `import_time_topology: ${path} builds ${holder} = ${callee.text}(...) outside a module-level def this reader can title the Flow by, so the declared topology is named rather than drawn`,
+          type: module,
+          method: moduleLevelBuilder(module, assignment, holder),
+        });
+        continue;
+      }
 
       const nodes: PyPipelineNode[] = [];
       const edges: PyPipelineEdge[] = [];
@@ -591,10 +654,20 @@ export const pyPipelines = (
           line_end: endLineOf(statement),
         };
         if (operation === "add_node") {
-          const key = stringLiteral(args[0] ?? null);
-          const identifier = args[1];
+          // LangGraph documents two shapes and both are fully declared: the paired
+          // `add_node("<key>", <fn>)` names the key, and the single-argument
+          // `add_node(<fn>)` infers it from the function name. Both are read here;
+          // anything else - a key or function that is not a literal or a bare name -
+          // is a `runtime_registration:` cut.
+          const twoArg = args.length >= 2;
+          const key = twoArg
+            ? stringLiteral(args[0] ?? null)
+            : args[0]?.type === "identifier"
+              ? args[0].text
+              : null;
+          const identifier = twoArg ? args[1] : args[0];
           if (key === null || identifier?.type !== "identifier") {
-            cut = `runtime_registration: ${path} registers a ${holder} node with something other than a string literal and a bare function name`;
+            cut = `runtime_registration: ${path} registers a ${holder} node with something other than a (string-literal key, bare function) pair or a single bare function name`;
             break;
           }
           const method = soleDefinitionNamed(index, path, identifier.text);
@@ -706,6 +779,31 @@ export const pyPipelines = (
  * figure by and no scope to bound the search, so it is left alone rather than
  * guessed at; neither #52 subject writes one.
  */
+/**
+ * A synthetic builder for a topology with no module-level def to name it, so an
+ * `import_time_topology:` cut has a landmark to name itself by (#6). It owns
+ * nothing and traces nothing - `soleLandmarkTrace` reads only its name and span.
+ */
+const moduleLevelBuilder = (
+  module: TypeSymbol,
+  assignment: SyntaxNode,
+  holder: string,
+): MethodSymbol => {
+  const statement = enclosingStatement(assignment);
+  return {
+    name: holder,
+    owner: module.qualified,
+    path: module.path,
+    params: [],
+    returns: null,
+    annotations: [],
+    modifiers: [],
+    body: null,
+    line_start: lineOf(statement),
+    line_end: endLineOf(statement),
+  };
+};
+
 const enclosingBuilder = (
   index: PythonIndex,
   path: string,

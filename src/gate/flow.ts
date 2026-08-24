@@ -800,7 +800,7 @@ const resolveSpringRoute = (
   // ends establish the same verb and the same normalized path, and #52 fixes the
   // new-matcher budget at one, so renaming it is its own decision.
   const handlerEndpoint = (path: string, source: string, ref: SymbolRef) =>
-    path.endsWith(".py") ? pythonRouteEndpoint(claim, texts, ref) : springEndpoint(source, ref);
+    path.endsWith(".py") ? pythonRouteEndpoint(ctx, claim, texts, ref) : springEndpoint(source, ref);
   const fromMatches =
     claim.from.path.endsWith(".java") || claim.from.path.endsWith(".py")
       ? endpointEquals(handlerEndpoint(claim.from.path, fromSource, claim.from), claim.from.protocol)
@@ -2079,7 +2079,8 @@ const resolvePyDirectCall = (
   claim: FlowClaim,
   texts: Map<string, string[]>,
 ): FlowClaimResolution => {
-  const to = claim.to!;
+  const to = claim.to;
+  if (!to) return { verdict: "unresolved", finding: "a direct_call claim names no target" };
   const fromSource = ctx.read(claim.from.path);
   const toSource = ctx.read(to.path);
   if (fromSource === null || toSource === null) {
@@ -2409,10 +2410,16 @@ const resolveDeclaredPipeline = (
       maskedPython(source),
     );
   const registered = (key: string, symbol: string): boolean =>
-    spans.some((span) =>
-      new RegExp(
-        `add_node\\s*\\(\\s*(['"])${escaped(key)}\\1\\s*,\\s*${escaped(symbol)}\\s*[,)]`,
-      ).test(span),
+    spans.some(
+      (span) =>
+        new RegExp(
+          `add_node\\s*\\(\\s*(['"])${escaped(key)}\\1\\s*,\\s*${escaped(symbol)}\\s*[,)]`,
+        ).test(span) ||
+        // The single-argument `add_node(<fn>)` form infers the key from the
+        // function name, so key and symbol are the one identifier - matched only
+        // when they agree, exactly as the producer derives the key.
+        (key === symbol &&
+          new RegExp(`add_node\\s*\\(\\s*${escaped(symbol)}\\s*[,)]`).test(span)),
     );
 
   if (isEntry) {
@@ -2496,7 +2503,34 @@ const PY_VERBS = "get|post|put|patch|delete|head|options";
  * literal reads as no endpoint at all, which quarantines the Flow rather than
  * admitting a route composed from a guess.
  */
+/**
+ * The `local -> imported simple name` map one file's `from ... import` statements
+ * declare, so an aliased router (`from routes import router as r`) is compared by
+ * the name the producer resolved it to (`router`), not by the call-site alias.
+ * The producer resolves the same alias through the file's own bindings, so the two
+ * sides agree on which router a mount names.
+ */
+const pyImportAliases = (source: string): Map<string, string> => {
+  const out = new Map<string, string>();
+  const masked = maskedPython(source);
+  for (const match of masked.matchAll(/^[ \t]*from[ \t]+[.\w]+[ \t]+import[ \t]+/gm)) {
+    const after = match.index + match[0].length;
+    const list = pyImportList(masked, after);
+    for (const piece of list
+      .replace(/[()\\]/g, "")
+      .split(",")
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)) {
+      const parts = /^([\w.]+)(?:[ \t]+as[ \t]+(\w+))?$/.exec(piece);
+      if (!parts) continue;
+      out.set(parts[2] ?? parts[1]!, simpleName(parts[1]!));
+    }
+  }
+  return out;
+};
+
 const pythonRouteEndpoint = (
+  ctx: ProbeContext,
   claim: FlowClaim,
   texts: Map<string, string[]>,
   ref: SymbolRef,
@@ -2529,11 +2563,15 @@ const pythonRouteEndpoint = (
 
   let mount = "";
   let construction = "";
-  for (const [, raw] of texts) {
+  for (const [mountPath, raw] of texts) {
+    // A bare-identifier router argument may be an alias, so it is resolved through
+    // the mounting file's own imports before the comparison - the same alias the
+    // producer resolved through the file's bindings.
+    const aliases = pyImportAliases(ctx.read(mountPath) ?? "");
     for (const span of raw.map(pythonWithoutComments)) {
       // The construction assigns `APIRouter(...)` to the router's own name; the
-      // mount passes that same name - bare `router` or `<module>.router` - to
-      // `include_router`. A span naming a different router contributes nothing,
+      // mount passes that same name - bare `router`, an alias, or `<module>.router`
+      // - to `include_router`. A span naming a different router contributes nothing,
       // which is how the gate re-derives the identity the producer resolved.
       if (new RegExp(`\\b${escaped(router)}\\s*=\\s*APIRouter\\s*\\(`).test(span)) {
         const literal = prefixOf(span);
@@ -2541,10 +2579,16 @@ const pythonRouteEndpoint = (
         construction = literal;
       }
       const mounted = /\binclude_router\s*\(\s*([\w.]+)/.exec(span);
-      if (mounted !== null && mounted[1]!.split(".").pop() === router) {
-        const literal = prefixOf(span);
-        if (literal === null) return null;
-        mount = literal;
+      if (mounted !== null) {
+        const token = mounted[1]!;
+        const resolved = token.includes(".")
+          ? token.split(".").pop()!
+          : aliases.get(token) ?? token;
+        if (resolved === router) {
+          const literal = prefixOf(span);
+          if (literal === null) return null;
+          mount = literal;
+        }
       }
     }
   }

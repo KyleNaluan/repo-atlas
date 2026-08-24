@@ -93,7 +93,16 @@ export const declaredIn = (manifest: string, text: string): DeclaredDeps => {
     const project = root["project"];
     const projectTable = isTomlTable(project) ? project : undefined;
 
+    // The four declaration sites this rule knows. A pyproject.toml using NONE
+    // of them declares its dependencies under a convention this rule cannot
+    // read (legacy Poetry `[tool.poetry.dependencies]`, say) - not zero
+    // dependencies. Confirming an empty set there would be the same false
+    // absence as an unreadable Gradle block: this manifest is unrecognized,
+    // demoted rather than confirmed. Presence, not non-emptiness, is the test.
+    let sawKnownSite = false;
+
     // PEP 621: [project] dependencies = [...]
+    if (projectTable?.["dependencies"] !== undefined) sawKnownSite = true;
     for (const spec of stringsIn(projectTable?.["dependencies"])) {
       const name = requirementName(spec);
       if (name) names.add(name);
@@ -110,6 +119,7 @@ export const declaredIn = (manifest: string, text: string): DeclaredDeps => {
 
     // PEP 621: [project.optional-dependencies] <extra> = [...]
     const optional = projectTable?.["optional-dependencies"];
+    if (optional !== undefined) sawKnownSite = true;
     if (isTomlTable(optional)) {
       for (const extra of Object.values(optional)) {
         for (const spec of stringsIn(extra)) {
@@ -123,6 +133,7 @@ export const declaredIn = (manifest: string, text: string): DeclaredDeps => {
     // inline table such as `{include-group = "dev"}` naming another group
     // rather than a requirement string; `stringsIn` already drops it.
     const groups = root["dependency-groups"];
+    if (groups !== undefined) sawKnownSite = true;
     if (isTomlTable(groups)) {
       for (const list of Object.values(groups)) {
         for (const spec of stringsIn(list)) {
@@ -135,12 +146,14 @@ export const declaredIn = (manifest: string, text: string): DeclaredDeps => {
     // uv's own pre-PEP-735 extension: [tool.uv] dev-dependencies = [...].
     const tool = root["tool"];
     const uv = isTomlTable(tool) ? tool["uv"] : undefined;
-    for (const spec of stringsIn(isTomlTable(uv) ? uv["dev-dependencies"] : undefined)) {
+    const devDependencies = isTomlTable(uv) ? uv["dev-dependencies"] : undefined;
+    if (devDependencies !== undefined) sawKnownSite = true;
+    for (const spec of stringsIn(devDependencies)) {
       const name = requirementName(spec);
       if (name) names.add(name);
     }
 
-    return { names, recognized: !dependenciesAreDynamic };
+    return { names, recognized: sawKnownSite && !dependenciesAreDynamic };
   }
   if (manifest === "pom.xml") {
     // Scanning every artifactId in the raw file counts a mention in an XML

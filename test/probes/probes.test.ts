@@ -1300,6 +1300,23 @@ describe("declaredIn: pyproject.toml", () => {
     expect(names).toEqual(new Set());
     expect(recognized).toBe(false);
   });
+
+  it("demotes a pyproject that declares dependencies under a convention this rule cannot read", () => {
+    // Legacy Poetry (`[tool.poetry.dependencies]`) uses none of the four sites
+    // this rule knows, so reading its empty result as "zero dependencies
+    // declared" would confirm a false absence - the same false negative as an
+    // unreadable Gradle block. It is unrecognized, demoted rather than confirmed.
+    const { names, recognized } = declaredIn(
+      "pyproject.toml",
+      "[tool.poetry]\n" +
+        'name = "x"\n\n' +
+        "[tool.poetry.dependencies]\n" +
+        'python = "^3.12"\n' +
+        'requests = "^2.31.0"\n',
+    );
+    expect(names).toEqual(new Set());
+    expect(recognized).toBe(false);
+  });
 });
 
 describe("decided-but-unbuilt", () => {

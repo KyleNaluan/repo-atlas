@@ -138,7 +138,10 @@ describe("the probe manifest", () => {
     // and "this enum carries a value that one cannot" are three different findings
     // about three different shapes, and no one of them can report another's
     // absence.
-    expect(PROBES).toHaveLength(21);
+    // #52 adds the three Python Flow adapters, split on the same principle: "no
+    // FastAPI here", "no runnable Python entry here" and "no declared LangGraph
+    // topology here" are three different facts about a subject.
+    expect(PROBES).toHaveLength(24);
     expect(PROBES.map((p) => p.id).sort()).toEqual([
       "ci-policy-guards",
       "decided-but-unbuilt",
@@ -149,6 +152,9 @@ describe("the probe manifest", () => {
       "flow-java-spring-http",
       "flow-java-spring-message",
       "flow-java-spring-scheduled",
+      "flow-python-console-entry",
+      "flow-python-fastapi-http",
+      "flow-python-langgraph-pipeline",
       "flow-systemd-unit",
       "flow-typescript-http-client",
       "measured-scale",
@@ -161,6 +167,15 @@ describe("the probe manifest", () => {
       "throw-where-siblings-return",
       "tuned-config-properties",
       "unresolved-references",
+    ]);
+  });
+
+  it("declares each probe's toolchain, Java for the code-level ones and Python for #52's three", () => {
+    const python = PROBES.filter((p) => p.toolchain === "python").map((p) => p.id);
+    expect(python.sort()).toEqual([
+      "flow-python-console-entry",
+      "flow-python-fastapi-http",
+      "flow-python-langgraph-pipeline",
     ]);
   });
 
@@ -199,6 +214,9 @@ describe("the probe manifest", () => {
       "flow-java-spring-http",
       "flow-java-spring-message",
       "flow-java-spring-scheduled",
+      "flow-python-console-entry",
+      "flow-python-fastapi-http",
+      "flow-python-langgraph-pipeline",
       "flow-systemd-unit",
       "flow-typescript-http-client",
       "orthogonal-hierarchies",

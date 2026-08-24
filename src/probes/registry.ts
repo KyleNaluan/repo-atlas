@@ -29,6 +29,9 @@ import { flowJavaSharedState } from "./library/flow-java-shared-state.js";
 import { flowJavaSpringHttp } from "./library/flow-java-spring-http.js";
 import { flowJavaSpringMessage } from "./library/flow-java-spring-message.js";
 import { flowJavaSpringScheduled } from "./library/flow-java-spring-scheduled.js";
+import { flowPythonConsoleEntry } from "./library/flow-python-console-entry.js";
+import { flowPythonFastapiHttp } from "./library/flow-python-fastapi-http.js";
+import { flowPythonLanggraphPipeline } from "./library/flow-python-langgraph-pipeline.js";
 import { flowSystemdUnit } from "./library/flow-systemd-unit.js";
 import { flowTypescriptHttpClient } from "./library/flow-typescript-http-client.js";
 import { tunedConfigProperties } from "./library/tuned-config-properties.js";
@@ -60,7 +63,11 @@ import type { Harvest } from "../harvest/types.js";
  * three entry families that have no caller in the tree at all - a clock, a
  * broker, and a systemd unit - and each is again its own adapter, so "runs no
  * batch work", "consumes no messages" and "ships no unit files" stay three
- * different findings on the run's own report.
+ * different findings on the run's own report. #52 adds the three Python families,
+ * split on the same principle: "no FastAPI here", "no runnable Python entry here"
+ * and "no declared LangGraph topology here" are three different facts, and the
+ * declared-topology adapter answers a question neither of the others asks - not
+ * what a call reaches, but what the subject declares a framework will run.
  */
 export const PROBES: readonly Probe[] = [
   decidedButUnbuilt,
@@ -84,6 +91,9 @@ export const PROBES: readonly Probe[] = [
   flowJavaSpringScheduled,
   flowJavaSpringMessage,
   flowSystemdUnit,
+  flowPythonFastapiHttp,
+  flowPythonConsoleEntry,
+  flowPythonLanggraphPipeline,
 ] as const;
 
 const git = (repo: string, args: string[]): string =>

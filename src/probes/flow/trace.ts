@@ -68,13 +68,28 @@ export const BOUNDS = {
  * PR 6's; refusing to emit it was never the honest way to defer that work.
  */
 
+/*
+ * The kinds a trace may stop at, shared by every language's tracer.
+ *
+ * The union is shared rather than forked because `candidate.ts` orders an absent
+ * cut's headline reason by it (`SEAM_PRIORITY`), and a kind missing from that
+ * list would sort ahead of every named seam by accident. The last two are
+ * Python's (#52 report 4.4): a chained receiver whose inner callee is not a
+ * same-file `def`, and a registration performed at run time rather than declared
+ * - `getattr`, an `add_conditional_edges` branch table, a handler list a caller
+ * fills. Java reaches neither, and that is a fact about Java: it has no
+ * import-time side-effect registration, and its one admissible chained receiver
+ * is already named as a receiver-type limit.
+ */
 export type GapKind =
   | "unresolved_dispatch"
   | "unresolved_receiver_type"
   | "unresolved_target"
   | "ambiguous_overload"
   | "unprovable_data_access"
-  | "trace_bound_before_terminal";
+  | "trace_bound_before_terminal"
+  | "chained_call"
+  | "runtime_registration";
 
 export interface TraceGap {
   kind: GapKind;
@@ -155,6 +170,20 @@ export interface TraceEdge {
    * matcher declares which, and the gate checks endpoint agreement accordingly.
    */
   lineage?: true;
+  /**
+   * Set on a DECLARED-PIPELINE arrow: one the subject declares rather than calls
+   * (#52, D2).
+   *
+   * `add_edge("sweep", "investigate")` says the framework will run `investigate`
+   * after `sweep`; no line of subject code calls `investigate`. The relation stays
+   * `call` at the schema level and this marker is what carries the distinction to
+   * the gate, exactly as `lineage` carries an orientation the relation cannot -
+   * the precedent for an arrow whose source is not a call is `process_launch`.
+   * The two keys travel with it because they are half of what the arrow asserts:
+   * the gate re-reads the topology's own literals and refuses a pair it does not
+   * find.
+   */
+  pipeline?: { fromKey: string; toKey: string };
   /**
    * The type the call was written on, when the declaration lives on a supertype
    * or an enclosing type of it. The gate re-derives that relation itself.

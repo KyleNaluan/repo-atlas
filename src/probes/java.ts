@@ -6,7 +6,10 @@
  * they ask are about structure rather than text. The other five stay grep-class,
  * because #5 is explicit that no probe should be forced through a parse tree that
  * a scan answers: the discovery report's "trivial grep, valuable because someone
- * framed the question" finding stands. The Flow producer's two Java entry
+ * framed the question" finding stands. The four boundary and coverage probes
+ * added since - `orthogonal-hierarchies`, `partitioned-implementations`,
+ * `superset-enum` and `self-disabling-tests` - read structure too and route
+ * through this same module via `declared.ts`. The Flow producer's two Java entry
  * adapters (#35) also read structure, and route through this same module; its
  * TypeScript client adapter reads lexically and never touches this parser.
  *

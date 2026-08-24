@@ -67,6 +67,17 @@ The existence gate runs in **both directions** (#7 point 7), and the single-dire
 
 Flow is the atomic exception to that generic outcome path (#35): every links-based candidate needs at least one `flow_claims` entry per arrow and a claim for every line that arrow cites, and one unresolved, stale, or contradicted arrow quarantines the **whole** Flow as `absent` - never attested, partial, or converted to a subject divergence. Every matcher now resolves: direct-call, exact Spring-route, data-access, closed-dispatch, `data_lineage`, the closed negative `reachability`, and PR 8's three caller-less entries - `scheduled_trigger`, `message_listener` and `process_launch`. Legacy `calls_next` remains a render input only and cannot enter as a newly verified candidate.
 
+## The boundary producers, and what coverage is measured against
+
+The three boundary probes (`orthogonal-hierarchies`, `partitioned-implementations`, `superset-enum`) each read a RELATIONSHIP BETWEEN TWO DECLARATIONS, which is why no single-declaration probe could ever mint one: two sealed hierarchies a carrier holds one of each of, an implementation set split on whether it holds anything from a package, an enum that is a strict superset of another.
+They share `src/probes/declared.ts` - one definition of what Java types this subject declares - for the reason `manifests.ts` shares one definition of "declared" and `sql.ts` one definition of "a read": two boundaries drawn on one subject must not rest on two readings of it.
+`partitioned-implementations` splits on a PACKAGE, not a field, and requires at least two abstainers, so a lone dissenter stays `dependency-asymmetry`'s finding rather than being minted twice in two vocabularies.
+
+**How far extraction reaches is measured, not asserted**: `test/fixtures/swe-prep.probe-coverage.json` accounts for all 33 reference nodes - 22 with a named producer, 11 with the standing decision that forecloses each - and `test/run/parity.test.ts` asserts the accounting is complete and that every unminted row states a reason.
+Read that fixture before proposing a new probe for this subject: most of the residual is not missing machinery but the write stage's territory (#2 gives reading a decision record to the model alone), a suite run (#5 forecloses execution), or a deliberate refusal to widen a comment vocabulary until it matches (#28).
+
+Note the two numbers move independently. The committed artifact's node count is what SHIPPED and moves only when a credentialed `repo-atlas score` + `repo-atlas run` is repeated; what the engine can ESTABLISH moves whenever the probes do. `rank` refuses an unscored node (`MissingScoreError`), so new gate-confirmed candidates cannot reach a document without refreshing the pinned scores.
+
 ## The Flow producer
 
 `src/probes/flow/` is the shared machinery and `src/probes/library/flow-*.ts` are the seven registered adapters (#35, PRs 4-8). One family per adapter, deliberately: "no Spring here", "no runnable main here", "no frontend calls anything here", "nothing here stores a record it derives from", "no batch work here", "nothing consumed here" and "no unit files here" are seven different findings, which is what the `Probe.applies` hook exists for - a framework-level applicability answer the toolchain test cannot give.

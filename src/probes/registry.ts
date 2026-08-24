@@ -20,6 +20,10 @@ import { sealedHierarchies } from "./library/sealed-hierarchies.js";
 import { throwWhereSiblingsReturn } from "./library/throw-where-siblings-return.js";
 import { unresolvedReferences } from "./library/unresolved-references.js";
 import { measuredScale } from "./library/measured-scale.js";
+import { orthogonalHierarchies } from "./library/orthogonal-hierarchies.js";
+import { partitionedImplementations } from "./library/partitioned-implementations.js";
+import { selfDisablingTests } from "./library/self-disabling-tests.js";
+import { supersetEnum } from "./library/superset-enum.js";
 import { flowJavaCli } from "./library/flow-java-cli.js";
 import { flowJavaSharedState } from "./library/flow-java-shared-state.js";
 import { flowJavaSpringHttp } from "./library/flow-java-spring-http.js";
@@ -40,9 +44,13 @@ import type { AtlasNode } from "../schema/types.js";
 import type { Harvest } from "../harvest/types.js";
 
 /**
- * #5's eight discovery probes, plus the node producers nothing else mints:
- * `unresolved-references` (#6 point 3), `measured-scale` (the stat tiles) and
- * the seven Flow adapters (#35). Each Flow adapter is listed separately on
+ * #5's eight discovery probes and the three boundary probes that read a
+ * relationship between two declarations - `orthogonal-hierarchies`,
+ * `partitioned-implementations` and `superset-enum`, sharing one reading of
+ * "declared" in `declared.ts` - plus the producers of the node types those do
+ * not mint: the two `coverage_gap` edges `unresolved-references` (#6 point 3)
+ * and `self-disabling-tests`, the stat-tile producer `measured-scale`, and the
+ * seven Flow adapters (#35). Each Flow adapter is listed separately on
  * purpose: one entry family being absent must not read as another one finding
  * nothing - and the TypeScript client adapter is separate from the Spring one
  * for the same reason, because "no frontend here" and "the frontend calls
@@ -61,6 +69,10 @@ export const PROBES: readonly Probe[] = [
   sealedHierarchies,
   throwWhereSiblingsReturn,
   dependencyAsymmetry,
+  orthogonalHierarchies,
+  partitionedImplementations,
+  supersetEnum,
+  selfDisablingTests,
   repeatedSqlPredicates,
   tunedConfigProperties,
   unresolvedReferences,

@@ -1,19 +1,19 @@
 {
   "schema_version": "1.1.0",
-  "generated_at": "2026-08-12T06:25:44.308Z",
+  "generated_at": "2026-08-24T06:19:10.114Z",
   "profile": "interview",
   "rubric_version": "v1",
   "subject": {
     "owner": "TooTallNate",
     "repo": "Java-WebSocket",
     "url": "https://github.com/TooTallNate/Java-WebSocket",
-    "branch": "master",
+    "branch": "HEAD",
     "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d",
-    "read_on": "2026-08-12",
+    "read_on": "2026-08-24",
     "visibility": "public"
   },
   "synopsis": {
-    "statement": "A barebones WebSocket server and client implementation written in 100% Java, built on java.nio for a non-blocking event-driven model, implementing RFC 6455 and RFC 7692, and published on Maven Central as org.java-websocket:Java-WebSocket; a server or client by itself does nothing until your subclass of WebSocketServer or WebSocketClient adds purpose.",
+    "statement": "This repository is a barebones WebSocket server and client implementation written in 100% Java, built on java.nio for a non-blocking, event-driven model similar to the WebSocket API for web browsers, implementing the RFC 6455 and RFC 7692 protocol versions.",
     "evidence": [
       {
         "kind": "file",
@@ -23,7 +23,7 @@
     ]
   },
   "shape": {
-    "tree": "├── .github/                                issue and PR templates plus CI, checkstyle and sonar workflows\n├── autobahn reports/                       stored report pages for clients and servers\n├── src/main/example/                       the examples the README points to - chat, SSL and wss, per-message deflate, proxy, reconnect, socket activation\n├── src/main/java/org/java_websocket/       core connection classes (WebSocket, WebSocketImpl, SSL socket channels), java.nio based\n│   ├── client/                             the WebSocketClient abstract class your subclass extends, plus DnsResolver\n│   ├── drafts/                             Draft_6455, the RFC 6455 protocol implementation\n│   ├── enums/                              opcode, ready state, role and handshake state values\n│   ├── exceptions/                         websocket-specific exceptions (invalid frame, invalid handshake, limits)\n│   ├── extensions/                         extension support, including permessage_deflate for RFC 7692\n│   ├── framing/                            frame types - text, binary, ping, pong, close, continuous\n│   ├── handshake/                          client and server handshake data and builders\n│   ├── interfaces/                         ISSLChannel\n│   ├── protocols/                          Sec-WebSocket-Protocol support\n│   ├── server/                             the WebSocketServer abstract class and its SSL server factories\n│   └── util/                               Base64, byte buffer, charset and thread helpers\n├── src/main/java9/module-info.java         Java module descriptor\n├── src/test/                               unit tests, per-issue regression tests, Autobahn tests, and test keystores\n├── build.gradle                            Gradle build for the Maven Central artifact\n├── pom.xml                                 Maven build for the same artifact\n├── checkstyle-suppressions.xml             checkstyle configuration\n├── eclipse-java-google-style.xml           editor style configuration\n├── intellij-java-google-style.xml          editor style configuration\n├── sonar-project.properties                sonar configuration\n├── CHANGELOG.md                            change history\n├── LICENSE                                 MIT license, per the README\n├── README.markdown                         the project README\n└── .gitignore                              git ignore rules",
+    "tree": "Java-WebSocket/\n├── README.markdown              the project's readme, describing this WebSocket server/client library\n├── LICENSE                      MIT license, referenced by the readme as governing everything in the repo\n├── CHANGELOG.md\n├── pom.xml                      Maven dependency descriptor for org.java-websocket:Java-WebSocket\n├── build.gradle                 Gradle dependency descriptor for the same artifact\n├── sonar-project.properties\n├── checkstyle-suppressions.xml\n├── eclipse-java-google-style.xml\n├── intellij-java-google-style.xml\n├── .gitignore\n├── .github/                     issue templates, pull request template, and CI workflow definitions\n├── autobahn reports/             Autobahn test suite report output, split into clients and servers\n│   ├── clients/\n│   └── servers/\n└── src/\n    ├── main/\n    │   ├── java/org/java_websocket/\n    │   │   ├── client/WebSocketClient.java   abstract class that connects to valid ws:// WebSocket servers; fires onOpen, onClose, onMessage, onError\n    │   │   └── server/WebSocketServer.java   abstract class implementing the server side of the WebSocket Protocol over HTTP\n    │   ├── java9/module-info.java\n    │   └── example/                 WebSocket server and client usage examples referenced by the readme's Getting Started section\n    └── test/\n        ├── java/org/java_websocket/    tests, including per-issue regression tests\n        └── resources/org/java_websocket/",
     "evidence": [
       {
         "kind": "command",
@@ -265,6 +265,30 @@
     {
       "type": "edge",
       "kind": "coverage_gap",
+      "id": "e-unresolved-114",
+      "title": "#114 is referenced but not explained",
+      "statement": "The source cites #114 in 1 place in the source, and the record does not resolve it: issue #114 exists (closed) but carries no resolution-shaped comment.",
+      "why_it_matters": "The code was written with a reason that lives outside the repository. Saying so is the honest report; inventing the reason from the surrounding code is the failure this engine exists to avoid.",
+      "how_to_say_it": "There is a reference to #114 here that the record does not explain.",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/main/java/org/java_websocket/WebSocketImpl.java",
+          "line_start": 541,
+          "line_end": 541,
+          "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+        },
+        {
+          "kind": "issue",
+          "number": 114
+        }
+      ],
+      "confidence": "verified",
+      "interview_value": 4
+    },
+    {
+      "type": "edge",
+      "kind": "coverage_gap",
       "id": "e-unresolved-190",
       "title": "#190 is referenced but not explained",
       "statement": "The source cites #190 in 6 places in the source, and the record does not resolve it: issue #190 exists (closed) but carries no resolution-shaped comment.",
@@ -302,138 +326,6 @@
     },
     {
       "type": "edge",
-      "kind": "unbuilt",
-      "id": "e-unbuilt-1499",
-      "title": "Unbounded default frame size allows DoS via memory exhaustion (OOM)",
-      "statement": "#1499 is open, so the record implies this is not built.",
-      "why_it_matters": "A decision that is settled but not built is the gap between the record and the tree, and it is what an interviewer asks about first.",
-      "how_to_say_it": "The tracker still has #1499 open for that.",
-      "evidence": [
-        {
-          "kind": "issue",
-          "number": 1499
-        }
-      ],
-      "confidence": "attested",
-      "interview_value": 3,
-      "probe_id": "decided-but-unbuilt"
-    },
-    {
-      "type": "edge",
-      "kind": "unbuilt",
-      "id": "e-unbuilt-1507",
-      "title": "[Security] Default maxFrameSize=Integer.MAX_VALUE -> declared-length pre-allocation -> OOM whole-server crash (Draft_6455.java:557)",
-      "statement": "#1507 is open, so the record implies this is not built.",
-      "why_it_matters": "A decision that is settled but not built is the gap between the record and the tree, and it is what an interviewer asks about first.",
-      "how_to_say_it": "The tracker still has #1507 open for that.",
-      "evidence": [
-        {
-          "kind": "issue",
-          "number": 1507
-        }
-      ],
-      "confidence": "attested",
-      "interview_value": 3,
-      "probe_id": "decided-but-unbuilt"
-    },
-    {
-      "type": "edge",
-      "kind": "unbuilt",
-      "id": "e-unbuilt-1508",
-      "title": "# Security Audit Report: Java-WebSocket (TooTallNate)",
-      "statement": "#1508 is open, so the record implies this is not built.",
-      "why_it_matters": "A decision that is settled but not built is the gap between the record and the tree, and it is what an interviewer asks about first.",
-      "how_to_say_it": "The tracker still has #1508 open for that.",
-      "evidence": [
-        {
-          "kind": "issue",
-          "number": 1508
-        }
-      ],
-      "confidence": "attested",
-      "interview_value": 3,
-      "probe_id": "decided-but-unbuilt"
-    },
-    {
-      "type": "edge",
-      "kind": "unbuilt",
-      "id": "e-unbuilt-811",
-      "title": "Thread safety (for example, connectionLostTimeout)",
-      "statement": "#811 is open, so the record implies this is not built.",
-      "why_it_matters": "A decision that is settled but not built is the gap between the record and the tree, and it is what an interviewer asks about first.",
-      "how_to_say_it": "The tracker still has #811 open for that.",
-      "evidence": [
-        {
-          "kind": "issue",
-          "number": 811
-        }
-      ],
-      "confidence": "attested",
-      "interview_value": 3,
-      "probe_id": "decided-but-unbuilt"
-    },
-    {
-      "type": "edge",
-      "kind": "unbuilt",
-      "id": "e-unbuilt-879",
-      "title": "Race Conditions when closing server, port is still bound",
-      "statement": "#879 is open, so the record implies this is not built.",
-      "why_it_matters": "A decision that is settled but not built is the gap between the record and the tree, and it is what an interviewer asks about first.",
-      "how_to_say_it": "The tracker still has #879 open for that.",
-      "evidence": [
-        {
-          "kind": "issue",
-          "number": 879
-        }
-      ],
-      "confidence": "attested",
-      "interview_value": 3,
-      "probe_id": "decided-but-unbuilt"
-    },
-    {
-      "type": "edge",
-      "kind": "unbuilt",
-      "id": "e-unbuilt-985",
-      "title": "Deadlock on client connect when using multiple client threads and SSLcontext",
-      "statement": "#985 is open, so the record implies this is not built.",
-      "why_it_matters": "A decision that is settled but not built is the gap between the record and the tree, and it is what an interviewer asks about first.",
-      "how_to_say_it": "The tracker still has #985 open for that.",
-      "evidence": [
-        {
-          "kind": "issue",
-          "number": 985
-        }
-      ],
-      "confidence": "attested",
-      "interview_value": 3,
-      "probe_id": "decided-but-unbuilt"
-    },
-    {
-      "type": "edge",
-      "kind": "coverage_gap",
-      "id": "e-unresolved-114",
-      "title": "#114 is referenced but not explained",
-      "statement": "The source cites #114 in 1 place in the source, and the record does not resolve it: issue #114 exists (closed) but carries no resolution-shaped comment.",
-      "why_it_matters": "The code was written with a reason that lives outside the repository. Saying so is the honest report; inventing the reason from the surrounding code is the failure this engine exists to avoid.",
-      "how_to_say_it": "There is a reference to #114 here that the record does not explain.",
-      "evidence": [
-        {
-          "kind": "file",
-          "path": "src/main/java/org/java_websocket/WebSocketImpl.java",
-          "line_start": 541,
-          "line_end": 541,
-          "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
-        },
-        {
-          "kind": "issue",
-          "number": 114
-        }
-      ],
-      "confidence": "verified",
-      "interview_value": 3
-    },
-    {
-      "type": "edge",
       "kind": "coverage_gap",
       "id": "e-unresolved-222",
       "title": "#222 is referenced but not explained",
@@ -454,7 +346,7 @@
         }
       ],
       "confidence": "verified",
-      "interview_value": 3
+      "interview_value": 4
     },
     {
       "type": "edge",
@@ -478,7 +370,7 @@
         }
       ],
       "confidence": "verified",
-      "interview_value": 3
+      "interview_value": 4
     },
     {
       "type": "edge",
@@ -498,7 +390,7 @@
         }
       ],
       "confidence": "verified",
-      "interview_value": 3
+      "interview_value": 4
     },
     {
       "type": "edge",
@@ -522,7 +414,7 @@
         }
       ],
       "confidence": "verified",
-      "interview_value": 3
+      "interview_value": 4
     },
     {
       "type": "fact",
@@ -535,40 +427,6 @@
           "kind": "command",
           "cmd": "git rev-list --count afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d",
           "output_excerpt": "1,199 commits, over 5,838 calendar days (2010-01-20 to 2026-01-13)"
-        }
-      ],
-      "source": "command",
-      "confidence": "verified",
-      "interview_value": 3
-    },
-    {
-      "type": "fact",
-      "id": "f-scale-lines",
-      "title": "How much code there is",
-      "label": "lines of production source",
-      "value": "14,550",
-      "evidence": [
-        {
-          "kind": "command",
-          "cmd": "git ls-tree -r --name-only afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d | xargs -I{} git cat-file -p afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d:{} | wc -l",
-          "output_excerpt": "14,550 lines across 99 production source files"
-        }
-      ],
-      "source": "command",
-      "confidence": "verified",
-      "interview_value": 3
-    },
-    {
-      "type": "fact",
-      "id": "f-scale-tests",
-      "title": "How much of it is tested",
-      "label": "test files",
-      "value": "70",
-      "evidence": [
-        {
-          "kind": "command",
-          "cmd": "git ls-tree -r --name-only afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d",
-          "output_excerpt": "70 test files alongside 99 production files"
         }
       ],
       "source": "command",
@@ -625,22 +483,143 @@
       "edges": "present"
     },
     "confidence_ledger": {
-      "verified": 17,
-      "attested": 6,
-      "absent_cut": 0
+      "verified": 15,
+      "attested": 0,
+      "absent_cut": 20
     },
-    "absent_cuts": [],
+    "absent_cuts": [
+      {
+        "id": "fl-cli-chatclient-main-0f48b83a",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-chatclient-main-0f48b83a quarantined atomically: the producer proposed it as absent (no_terminal_reached: no traced path reaches a response, durable read or durable write); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-chatserver-main-d7777b47",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-chatserver-main-d7777b47 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.start/0 calls WebSocketServer.getClass through an abstract class whose implementation set the subject's wiring does not close: ChatServer implements WebSocketServer but resolves no single getClass/0 (plus 4 further unresolved calls: unresolved_dispatch x3, ambiguous_overload x1)); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-chatserverattachmentexample-main-a4df68f0",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-chatserverattachmentexample-main-a4df68f0 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.start/0 calls WebSocketServer.getClass through an abstract class whose implementation set the subject's wiring does not close: ChatServer implements WebSocketServer but resolves no single getClass/0 (plus 4 further unresolved calls: unresolved_dispatch x3, ambiguous_overload x1)); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-customheaderclientexample-main-e0f167a0",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-customheaderclientexample-main-e0f167a0 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/client/WebSocketClient.java#WebSocketClient.connectBlocking/0 calls WebSocketClient.connect through an abstract class whose implementation set the subject's wiring does not close: WebSocketClient has 3 implementations and ExampleClient carries no Spring stereotype, so the container does not close the set (plus 1 further unresolved call: unresolved_dispatch x1)); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-exampleclient-main-09263d8c",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-exampleclient-main-09263d8c quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/client/WebSocketClient.java#WebSocketClient.connect/0 calls WebSocketClient.isDaemon through an abstract class whose implementation set the subject's wiring does not close: WebSocketClient has 3 implementations and ExampleClient carries no Spring stereotype, so the container does not close the set); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-fragmentedframesexample-main-42f70207",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-fragmentedframesexample-main-42f70207 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/example/FragmentedFramesExample.java#FragmentedFramesExample.main/1 calls WebSocketClient.connectBlocking through an abstract class whose implementation set the subject's wiring does not close: WebSocketClient has 3 implementations and ExampleClient carries no Spring stereotype, so the container does not close the set (plus 2 further unresolved calls: unresolved_dispatch x2)); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-proxyclientexample-main-532b1291",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-proxyclientexample-main-532b1291 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/client/WebSocketClient.java#WebSocketClient.connect/0 calls WebSocketClient.isDaemon through an abstract class whose implementation set the subject's wiring does not close: WebSocketClient has 3 implementations and ExampleClient carries no Spring stereotype, so the container does not close the set); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-reconnectclientexample-main-6de5f968",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-reconnectclientexample-main-6de5f968 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/client/WebSocketClient.java#WebSocketClient.connectBlocking/0 calls WebSocketClient.connect through an abstract class whose implementation set the subject's wiring does not close: WebSocketClient has 3 implementations and ExampleClient carries no Spring stereotype, so the container does not close the set (plus 6 further unresolved calls: ambiguous_overload x1, unresolved_dispatch x5)); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-sslclientexample-main-0aa09b30",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-sslclientexample-main-0aa09b30 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/client/WebSocketClient.java#WebSocketClient.connectBlocking/0 calls WebSocketClient.connect through an abstract class whose implementation set the subject's wiring does not close: WebSocketClient has 3 implementations and ExampleClient carries no Spring stereotype, so the container does not close the set (plus 4 further unresolved calls: unresolved_dispatch x3, ambiguous_overload x1)); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-sslservercustomwebsocketfactoryexample-main-258765f4",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-sslservercustomwebsocketfactoryexample-main-258765f4 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.setWebSocketFactory/1 calls WebSocketServerFactory.close through an interface whose implementation set the subject's wiring does not close: WebSocketServerFactory has 4 implementations and DefaultSSLWebSocketServerFactory carries no Spring stereotype, so the container does not close the set (plus 2 further unresolved calls: unresolved_dispatch x2)); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-sslserverexample-main-d22a69ab",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-sslserverexample-main-d22a69ab quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.setWebSocketFactory/1 calls WebSocketServerFactory.close through an interface whose implementation set the subject's wiring does not close: WebSocketServerFactory has 4 implementations and DefaultSSLWebSocketServerFactory carries no Spring stereotype, so the container does not close the set (plus 2 further unresolved calls: unresolved_dispatch x2)); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-sslserverletsencryptexample-main-aae7283c",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-sslserverletsencryptexample-main-aae7283c quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.setWebSocketFactory/1 calls WebSocketServerFactory.close through an interface whose implementation set the subject's wiring does not close: WebSocketServerFactory has 4 implementations and DefaultSSLWebSocketServerFactory carries no Spring stereotype, so the container does not close the set (plus 5 further unresolved calls: unresolved_dispatch x5)); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-secwebsocketprotocolclientexample-main-f2e3e7f1",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-secwebsocketprotocolclientexample-main-f2e3e7f1 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/client/WebSocketClient.java#WebSocketClient.connect/0 calls WebSocketClient.isDaemon through an abstract class whose implementation set the subject's wiring does not close: WebSocketClient has 3 implementations and ExampleClient carries no Spring stereotype, so the container does not close the set); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-secwebsocketprotocolserverexample-main-08fee744",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-secwebsocketprotocolserverexample-main-08fee744 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.start/0 calls WebSocketServer.getClass through an abstract class whose implementation set the subject's wiring does not close: ChatServer implements WebSocketServer but resolves no single getClass/0 (plus 1 further unresolved call: unresolved_dispatch x1)); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-serveradditionalheaderexample-main-7a53caf2",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-serveradditionalheaderexample-main-7a53caf2 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.start/0 calls WebSocketServer.getClass through an abstract class whose implementation set the subject's wiring does not close: ChatServer implements WebSocketServer but resolves no single getClass/0 (plus 4 further unresolved calls: unresolved_dispatch x3, ambiguous_overload x1)); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-serverrejecthandshakeexample-main-b4a67792",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-serverrejecthandshakeexample-main-b4a67792 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.start/0 calls WebSocketServer.getClass through an abstract class whose implementation set the subject's wiring does not close: ChatServer implements WebSocketServer but resolves no single getClass/0 (plus 4 further unresolved calls: unresolved_dispatch x3, ambiguous_overload x1)); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-serverstresstest-main-2be35271",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-serverstresstest-main-2be35271 quarantined atomically: the producer proposed it as absent (no_terminal_reached: no traced path reaches a response, durable read or durable write); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-socketactivation-main-05e0396b",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-socketactivation-main-05e0396b quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.start/0 calls WebSocketServer.getClass through an abstract class whose implementation set the subject's wiring does not close: ChatServer implements WebSocketServer but resolves no single getClass/0 (plus 2 further unresolved calls: unresolved_dispatch x2)); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-cli-twowaysslserverexample-main-165007d3",
+        "candidate_type": "flow",
+        "reason": "Flow fl-cli-twowaysslserverexample-main-165007d3 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.setWebSocketFactory/1 calls WebSocketServerFactory.close through an interface whose implementation set the subject's wiring does not close: WebSocketServerFactory has 4 implementations and DefaultSSLWebSocketServerFactory carries no Spring stereotype, so the container does not close the set (plus 2 further unresolved calls: unresolved_dispatch x2)); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-java-cli)"
+      },
+      {
+        "id": "fl-unit-jws-activation-service-5f79c938",
+        "candidate_type": "flow",
+        "reason": "Flow fl-unit-jws-activation-service-5f79c938 quarantined atomically: the producer proposed it as absent (unresolved_exec_target: jws-activation.service runs `/bin/sh %h/jws_activation_run`, which names no fully-qualified class this subject declares a main for - a wrapper script, a jar whose main class lives in its manifest, or a binary this engine does not read); no partial chain may be promoted",
+        "note": "no admissible evidence at this SHA (flow-systemd-unit)"
+      }
+    ],
     "deletions": [
       {
         "id": "b-asymmetry-src-main-java-org-java-websocket-handshake-handshakedataimpl1-handshakedataimpl1-string",
-        "score": 0,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
         "id": "b-asymmetry-src-test-java-org-java-websocket-example-autobahnclienttest-autobahnclienttest-int",
-        "score": 0,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -661,7 +640,7 @@
       },
       {
         "id": "e-unbuilt-1130",
-        "score": 0,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -675,7 +654,7 @@
       },
       {
         "id": "e-unbuilt-1289",
-        "score": 0,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -689,21 +668,21 @@
       },
       {
         "id": "e-unbuilt-1320",
-        "score": 0,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
         "id": "e-unbuilt-1329",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
         "id": "e-unbuilt-1332",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -731,7 +710,7 @@
       },
       {
         "id": "e-unbuilt-1455",
-        "score": 0,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -752,28 +731,49 @@
       },
       {
         "id": "e-unbuilt-1470",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
         "id": "e-unbuilt-1478",
-        "score": 2,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
         "id": "e-unbuilt-1481",
-        "score": 2,
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unbuilt-1499",
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
         "id": "e-unbuilt-1500",
-        "score": 2,
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unbuilt-1507",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unbuilt-1508",
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -787,14 +787,14 @@
       },
       {
         "id": "e-unbuilt-517",
-        "score": 0,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
         "id": "e-unbuilt-691",
-        "score": 0,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -807,15 +807,29 @@
         "unit": "node"
       },
       {
+        "id": "e-unbuilt-811",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
         "id": "e-unbuilt-823",
-        "score": 0,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
       },
       {
         "id": "e-unbuilt-877",
-        "score": 2,
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "e-unbuilt-879",
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -829,7 +843,7 @@
       },
       {
         "id": "e-unbuilt-946",
-        "score": 0,
+        "score": 1,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
         "unit": "node"
@@ -849,7 +863,35 @@
         "unit": "node"
       },
       {
+        "id": "e-unbuilt-985",
+        "score": 1,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
         "id": "f-scale-files",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "f-scale-lines",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "f-scale-test-lines",
+        "score": 2,
+        "reason": "below the interview_value floor of 3",
+        "kind": "floor",
+        "unit": "node"
+      },
+      {
+        "id": "f-scale-tests",
         "score": 2,
         "reason": "below the interview_value floor of 3",
         "kind": "floor",
@@ -864,8 +906,8 @@
     },
     "audit": {
       "status": "passed_with_warnings",
-      "content_hash": "sha256:a210f2f7bbca3616bd9bb3d383fc61482256d50b9220467fd5cc6b1746e61f7e",
-      "audited_at": "2026-08-21T06:56:57.782Z",
+      "content_hash": "sha256:dad046fd92e3e97cc810d7b2facc3beec3b61a5529feb14137700a1527387b02",
+      "audited_at": "2026-08-24T06:24:34.448Z",
       "checks": [
         {
           "id": "S1",
@@ -893,7 +935,7 @@
           "name": "Artifact is one file, no siblings required",
           "class": "gate",
           "outcome": "passed",
-          "count": 1021
+          "count": 7
         },
         {
           "id": "L1",
@@ -914,14 +956,14 @@
           "name": "Every issue and comment citation resolves",
           "class": "gate",
           "outcome": "passed",
-          "count": 19
+          "count": 13
         },
         {
           "id": "L4",
           "name": "Every internal anchor resolves to an element",
           "class": "gate",
           "outcome": "passed",
-          "count": 33
+          "count": 25
         },
         {
           "id": "L5",
@@ -942,21 +984,21 @@
           "name": "No deleted node is resurrected",
           "class": "gate",
           "outcome": "passed",
-          "count": 32
+          "count": 61
         },
         {
           "id": "G3",
           "name": "Displayed rank, value and rubric match atlas.json",
           "class": "gate",
           "outcome": "passed",
-          "count": 20
+          "count": 14
         },
         {
           "id": "E1",
           "name": "Every prose passage traces to a graph field or the chrome inventory",
           "class": "gate",
           "outcome": "passed",
-          "count": 260
+          "count": 246
         },
         {
           "id": "E2",
@@ -998,26 +1040,15 @@
           "name": "Each node's prose is supported by its own evidence",
           "class": "warning",
           "outcome": "failed",
-          "count": 23,
+          "count": 15,
           "findings": [
-            "e-unbuilt-1271-divergence: Sentence 2 ('Going first on that is strictly better... the one finding a summariser cannot produce') is editorial self-praise no cited evidence establishes, and the cited WebSocketServer.java excerpt never shows basic auth actually built, so 'the tree says otherwise' is also unestablished.",
-            "e-unbuilt-1302-divergence: The sentence 'the tree says otherwise' claims the code implements retrieving a refused handshake's HTTP body, but the cited files (ExampleClient, AbstractWebSocket, WebSocket interface) show no API exposing that body.",
-            "e-unbuilt-1374-divergence: The sentence \"the tree says otherwise\" claims the code supports String connection links, but the cited Draft_6455.java evidence shows only protocol/handshake code, not any String-based connection API contradicting open #1374.",
-            "e-unbuilt-1423-divergence: The sentence \"the tree says otherwise\" claims 401 handshake responses are implemented, but the cited files only show generic handshake rejection via InvalidDataException (answered with 404 per the issue), not 401 support.",
-            "e-unbuilt-1454-divergence: The claim 'the tree says otherwise' (sentences 1 and 3) asserts the code implements HTTP-response access on failed handshakes, but the cited files only show handshake callbacks for received/successful handshakes, not exposure of a failed handshake's status code.",
-            "e-unbuilt-1471-divergence: Sentence 2 (\"Going first on that is strictly better than being caught by it, and it is the one finding a summariser cannot produce\") asserts strategic value and summariser-comparison claims that no cited evidence establishes.",
-            "e-unbuilt-347-divergence: The sentence \"the record implies this is not built, and the tree says otherwise\" claims the code contradicts #347, but the cited source excerpts show no pre-connection close handling that would establish the behavior is built.",
-            "e-unbuilt-977-divergence: The sentence \"the record implies this is not built, and the tree says otherwise\" is unsupported: the cited code is CloseFrame.java, which handles close frames, not the HTTP handshake error response (generateHttpResponseDueToError) that #977 asks to change, so the evidence never shows the feature built.",
-            "e-unresolved-190: Sentence 1 claims #190 is cited in 6 places and that the closed issue carries no resolution-shaped comment; the evidence shows only 3 source lines and the issue body, with no issue state or comment record.",
-            "e-unbuilt-1499: Sentence 2 calls the decision 'settled but not built', but #1499 is only an open report/recommendation - the evidence shows no settled decision anywhere.",
-            "e-unbuilt-1508: The sentence '#1508 is open' (and 'The tracker still has #1508 open') asserts the issue's state, but the cited evidence is only the issue body - a security audit report - which shows no open/closed state and settles nothing about whether something is built.",
-            "e-unbuilt-811: \"A decision that is settled but not built...\" claims a settled decision, but #811 is only a bug report requesting thread-safety review; the evidence shows no decision was made, nor does it show the issue's open state.",
-            "e-unbuilt-879: Sentence 1 ('#879 is open, so the record implies this is not built') overreaches: the evidence is a bug report describing a race condition, which shows neither the issue's open state nor that anything is unbuilt - an open ticket is not evidence of absence.",
-            "e-unbuilt-985: \"The tracker still has #985 open for that\" (and sentence 1) claims #985 tracks an unbuilt decision, but the evidence is only a bug report about connectBlocking hanging with SSL - it shows no decision, no build-status claim, and not even the issue's open state.",
-            "e-unresolved-114: Sentence 1 claims issue #114 is closed and carries no resolution-shaped comment, but the evidence shows only the issue's opening bug report, not its state or its full comment record.",
-            "e-unresolved-222: The sentences 'the record does not resolve it' and 'There is a reference to #222 here that the record does not explain' claim more than the evidence shows - the cited issue #222 body itself explains the reference (bind failure left worker threads running, hence the shutdown code), and the evidence also shows nothing about the issue being closed.",
-            "e-unresolved-458: Sentence 1 says issue #458 is closed and carries no resolution-shaped comment; the cited evidence shows only the issue body and one source comment, establishing neither the closed state nor the absence of resolution comments.",
-            "e-unresolved-512: Sentence 1 says 'issue #512 exists (closed)', but the cited evidence shows only the issue body and never its state, so 'closed' claims more than the evidence establishes."
+            "e-unbuilt-1271-divergence: \"the tree says otherwise\" and \"the tree and the code disagree\" claim the source file shows basic auth implemented, but the cited WebSocketServer.java excerpt shows only license header, imports, and class declaration - no authentication mechanism is visible in the evidence provided.",
+            "e-unbuilt-1302-divergence: Sentences 1 and 3 assert 'the tree says otherwise' (i.e. the feature is built), but none of the cited files (ExampleClient.java, AbstractWebSocket.java, WebSocket.java) show any method for retrieving an HTTP response body from a refused/rejected connection.",
+            "e-unbuilt-1374-divergence: The sentence 'the tree says otherwise' (repeated in all three lines) claims the code contradicts the tracker by supporting String-type connection links, but the cited Draft_6455.java excerpt only shows license header, imports, and field declarations - no code establishing String-based connection link handling is shown.",
+            "e-unbuilt-1423-divergence: The sentence 'the tree says otherwise' claims the code tree shows #1423 IS built, but the cited evidence (the issue text and three unrelated example files) contains no implementation of 401-status handling in the handshake/response code to establish that.",
+            "e-unbuilt-1454-divergence: Sentence 1 and 3 assert 'the tree says otherwise' (i.e. the feature is built), but the cited evidence only shows server-side handshake-response construction (ServerAdditionalHeaderExample, WebSocketAdapter) and general WebSocketImpl connection code, not any mechanism for a client to access the HTTP response/status code when a handshake fails, which is what #1454 requests.",
+            "e-unbuilt-977-divergence: The claim 'the tree says otherwise' (built) rests on citing CloseFrame.java, but the shown content of that file is only close-status-code constants and has nothing to do with generateHttpResponseDueToError or custom error messages in HTTP responses, so the cited evidence does not establish that the feature is implemented.",
+            "e-unresolved-190: First sentence claims #190 is cited in 6 places, but the evidence lists only 3 source lines (102, 196, 198)."
           ]
         },
         {
@@ -1025,28 +1056,16 @@
           "name": "Each absence claim's citation actually witnesses absence",
           "class": "warning",
           "outcome": "failed",
-          "count": 20,
+          "count": 14,
           "findings": [
-            "e-unbuilt-1271-divergence: \"#1271 is open, so the record implies it is not built\" - the issue is a user question asking if the feature exists, not a negative search or closed enumeration, and one source file cannot witness absence either way.",
-            "e-unbuilt-1302-divergence: \"the tree says otherwise\" is unwitnessed: the cited files are example code and generic interfaces showing no refused-handshake body access, and nothing cited is a negative search or closed enumeration settling presence or absence.",
-            "e-unbuilt-1374-divergence: \"the tree says otherwise\" is unwitnessed - Draft_6455.java covers RFC 6455 handshake/framing, not connection-link construction, so it shows neither a String-based connect API nor its absence, and the open issue #1374 only shows a request exists, not the build state either way.",
-            "e-unbuilt-1423-divergence: The sentence 'the tree says otherwise' is unwitnessed: the three cited example files only show handshake rejection via InvalidDataException (which the issue itself says yields 404), never a 401 status line, while the issue's quoted closed switch (404/500) actually witnesses absence - the opposite of the claimed divergence.",
-            "e-unbuilt-1454-divergence: \"the tree says otherwise\" is not witnessed: the cited code (a server-side header example and WebSocketAdapter's success-path onWebsocketHandshakeReceivedAsClient) neither shows client access to a failed-handshake HTTP response nor is a negative search or closed enumeration establishing absence either way.",
-            "e-unbuilt-1471-divergence: \"the record implies this is not built, and the tree says otherwise\" - the open #1471 is not a witness of absence, and the cited rejection tests exercise server-rejected handshakes closing cleanly, not the exception-during-upgrade close failure the issue describes; no negative search or closed enumeration establishes either side",
-            "e-unbuilt-347-divergence: The sentence \"the record implies this is not built, and the tree says otherwise\" cites only an open issue and two whole-file dumps; an open ticket is not evidence of absence, and neither file is a negative search or closed enumeration showing pre-connection close handling present or absent.",
-            "e-unbuilt-977-divergence: \"the tree says otherwise\" is unsupported - CloseFrame.java covers close-frame reason codes, not the generateHttpResponseDueToError HTTP handshake path #977 targets, so nothing cited settles built-or-not either way.",
-            "e-unresolved-190: The sentence 'issue #190 exists (closed) but carries no resolution-shaped comment' asserts absence over the issue's comments, but the evidence cites only the issue body and code references - no enumeration or negative search of #190's comments is shown.",
-            "e-unbuilt-1499: \"#1499 is open, so the record implies this is not built\" rests only on the issue's existence and open state; an open ticket is a request, not a negative search or closed enumeration, and nothing cited shows the tree lacks a default frame-size limit.",
-            "e-unbuilt-1507: Sentence '#1507 is open, so the record implies this is not built' infers absence of a fix from an open ticket; the issue text describes the vulnerability but never witnesses the tree lacking the fix - an open ticket is not evidence of absence.",
-            "e-unbuilt-1508: \"#1508 is open, so the record implies this is not built\" - the cited evidence is only the audit report filed as the issue body; it shows a vulnerability was reported, not a negative search or closed enumeration of the tree, so an open ticket does not witness that no fix was built.",
-            "e-unbuilt-811: \"#811 is open, so the record implies this is not built\" - an open issue body only states a request; open status is neither a negative search nor a closed enumeration, so it does not witness absence.",
-            "e-unbuilt-879: \"#879 is open, so the record implies this is not built\" - the evidence is only the bug report's own text; an open ticket shows a claim was filed, not a negative search or closed enumeration over the tree, so it cannot witness that no fix exists.",
-            "e-unbuilt-985: \"#985 is open, so the record implies this is not built\" - the cited issue body only shows a bug was reported and the ticket remains open; an open ticket is not evidence of absence in the tree, and no negative search or closed enumeration is cited.",
-            "e-unresolved-114: \"issue #114 exists (closed) but carries no resolution-shaped comment\" - the evidence shows only the issue's opening report, not an enumeration or empty search of its comments, so nothing witnesses that no resolution comment exists.",
-            "e-unresolved-222: The sentence 'issue #222 exists (closed) but carries no resolution-shaped comment' is not witnessed: the evidence cites only the issue body, not a negative search or enumeration of its comments, so absence of a resolution comment is asserted, not shown.",
-            "e-unresolved-458: The sentence 'the record does not resolve it: issue #458 ... carries no resolution-shaped comment' is unwitnessed - the evidence shows only the issue body and a code comment, not a negative search or enumeration of #458's comments proving none is resolution-shaped.",
-            "e-unresolved-459: The sentence 'no issue with that number was harvested for this subject' claims absence from the harvest record, but the only evidence is the source comment mentioning #459, which witnesses the reference's presence and says nothing about what the harvest contains.",
-            "e-unresolved-512: The sentence 'issue #512 exists (closed) but carries no resolution-shaped comment' claims absence over the whole comment record, yet the evidence cites only the issue's opening body - no comment enumeration or empty-search result witnesses that no resolving comment exists."
+            "e-unbuilt-1271-divergence: The sentence '...the tree says otherwise' asserts the tree shows auth built, but the cited WebSocketServer.java excerpt is truncated to license/imports and shows no actual authentication code establishing that claim.",
+            "e-unbuilt-1302-divergence: 'the tree says otherwise' (i.e., the feature is built) is not shown - none of the cited files (ExampleClient, AbstractWebSocket, WebSocket interface) contain any method or code path exposing a refused connection's HTTP response body.",
+            "e-unbuilt-1374-divergence: Claim 'the tree says otherwise' (feature is built) is unsupported: cited evidence is only the issue text and an unrelated Draft_6455.java header/imports snippet, not any search or enumeration establishing String-link support exists in code.",
+            "e-unbuilt-1423-divergence: The sentence 'the tree says otherwise' claims the feature is built, but cited evidence is only the issue's own proposal text plus three unrelated example files, none of which show 401 handling implemented.",
+            "e-unbuilt-1454-divergence: Claims 'the tree says otherwise' (feature is built), but cited code (ServerAdditionalHeaderExample, WebSocketAdapter's pre-existing handshake callbacks, truncated WebSocketImpl) shows no mechanism exposing the HTTP response/status code on a failed handshake as #1454 requests.",
+            "e-unbuilt-1471-divergence: The sentence 'the tree says otherwise' asserts the fix is built, but the cited test files (Issue847Test on binary frame size, OpeningHandshakeRejectionTest, ProtocolHandshakeRejectionTest) test unrelated handshake-rejection scenarios, not the specific '#1471 connection fails to close after upgrade exception' behavior, so they don't establish the tree actually fixed it.",
+            "e-unbuilt-347-divergence: \"the tree says otherwise\" needs code showing how connect-before-close is actually handled, but the cited WebSocketClient.java/WebSocketServer.java excerpts are truncated to license headers, imports, and field javadocs - the connect()/closeConnection() logic that would establish the divergence is not shown.",
+            "e-unbuilt-977-divergence: Claims 'the tree says otherwise' (feature is built) but cited evidence is CloseFrame.java's close-code constants, unrelated to generateHttpResponseDueToError or custom error messages - it shows nothing about that method being changed."
           ]
         }
       ],

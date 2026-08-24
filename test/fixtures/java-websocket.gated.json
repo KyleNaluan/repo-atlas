@@ -1322,7 +1322,7 @@
         "evidence": [
           {
             "kind": "command",
-            "cmd": "git ls-tree -r --name-only afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d | xargs -I{} git cat-file -p afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d:{} | wc -l",
+            "cmd": "git ls-tree -r --name-only afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d | grep -iE '\\.(java|ts|tsx|js|jsx|py|go|rb|rs|kt|scala|c|cc|cpp|h|hpp|cs|php|sql)$' | grep -ivE '(^|/)(test|tests|spec|__tests__)(/|$)|\\.(test|spec)\\.' | xargs -I{} sh -c 'git cat-file -p afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d:{} | awk 1' | wc -l",
             "output_excerpt": "14,550 lines across 99 production source files"
           }
         ],
@@ -1344,7 +1344,7 @@
         "evidence": [
           {
             "kind": "command",
-            "cmd": "git ls-tree -r --name-only afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d",
+            "cmd": "git ls-tree -r --name-only afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d | grep -iE '\\.(java|ts|tsx|js|jsx|py|go|rb|rs|kt|scala|c|cc|cpp|h|hpp|cs|php|sql)$' | grep -ivE '(^|/)(test|tests|spec|__tests__)(/|$)|\\.(test|spec)\\.'",
             "output_excerpt": "99 production source files, 70 test files"
           }
         ],
@@ -1388,7 +1388,7 @@
         "evidence": [
           {
             "kind": "command",
-            "cmd": "git ls-tree -r --name-only afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d",
+            "cmd": "git ls-tree -r --name-only afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d | grep -iE '\\.(java|ts|tsx|js|jsx|py|go|rb|rs|kt|scala|c|cc|cpp|h|hpp|cs|php|sql)$' | grep -iE '(^|/)(test|tests|spec|__tests__)(/|$)|\\.(test|spec)\\.'",
             "output_excerpt": "70 test files alongside 99 production files"
           }
         ],
@@ -1398,6 +1398,488 @@
       },
       "verdict": "confirmed",
       "finding": "grounded in what the probe read; no separate claim to resolve"
+    },
+    {
+      "probe_id": "measured-scale",
+      "node": {
+        "type": "fact",
+        "id": "f-scale-test-lines",
+        "title": "How much of it is test code",
+        "label": "lines of test source",
+        "value": "9,808",
+        "evidence": [
+          {
+            "kind": "command",
+            "cmd": "git ls-tree -r --name-only afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d | grep -iE '\\.(java|ts|tsx|js|jsx|py|go|rb|rs|kt|scala|c|cc|cpp|h|hpp|cs|php|sql)$' | grep -iE '(^|/)(test|tests|spec|__tests__)(/|$)|\\.(test|spec)\\.' | xargs -I{} sh -c 'git cat-file -p afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d:{} | awk 1' | wc -l",
+            "output_excerpt": "9,808 lines of test source against 14,550 of production source"
+          }
+        ],
+        "source": "command",
+        "confidence": "verified",
+        "interview_value": 0
+      },
+      "verdict": "confirmed",
+      "finding": "grounded in what the probe read; no separate claim to resolve"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-chatclient-main-0f48b83a",
+        "title": "ChatClient run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/ChatClient.java",
+            "line_start": 172,
+            "line_end": 182,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-chatclient-main-0f48b83a quarantined atomically: the producer proposed it as absent (no_terminal_reached: no traced path reaches a response, durable read or durable write); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-chatserver-main-d7777b47",
+        "title": "ChatServer run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/ChatServer.java",
+            "line_start": 84,
+            "line_end": 103,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-chatserver-main-d7777b47 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.start/0 calls WebSocketServer.getClass through an abstract class whose implementation set the subject's wiring does not close: ChatServer implements WebSocketServer but resolves no single getClass/0 (plus 4 further unresolved calls: unresolved_dispatch x3, ambiguous_overload x1)); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-chatserverattachmentexample-main-a4df68f0",
+        "title": "ChatServerAttachmentExample run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/ChatServerAttachmentExample.java",
+            "line_start": 80,
+            "line_end": 99,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-chatserverattachmentexample-main-a4df68f0 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.start/0 calls WebSocketServer.getClass through an abstract class whose implementation set the subject's wiring does not close: ChatServer implements WebSocketServer but resolves no single getClass/0 (plus 4 further unresolved calls: unresolved_dispatch x3, ambiguous_overload x1)); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-customheaderclientexample-main-e0f167a0",
+        "title": "CustomHeaderClientExample run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/CustomHeaderClientExample.java",
+            "line_start": 38,
+            "line_end": 67,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-customheaderclientexample-main-e0f167a0 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/client/WebSocketClient.java#WebSocketClient.connectBlocking/0 calls WebSocketClient.connect through an abstract class whose implementation set the subject's wiring does not close: WebSocketClient has 3 implementations and ExampleClient carries no Spring stereotype, so the container does not close the set (plus 1 further unresolved call: unresolved_dispatch x1)); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-exampleclient-main-09263d8c",
+        "title": "ExampleClient run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/ExampleClient.java",
+            "line_start": 77,
+            "line_end": 81,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-exampleclient-main-09263d8c quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/client/WebSocketClient.java#WebSocketClient.connect/0 calls WebSocketClient.isDaemon through an abstract class whose implementation set the subject's wiring does not close: WebSocketClient has 3 implementations and ExampleClient carries no Spring stereotype, so the container does not close the set); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-fragmentedframesexample-main-42f70207",
+        "title": "FragmentedFramesExample run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/FragmentedFramesExample.java",
+            "line_start": 45,
+            "line_end": 83,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-fragmentedframesexample-main-42f70207 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/example/FragmentedFramesExample.java#FragmentedFramesExample.main/1 calls WebSocketClient.connectBlocking through an abstract class whose implementation set the subject's wiring does not close: WebSocketClient has 3 implementations and ExampleClient carries no Spring stereotype, so the container does not close the set (plus 2 further unresolved calls: unresolved_dispatch x2)); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-proxyclientexample-main-532b1291",
+        "title": "ProxyClientExample run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/ProxyClientExample.java",
+            "line_start": 33,
+            "line_end": 37,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-proxyclientexample-main-532b1291 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/client/WebSocketClient.java#WebSocketClient.connect/0 calls WebSocketClient.isDaemon through an abstract class whose implementation set the subject's wiring does not close: WebSocketClient has 3 implementations and ExampleClient carries no Spring stereotype, so the container does not close the set); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-reconnectclientexample-main-6de5f968",
+        "title": "ReconnectClientExample run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/ReconnectClientExample.java",
+            "line_start": 34,
+            "line_end": 52,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-reconnectclientexample-main-6de5f968 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/client/WebSocketClient.java#WebSocketClient.connectBlocking/0 calls WebSocketClient.connect through an abstract class whose implementation set the subject's wiring does not close: WebSocketClient has 3 implementations and ExampleClient carries no Spring stereotype, so the container does not close the set (plus 6 further unresolved calls: ambiguous_overload x1, unresolved_dispatch x5)); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-sslclientexample-main-0aa09b30",
+        "title": "SSLClientExample run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/SSLClientExample.java",
+            "line_start": 79,
+            "line_end": 122,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-sslclientexample-main-0aa09b30 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/client/WebSocketClient.java#WebSocketClient.connectBlocking/0 calls WebSocketClient.connect through an abstract class whose implementation set the subject's wiring does not close: WebSocketClient has 3 implementations and ExampleClient carries no Spring stereotype, so the container does not close the set (plus 4 further unresolved calls: unresolved_dispatch x3, ambiguous_overload x1)); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-sslservercustomwebsocketfactoryexample-main-258765f4",
+        "title": "SSLServerCustomWebsocketFactoryExample run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/SSLServerCustomWebsocketFactoryExample.java",
+            "line_start": 49,
+            "line_end": 91,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-sslservercustomwebsocketfactoryexample-main-258765f4 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.setWebSocketFactory/1 calls WebSocketServerFactory.close through an interface whose implementation set the subject's wiring does not close: WebSocketServerFactory has 4 implementations and DefaultSSLWebSocketServerFactory carries no Spring stereotype, so the container does not close the set (plus 2 further unresolved calls: unresolved_dispatch x2)); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-sslserverexample-main-d22a69ab",
+        "title": "SSLServerExample run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/SSLServerExample.java",
+            "line_start": 44,
+            "line_end": 72,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-sslserverexample-main-d22a69ab quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.setWebSocketFactory/1 calls WebSocketServerFactory.close through an interface whose implementation set the subject's wiring does not close: WebSocketServerFactory has 4 implementations and DefaultSSLWebSocketServerFactory carries no Spring stereotype, so the container does not close the set (plus 2 further unresolved calls: unresolved_dispatch x2)); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-sslserverletsencryptexample-main-aae7283c",
+        "title": "SSLServerLetsEncryptExample run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/SSLServerLetsEncryptExample.java",
+            "line_start": 51,
+            "line_end": 61,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-sslserverletsencryptexample-main-aae7283c quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.setWebSocketFactory/1 calls WebSocketServerFactory.close through an interface whose implementation set the subject's wiring does not close: WebSocketServerFactory has 4 implementations and DefaultSSLWebSocketServerFactory carries no Spring stereotype, so the container does not close the set (plus 5 further unresolved calls: unresolved_dispatch x5)); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-secwebsocketprotocolclientexample-main-f2e3e7f1",
+        "title": "SecWebSocketProtocolClientExample run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/SecWebSocketProtocolClientExample.java",
+            "line_start": 40,
+            "line_end": 54,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-secwebsocketprotocolclientexample-main-f2e3e7f1 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/client/WebSocketClient.java#WebSocketClient.connect/0 calls WebSocketClient.isDaemon through an abstract class whose implementation set the subject's wiring does not close: WebSocketClient has 3 implementations and ExampleClient carries no Spring stereotype, so the container does not close the set); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-secwebsocketprotocolserverexample-main-08fee744",
+        "title": "SecWebSocketProtocolServerExample run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/SecWebSocketProtocolServerExample.java",
+            "line_start": 39,
+            "line_end": 53,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-secwebsocketprotocolserverexample-main-08fee744 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.start/0 calls WebSocketServer.getClass through an abstract class whose implementation set the subject's wiring does not close: ChatServer implements WebSocketServer but resolves no single getClass/0 (plus 1 further unresolved call: unresolved_dispatch x1)); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-serveradditionalheaderexample-main-7a53caf2",
+        "title": "ServerAdditionalHeaderExample run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/ServerAdditionalHeaderExample.java",
+            "line_start": 59,
+            "line_end": 78,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-serveradditionalheaderexample-main-7a53caf2 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.start/0 calls WebSocketServer.getClass through an abstract class whose implementation set the subject's wiring does not close: ChatServer implements WebSocketServer but resolves no single getClass/0 (plus 4 further unresolved calls: unresolved_dispatch x3, ambiguous_overload x1)); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-serverrejecthandshakeexample-main-b4a67792",
+        "title": "ServerRejectHandshakeExample run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/ServerRejectHandshakeExample.java",
+            "line_start": 75,
+            "line_end": 94,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-serverrejecthandshakeexample-main-b4a67792 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.start/0 calls WebSocketServer.getClass through an abstract class whose implementation set the subject's wiring does not close: ChatServer implements WebSocketServer but resolves no single getClass/0 (plus 4 further unresolved calls: unresolved_dispatch x3, ambiguous_overload x1)); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-serverstresstest-main-2be35271",
+        "title": "ServerStressTest run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/ServerStressTest.java",
+            "line_start": 244,
+            "line_end": 246,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-serverstresstest-main-2be35271 quarantined atomically: the producer proposed it as absent (no_terminal_reached: no traced path reaches a response, durable read or durable write); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-socketactivation-main-05e0396b",
+        "title": "SocketActivation run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/SocketActivation.java",
+            "line_start": 82,
+            "line_end": 90,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-socketactivation-main-05e0396b quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.start/0 calls WebSocketServer.getClass through an abstract class whose implementation set the subject's wiring does not close: ChatServer implements WebSocketServer but resolves no single getClass/0 (plus 2 further unresolved calls: unresolved_dispatch x2)); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-java-cli",
+      "node": {
+        "type": "flow",
+        "id": "fl-cli-twowaysslserverexample-main-165007d3",
+        "title": "TwoWaySSLServerExample run as a program, entry to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/TwoWaySSLServerExample.java",
+            "line_start": 50,
+            "line_end": 81,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-java-cli",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-cli-twowaysslserverexample-main-165007d3 quarantined atomically: the producer proposed it as absent (unresolved_dispatch: src/main/java/org/java_websocket/server/WebSocketServer.java#WebSocketServer.setWebSocketFactory/1 calls WebSocketServerFactory.close through an interface whose implementation set the subject's wiring does not close: WebSocketServerFactory has 4 implementations and DefaultSSLWebSocketServerFactory carries no Spring stereotype, so the container does not close the set (plus 2 further unresolved calls: unresolved_dispatch x2)); no partial chain may be promoted"
+    },
+    {
+      "probe_id": "flow-systemd-unit",
+      "node": {
+        "type": "flow",
+        "id": "fl-unit-jws-activation-service-5f79c938",
+        "title": "jws-activation.service starts a program, unit to terminal",
+        "evidence": [
+          {
+            "kind": "file",
+            "path": "src/main/example/jws-activation.service",
+            "line_start": 9,
+            "line_end": 9,
+            "sha": "afeacbf8c0f6f6a761c9d9daed8c813dd3b8ed7d"
+          }
+        ],
+        "confidence": "absent",
+        "interview_value": 0,
+        "probe_id": "flow-systemd-unit",
+        "steps": []
+      },
+      "verdict": "unresolved",
+      "finding": "Flow fl-unit-jws-activation-service-5f79c938 quarantined atomically: the producer proposed it as absent (unresolved_exec_target: jws-activation.service runs `/bin/sh %h/jws_activation_run`, which names no fully-qualified class this subject declares a main for - a wrapper script, a jar whose main class lives in its manifest, or a binary this engine does not read); no partial chain may be promoted"
     }
   ]
 }

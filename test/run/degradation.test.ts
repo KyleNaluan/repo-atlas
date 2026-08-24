@@ -19,6 +19,27 @@
  * a source comment reading "look at variable declaration why this line exists and
  * #190" is an invitation to synthesise a rationale from the surrounding code.
  * The contract is that the artifact says the reference is unresolved instead.
+ *
+ * This fixture set is the v1 acceptance bar's other half (map issue #1): a full
+ * credentialed `repo-atlas run` against this subject, judged for honest
+ * degradation rather than richness. It renders 15 nodes (facts, shape, edges;
+ * flows, decisions and mechanisms all correctly absent), audits
+ * passed_with_warnings, and surfaces a real finding beyond mere absence: eight
+ * `decided-but-unbuilt` candidates were overturned into `divergence` edges by a
+ * regex match somewhere in a cited file, but the gate's `treeHas` (src/gate/gate.ts)
+ * records only the matching file, never the matching line, so seven of the eight
+ * carry a file-level citation the audit's own M1/M2 pass correctly flags as too
+ * coarse to support "the tree says otherwise" on its own. Advisory, not a hard-gate
+ * failure, and not a defect this run fixes - recorded here as a follow-up: `treeHas`
+ * would need to capture match position, not just match presence, for every probe
+ * that hands it a pattern claim, which is a shared-surface change deserving its own
+ * PR rather than one folded into a fixture refresh.
+ *
+ * Both this run and the swe-prep pipeline refresh alongside it ran against
+ * claude-sonnet-5, not claude-fable-5, after three spaced retries confirmed
+ * fable-5 unusable in the environment they executed in (recorded in `written.json`
+ * and `scores.json`'s `model` field, and in the PR body). A fable-5 re-run is a
+ * recorded follow-up rather than silently normalized.
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";

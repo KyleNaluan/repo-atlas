@@ -16,6 +16,7 @@ import {
   readParenList,
   withoutComments,
 } from "../probes/flow/reachability.js";
+import { maskedPython, pythonWithoutComments } from "../probes/flow/py-mask.js";
 import { dottedNamesOf, moduleOwnerName, packageDirsIn } from "../probes/flow/py-module.js";
 import { normalizedRoute } from "../probes/flow/route.js";
 import {
@@ -1689,62 +1690,6 @@ const resolveProcessLaunch = (
  *   said. So every check below is anchored in the CALLER'S OWN import statements
  *   and declarations, which is also exactly what a single blob can establish.
  */
-
-/**
- * Python source with comments blanked and string CONTENTS blanked, length
- * preserved, so an offset into the mask is an offset into the original.
- *
- * The lexical order matters and is Python's own: a triple-quoted string before a
- * plain one, because the plain rule would end it at the second quote; a string
- * prefix (`r`, `b`, `f`, `rb`, ...) before the quote it carries; and `#` last,
- * because a `#` inside a string is not a comment. Nothing here parses Python - it
- * only has to know where code is NOT, which is what keeps an `add_edge` inside a
- * docstring from counting as a declared arrow.
- */
-const PY_STRING_OPEN = /^[rRbBuUfF]{0,3}("""|'''|"|')/;
-
-const maskPython = (source: string, keepStrings: boolean): string => {
-  const out = source.split("");
-  const blank = (from: number, to: number): void => {
-    for (let i = from; i < to && i < out.length; i += 1) if (out[i] !== "\n") out[i] = " ";
-  };
-  let i = 0;
-  while (i < source.length) {
-    if (source[i] === "#") {
-      const end = source.indexOf("\n", i);
-      const stop = end === -1 ? source.length : end;
-      blank(i, stop);
-      i = stop;
-      continue;
-    }
-    const opened = PY_STRING_OPEN.exec(source.slice(i, i + 7));
-    if (opened) {
-      const quote = opened[1]!;
-      const bodyStart = i + opened[0].length;
-      let j = bodyStart;
-      while (j < source.length) {
-        if (source[j] === "\\") {
-          j += 2;
-          continue;
-        }
-        if (source.startsWith(quote, j)) break;
-        if (quote.length === 1 && source[j] === "\n") break;
-        j += 1;
-      }
-      const stop = Math.min(j + quote.length, source.length);
-      if (!keepStrings) blank(bodyStart, j);
-      i = stop;
-      continue;
-    }
-    i += 1;
-  }
-  return out.join("");
-};
-
-/** Where code is: comments and string contents blanked. */
-const maskedPython = (source: string): string => maskPython(source, false);
-/** Where a declared literal is: comments blanked, string contents kept. */
-const pythonWithoutComments = (source: string): string => maskPython(source, true);
 
 const pyCache = new WeakMap<ProbeContext, Set<string>>();
 

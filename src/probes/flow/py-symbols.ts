@@ -187,7 +187,6 @@ const definitionsIn = (
       returns: declaredReturn(definition),
       annotations: decorators,
       modifiers: [
-        ...(definition.parent?.type === "decorated_definition" ? [] : []),
         ...(definition.text.startsWith("async") ? ["async"] : []),
         ...decorators.map((decorator) => decorator.name),
       ],

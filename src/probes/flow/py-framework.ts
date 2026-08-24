@@ -10,14 +10,18 @@
  * would eventually answer differently.
  *
  * Both read IMPORTS rather than a text scan, because an import is the file's own
- * statement and a mention in a docstring is not. `withoutComments` is not enough
- * on its own here - a framework named inside a string literal is still not an
- * import - so the test is anchored to the statement keyword.
+ * statement and a mention in a docstring is not. So the source is masked with the
+ * gate's own `maskedPython` first - one definition of "where Python code is not",
+ * shared for the same reason `route.ts` shares "the same route" - because a
+ * `from fastapi import ...` inside a docstring is still not an import, and
+ * anchoring on the statement keyword alone would let the multiline scan match it.
  */
+
+import { maskedPython } from "./py-mask.js";
 
 const importsModule = (source: string, root: string): boolean =>
   new RegExp(String.raw`^\s*(?:from\s+${root}(?:\.[\w.]+)?\s+import\b|import\s+${root}\b)`, "m").test(
-    source,
+    maskedPython(source),
   );
 
 const declaresModule = (

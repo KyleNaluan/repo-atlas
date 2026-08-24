@@ -318,14 +318,6 @@ const valueScope = (definition: SyntaxNode, body: SyntaxNode): ValueScope => {
       remember(left.text, { annotation: null, init: right, parameter: false, element: true }, node);
       return;
     }
-    if (node.type === "for_in_clause") {
-      const left = node.childForFieldName("left");
-      const right = node.childForFieldName("right");
-      if (left?.type === "identifier" && right !== null) {
-        remember(left.text, { annotation: null, init: right, parameter: false, element: true }, node);
-      }
-      return;
-    }
     if (node.type === "as_pattern") {
       const alias = namedChildren(node).find((child) => child.type === "as_pattern_target");
       const target = alias === undefined ? null : namedChildren(alias)[0] ?? null;

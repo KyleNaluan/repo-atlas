@@ -44,9 +44,13 @@ import type { AtlasNode } from "../schema/types.js";
 import type { Harvest } from "../harvest/types.js";
 
 /**
- * #5's eight discovery probes, plus the node producers nothing else mints:
- * `unresolved-references` (#6 point 3), `measured-scale` (the stat tiles) and
- * the seven Flow adapters (#35). Each Flow adapter is listed separately on
+ * #5's eight discovery probes and the three boundary probes that read a
+ * relationship between two declarations - `orthogonal-hierarchies`,
+ * `partitioned-implementations` and `superset-enum`, sharing one reading of
+ * "declared" in `declared.ts` - plus the producers of the node types those do
+ * not mint: the two `coverage_gap` edges `unresolved-references` (#6 point 3)
+ * and `self-disabling-tests`, the stat-tile producer `measured-scale`, and the
+ * seven Flow adapters (#35). Each Flow adapter is listed separately on
  * purpose: one entry family being absent must not read as another one finding
  * nothing - and the TypeScript client adapter is separate from the Spring one
  * for the same reason, because "no frontend here" and "the frontend calls

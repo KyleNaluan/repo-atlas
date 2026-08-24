@@ -374,8 +374,7 @@ const ensureTableForHeader = (root: TomlTable, path: string[], isArrayTable: boo
 export const parseToml = (text: string): TomlTable | null => {
   try {
     return new Reader(text).parse();
-  } catch (e) {
-    if (e instanceof ParseError) return null;
-    throw e;
+  } catch {
+    return null;
   }
 };

@@ -1301,6 +1301,19 @@ describe("declaredIn: pyproject.toml", () => {
     expect(recognized).toBe(false);
   });
 
+  it("demotes rather than crashing when the value recursion is pathologically deep", () => {
+    // A deeply nested array blows the parser's call stack with a RangeError, not
+    // a ParseError. The reader's contract is "a file I cannot read demotes"; the
+    // whole probe+gate run must not crash for the subject on such a file.
+    const deep = "[project]\ndependencies = " + "[".repeat(50000) + "\n";
+    let result: ReturnType<typeof declaredIn>;
+    expect(() => {
+      result = declaredIn("pyproject.toml", deep);
+    }).not.toThrow();
+    expect(result!.names).toEqual(new Set());
+    expect(result!.recognized).toBe(false);
+  });
+
   it("demotes a pyproject that declares dependencies under a convention this rule cannot read", () => {
     // Legacy Poetry (`[tool.poetry.dependencies]`) uses none of the four sites
     // this rule knows, so reading its empty result as "zero dependencies

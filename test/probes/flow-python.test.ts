@@ -18,9 +18,11 @@ import { describe, expect, it } from "vitest";
 import { runProbes } from "../../src/probes/registry.js";
 import { contextFor, only, runAdapter } from "./flow-subject.js";
 import { gateCandidate } from "../../src/gate/gate.js";
+import { resolveFlowClaim } from "../../src/gate/flow.js";
 import { flowArchetype } from "../../src/rank/flow.js";
 import { dottedNamesOf, moduleOwnerName, packageDirsIn } from "../../src/probes/flow/py-module.js";
-import type { Candidate, ProbeOutcome } from "../../src/probes/types.js";
+import { pythonIndex } from "../../src/probes/flow/py-symbols.js";
+import type { Candidate, FlowClaim, ProbeOutcome } from "../../src/probes/types.js";
 import type { FlowNode } from "../../src/schema/types.js";
 
 /* ---------------------------------------------------------- fixtures */
@@ -670,5 +672,228 @@ if __name__ == "__main__":
     const result = gateCandidate(moved, repinned(candidate, ctx.sha, moved.sha));
     expect(result.node.confidence).toBe("absent");
     expect(result.finding).toContain("selects a member out of _KINDS");
+  }, 60_000);
+});
+
+/* ------------------------------------ producer/gate parity fixes (review round) */
+
+describe("two routers in one module keep their own mount identity", () => {
+  const TWO_ROUTERS = (mainBody: string) => ({
+    "app/__init__.py": INIT,
+    "app/routes.py": `from fastapi import APIRouter
+
+from app import records
+
+router_a = APIRouter(prefix="/a")
+router_b = APIRouter(prefix="/b")
+
+
+@router_a.get("/records/{record_id}")
+def show_a(record_id: str) -> str:
+    return records.render(record_id)
+
+
+@router_b.get("/records/{record_id}")
+def show_b(record_id: str) -> str:
+    return records.render(record_id)
+`,
+    "app/main.py": `from fastapi import FastAPI
+
+from app import routes
+
+app = FastAPI()
+${mainBody}`,
+    "app/records.py": RECORDS,
+    "app/store.py": STORE,
+  });
+
+  it("gives each mounted router its own prefix, with no spurious ambiguous_route_mount", async () => {
+    const candidates = await runAdapter(
+      "flow-python-fastapi-http",
+      contextFor(
+        TWO_ROUTERS("app.include_router(routes.router_a, prefix=\"/x\")\napp.include_router(routes.router_b, prefix=\"/y\")\n"),
+      ),
+    );
+    // Before the fix the consumer matched mounts by file alone, so each route saw
+    // both mounts and cut itself `ambiguous_route_mount`; now each router is
+    // matched by identity and gets its own composed path.
+    expect(verifiedOnly(candidates).map((c) => flowOf(c).steps[0]!.node).sort()).toEqual([
+      "GET /x/a/records/{}",
+      "GET /y/b/records/{}",
+    ]);
+    expect(cutReasons(candidates)).toEqual([]);
+  }, 60_000);
+
+  it("does not serve a declared-but-unmounted router's routes", async () => {
+    const ctx = contextFor(TWO_ROUTERS("app.include_router(routes.router_a)\n"));
+    const candidates = await runAdapter("flow-python-fastapi-http", ctx);
+    // Only router_a is mounted, so only its route is served - and the gate confirms
+    // the composed path from the same declaration, not a borrowed one.
+    const served = only(verifiedOnly(candidates));
+    expect(flowOf(served).steps[0]!.node).toBe("GET /a/records/{}");
+    expect(gateCandidate(ctx, served).verdict).toBe("confirmed");
+    // router_b is declared but nothing mounts it, so its route is a named cut.
+    const cut = only(cutReasons(candidates));
+    expect(cut).toContain("unmounted_router:");
+    expect(cut).toContain("router_b");
+  }, 60_000);
+});
+
+describe("the gate types a wrapped receiver the same as the producer", () => {
+  const WRAPPED = (annotation: string) => ({
+    "app/__init__.py": INIT,
+    "app/main.py": `from typing import Optional, Type, Final, Annotated, ClassVar
+from fastapi import FastAPI
+
+from app.store import Store
+
+app = FastAPI()
+
+
+@app.get("/records/{record_id}")
+def show_record(record_id: str, store: ${annotation}) -> str:
+    return store.read_record(record_id)
+`,
+    "app/store.py": STORE,
+  });
+
+  // Exactly the TRANSPARENT set `annotationName` unwraps, plus the union in either
+  // order; a container like `list[Store]` is deliberately NOT here, because the
+  // producer refuses to type a receiver as its element.
+  for (const annotation of [
+    "Optional[Store]",
+    "type[Store]",
+    "Type[Store]",
+    "Final[Store]",
+    "Annotated[Store]",
+    "ClassVar[Store]",
+    "Store | None",
+    "None | Store",
+  ]) {
+    it(`re-resolves a receiver annotated ${annotation}`, async () => {
+      const { candidate, result } = await gated(WRAPPED(annotation), "flow-python-fastapi-http");
+      expect(flowOf(candidate).steps.some((step) => step.node === "Store")).toBe(true);
+      expect(result.verdict).toBe("confirmed");
+    }, 60_000);
+  }
+});
+
+describe("an aliased free-function call resolves to the imported def", () => {
+  it("looks the target up by the imported name, not the call-site alias", async () => {
+    const subject = {
+      "app/__init__.py": INIT,
+      "app/cli.py": `from app.work import run_job as go
+
+
+def main() -> None:
+    go()
+
+
+if __name__ == "__main__":
+    main()
+`,
+      "app/work.py": `from app.store import Store
+
+
+def run_job() -> None:
+    store = Store()
+    store.read_record("x")
+`,
+      "app/store.py": STORE,
+    };
+    // Before the fix the target was looked up by the alias `go`, which the work
+    // module does not declare, so the whole story quarantined as unresolved_target.
+    const { candidate, result } = await gated(subject, "flow-python-console-entry");
+    expect(flowOf(candidate).steps.some((step) => step.node === "Store")).toBe(true);
+    expect(result.verdict).toBe("confirmed");
+  }, 60_000);
+});
+
+describe("a registry key that contains a colon is split on the masked copy", () => {
+  it("keeps the whole quoted key rather than splitting inside the string", async () => {
+    const subject = {
+      "app/__init__.py": INIT,
+      "app/schema.py": SCHEMA(`_KINDS: dict[str, type] = {
+    "http:get": Alpha,
+    "http:post": Beta,
+}`),
+      "app/payloads.py": DISPATCH_ENTRY,
+    };
+    const { candidate, result } = await gated(subject, "flow-python-console-entry");
+    const claims = (candidate.flow_claims ?? []).filter((c) => c.matcher === "closed_dispatch");
+    expect(claims).toHaveLength(2);
+    // The colon lives inside the key literal, so a naive split miscounts the set
+    // and the label check contradicts; the masked split keeps `"http:get"` whole.
+    expect(result.verdict).toBe("confirmed");
+  }, 60_000);
+});
+
+describe("the gate fails closed on a self-call across two files", () => {
+  it("does not confirm a self.m() when the two classes only share a simple name", async () => {
+    const ctx = contextFor({
+      "app/__init__.py": INIT,
+      "app/a.py": `class Store:
+    def handle(self, record_id: str) -> str:
+        return self.read_record(record_id)
+`,
+      "app/b.py": `class Store:
+    def read_record(self, record_id: str) -> str:
+        return "x"
+`,
+    });
+    const claim: FlowClaim = {
+      expect: "present",
+      matcher: "direct_call",
+      from: { path: "app/a.py", name: "handle", owner: "Store", arity: 1 },
+      to: { path: "app/b.py", name: "read_record", owner: "Store", arity: 1 },
+      evidence: [{ kind: "file", path: "app/a.py", line_start: 1, line_end: 3, sha: ctx.sha }],
+    };
+    // Two unrelated `Store` classes in two files are not the same receiver, so the
+    // simple-name branch carries the same `sameFile` guard the inherited branch has.
+    expect(resolveFlowClaim(ctx, undefined, claim).verdict).not.toBe("confirmed");
+  }, 60_000);
+});
+
+describe("a re-export whose imported name equals the module binds", () => {
+  it("binds `app` for `from app import app` rather than skipping it as the module node", async () => {
+    const index = await pythonIndex(
+      contextFor({
+        "main.py": "from app import app\n",
+        "app.py": "def app() -> None:\n    pass\n",
+      }),
+    );
+    // The imported name shares text and type with the module_name node, so a
+    // text-based skip left it unbound; identifying the module node by span binds it.
+    expect(index.bindingsByPath.get("main.py")?.get("app")).toEqual({
+      kind: "symbol",
+      path: "app.py",
+      name: "app",
+    });
+  }, 60_000);
+});
+
+describe("a framework base after a structural one is still inventoried (D1)", () => {
+  it("reaches the real base past a leading Generic and names the cut by it", async () => {
+    const candidates = await runAdapter(
+      "flow-python-console-entry",
+      contextFor({
+        "app/__init__.py": INIT,
+        "app/strategy.py": `from typing import Generic, TypeVar
+from nautilus_trader.trading.strategy import Strategy
+
+T = TypeVar("T")
+
+
+class BookStrategy(Generic[T], Strategy):
+    def on_bar(self, bar: object) -> None:
+        pass
+`,
+      }),
+    );
+    // Generic is a structural base and comes first; abandoning the class at it
+    // would leave the real Strategy callback a #6 silence, so the reader skips it.
+    const reason = only(cutReasons(candidates));
+    expect(reason).toContain("framework_callback_unestablished:");
+    expect(reason).toContain("BookStrategy(Strategy).on_bar");
   }, 60_000);
 });

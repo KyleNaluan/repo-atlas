@@ -100,6 +100,13 @@ export interface PythonIndex {
   treesByPath: Map<string, SyntaxNode>;
 }
 
+/** Whether two nodes of one tree occupy the exact same source span - a stable identity. */
+const sameSpan = (a: SyntaxNode, b: SyntaxNode): boolean =>
+  a.startPosition.row === b.startPosition.row &&
+  a.startPosition.column === b.startPosition.column &&
+  a.endPosition.row === b.endPosition.row &&
+  a.endPosition.column === b.endPosition.column;
+
 /** A decorator reduced to a name and its argument text, mirroring `AnnotationRef`. */
 const decoratorRefs = (definition: SyntaxNode): { name: string; args: string }[] => {
   const decorated = decoratedOf(definition);
@@ -478,9 +485,12 @@ const bindingsIn = (
     const base = relativeDots > 0 ? relativeBase(relativeDots, moduleText.replace(/^\.+/, "")) : null;
     const dottedModule = relativeDots > 0 ? null : moduleText;
     for (const child of namedChildren(statement)) {
-      if (child === moduleNode || (moduleNode !== null && child.text === moduleNode.text && child.type === moduleNode.type)) {
-        continue;
-      }
+      // The module node is identified by its SOURCE SPAN, not by text+type: for
+      // `from app import app` the imported name shares both with the module_name,
+      // and skipping on text would leave `app` unbound - a re-export the tracer
+      // then cannot follow. Reference equality is unreliable across web-tree-sitter
+      // accesses, so position is the stable identity.
+      if (moduleNode !== null && sameSpan(child, moduleNode)) continue;
       if (child.type === "wildcard_import") continue;
       const imported =
         child.type === "aliased_import" ? namedChildren(child)[0]?.text ?? "" : child.text;

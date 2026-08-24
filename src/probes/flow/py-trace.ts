@@ -868,10 +868,13 @@ export const pyTraceFrom = (
         // reading `trace.ts` gives `new X()`.
         if (classIn(index, bound.path, bound.name) !== null) continue;
         const owning = index.modules.get(bound.path);
-        const target = owning === undefined ? null : methodNamed(owning, name);
+        // The IMPORTED name, not the call-site text: `from mod import real as alias`
+        // called as `alias()` resolves the def `real`, exactly as the sibling
+        // `classIn` above reads `bound.name` and `expressionType` does.
+        const target = owning === undefined ? null : methodNamed(owning, bound.name);
         if (owning === undefined) continue;
         if (target === null) {
-          if (owning.methods.some((m) => m.name === name)) {
+          if (owning.methods.some((m) => m.name === bound.name)) {
             gap(
               "ambiguous_overload",
               key,

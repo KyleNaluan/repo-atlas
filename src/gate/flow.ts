@@ -1769,19 +1769,22 @@ const pyDeclaresBase = (source: string, sub: string, base: string): boolean =>
  *
  * Two answers, because the two mean different things at a call site: a MODULE
  * binding makes `decision_logs.query_rows(...)` a call on a module-level `def`,
- * while a SYMBOL binding makes `query_rows(...)` one. Both are read off the
- * caller's own import statements, and the dotted names the target answers to come
- * from the shared `py-module.ts` definition - so the two sides cannot disagree
- * about what a module is called while still deriving the binding independently.
+ * while a SYMBOL binding makes `query_rows(...)` one. The symbol binding maps the
+ * local name to the imported NAME, so a call written on an alias (`from mod import
+ * run_job as go` then `go()`) is re-resolved to the def it names - the gate's half
+ * of the producer's `bound.name`. Both are read off the caller's own import
+ * statements, and the dotted names the target answers to come from the shared
+ * `py-module.ts` definition - so the two sides cannot disagree about what a module
+ * is called while still deriving the binding independently.
  */
 const pyBindingsTo = (
   ctx: ProbeContext,
   fromPath: string,
   fromSource: string,
   targetPath: string,
-): { modules: Set<string>; symbols: Set<string> } => {
+): { modules: Set<string>; symbolNames: Map<string, string> } => {
   const modules = new Set<string>();
-  const symbols = new Set<string>();
+  const symbolNames = new Map<string, string>();
   const dotted = new Set(dottedNamesOf(targetPath, pyPackageDirs(ctx)));
   const masked = maskedPython(fromSource);
 
@@ -1810,7 +1813,7 @@ const pyBindingsTo = (
         modules.add(local);
         continue;
       }
-      if (resolved !== null && dotted.has(resolved)) symbols.add(local);
+      if (resolved !== null && dotted.has(resolved)) symbolNames.set(local, simpleName(name));
     }
   }
 
@@ -1821,7 +1824,7 @@ const pyBindingsTo = (
     if (alias !== undefined) modules.add(alias);
     else if (!moduleText.includes(".")) modules.add(moduleText);
   }
-  return { modules, symbols };
+  return { modules, symbolNames };
 };
 
 /**
@@ -1875,6 +1878,17 @@ const pyResolveModuleText = (
 };
 
 /**
+ * The optional annotation wrapper before the named type, matching the producer's
+ * `TRANSPARENT` set (`annotationName`, `src/probes/python.ts`) exactly: `Optional`,
+ * `type`, `Type`, `Final`, `Annotated`, `ClassVar`, plus a leading `None |` for the
+ * union written in either order (`X | None` needs no prefix, since `X` is first),
+ * and a forward-reference quote. A CONTAINER (`list[X]`, `Sequence[X]`) is
+ * deliberately absent - the producer refuses to type a receiver as its element, so
+ * the gate must not either.
+ */
+const PY_TRANSPARENT_PREFIX = `(?:(?:Optional|type|Type|Final|Annotated|ClassVar)\\s*\\[\\s*|None\\s*\\|\\s*|"|')?`;
+
+/**
  * The receiver expressions this file types as `owner`.
  *
  * Five declaration shapes, and every one of them is a line in the file being
@@ -1894,7 +1908,7 @@ const pyReceiverNames = (source: string, owner: string): Set<string> => {
   const names = new Set<string>([simple]);
   const annotated = new Set<string>();
   const typed = new RegExp(
-    `(?:^|[(,\\s])(self\\s*\\.\\s*\\w+|\\w+)\\s*:\\s*(?:Optional\\s*\\[\\s*|"|')?${escaped(simple)}\\b`,
+    `(?:^|[(,\\s])(self\\s*\\.\\s*\\w+|\\w+)\\s*:\\s*${PY_TRANSPARENT_PREFIX}${escaped(simple)}\\b`,
     "g",
   );
   for (const match of masked.matchAll(typed)) {
@@ -1985,12 +1999,26 @@ const pyResolvesCall = (
   const sameFile = to.path === from.path;
   const moduleTarget = isModuleOwned(to);
   const receivers = moduleTarget ? new Set<string>() : pyReceiverNames(fromSource, to.owner!);
-  const call = new RegExp(`\\b${escaped(name)}\\s*\\(`, "g");
+  // A module-level def may be called through an import alias (`from mod import
+  // run_job as go` then `go()`), so the callee names searched include every local
+  // the caller binds to THIS def - the gate's half of the producer's `bound.name`.
+  const callNames = new Set<string>([name]);
+  if (moduleTarget) {
+    for (const [local, imported] of bindings.symbolNames) {
+      if (imported === name) callNames.add(local);
+    }
+  }
+  const call = new RegExp(`\\b(${[...callNames].map(escaped).join("|")})\\s*\\(`, "g");
+  // A `self`/`cls` call resolves only WITHIN one file: two unrelated classes that
+  // happen to share a simple name in two modules are not the same receiver, so the
+  // simple-name branch carries the same `sameFile` guard the inherited-base branch
+  // already does.
   const selfResolves =
     !moduleTarget &&
     from.owner !== undefined &&
+    sameFile &&
     (simpleName(from.owner) === simpleName(to.owner!) ||
-      (sameFile && pyDeclaresBase(fromSource, from.owner, to.owner!)));
+      pyDeclaresBase(fromSource, from.owner, to.owner!));
   const accessors = moduleTarget ? new Set<string>() : pyAccessorsReturning(fromSource, to.owner!);
 
   for (const span of spans) {
@@ -2002,7 +2030,15 @@ const pyResolvesCall = (
       }
       const shape = pyReceiverBefore(masked, match.index);
       if (shape.kind === "none") {
-        if (moduleTarget && (sameFile || bindings.symbols.has(name))) return true;
+        const callee = match[1]!;
+        // Same-file calls use the def's own name; a cross-file call must reach it
+        // through an import that binds that exact name, alias or not.
+        if (
+          moduleTarget &&
+          ((sameFile && callee === name) || bindings.symbolNames.get(callee) === name)
+        ) {
+          return true;
+        }
         continue;
       }
       if (shape.kind === "chained") {
@@ -2031,7 +2067,7 @@ const pyResolvesCall = (
 const pyAccessorsReturning = (source: string, type: string): Set<string> => {
   const names = new Set<string>();
   const declarations = new RegExp(
-    `^(?:async[ \\t]+)?def[ \\t]+(\\w+)[ \\t]*\\([^\\n]*\\)[ \\t]*->[ \\t]*(?:Optional\\s*\\[\\s*)?${escaped(simpleName(type))}\\b`,
+    `^(?:async[ \\t]+)?def[ \\t]+(\\w+)[ \\t]*\\([^\\n]*\\)[ \\t]*->[ \\t]*${PY_TRANSPARENT_PREFIX}${escaped(simpleName(type))}\\b`,
     "gm",
   );
   for (const match of maskedPython(source).matchAll(declarations)) names.add(match[1]!);
@@ -2189,20 +2225,24 @@ const pyRegistryPairs = (
   const pairs: { key: string; value: string }[] = [];
   let level = 0;
   let start = 0;
-  const pieces: string[] = [];
+  const ranges: { start: number; end: number }[] = [];
   for (let i = 0; i < guard.length; i += 1) {
     const ch = guard[i];
     if (ch === "{" || ch === "[" || ch === "(") level += 1;
     else if (ch === "}" || ch === "]" || ch === ")") level -= 1;
     else if (ch === "," && level === 0) {
-      pieces.push(inner.slice(start, i));
+      ranges.push({ start, end: i });
       start = i + 1;
     }
   }
-  pieces.push(inner.slice(start));
-  for (const piece of pieces) {
+  ranges.push({ start, end: guard.length });
+  for (const { start: s, end: e } of ranges) {
+    const piece = inner.slice(s, e);
     if (piece.trim() === "") continue;
-    const split = piece.indexOf(":");
+    // The key/value split is found on the STRING-MASKED copy, so a colon inside a
+    // string key (`"http:get": Handler`) does not split the piece inside its own
+    // literal - the same masked copy the bracket balancing and comma splitting use.
+    const split = guard.slice(s, e).indexOf(":");
     if (split < 0) return null;
     pairs.push({ key: piece.slice(0, split).trim(), value: piece.slice(split + 1).trim() });
   }
@@ -2463,35 +2503,48 @@ const pythonRouteEndpoint = (
 ): { method: string; path: string } | null => {
   const spans = (texts.get(ref.path) ?? []).map(pythonWithoutComments);
   const name = simpleName(ref.name);
-  let declared: { method: string; path: string } | null = null;
+  let declared: { method: string; path: string; router: string } | null = null;
   for (const span of spans) {
     const decorator = new RegExp(
-      `@\\s*\\w+\\s*\\.\\s*(${PY_VERBS})\\s*\\(\\s*(['"])([^'"\\n]*)\\2[\\s\\S]*?\\)\\s*(?:@[^\\n]*\\s*)*(?:async[ \\t]+)?def[ \\t]+${escaped(name)}[ \\t]*\\(`,
+      `@\\s*(\\w+)\\s*\\.\\s*(${PY_VERBS})\\s*\\(\\s*(['"])([^'"\\n]*)\\3[\\s\\S]*?\\)\\s*(?:@[^\\n]*\\s*)*(?:async[ \\t]+)?def[ \\t]+${escaped(name)}[ \\t]*\\(`,
     ).exec(span);
     if (!decorator) continue;
     if (declared !== null) return null;
-    declared = { method: decorator[1]!.toUpperCase(), path: decorator[3]! };
+    // The decorator names the router variable the route is written on; the prefix
+    // is only composed from spans that name THAT SAME router, so a module holding
+    // two routers cannot lend one's prefix to the other's routes.
+    declared = { method: decorator[2]!.toUpperCase(), path: decorator[4]!, router: decorator[1]! };
   }
   if (declared === null) return null;
+  const router = declared.router;
+
+  // The `prefix=` literal on a span: "" for none, or null when one is written but
+  // is not a single string literal - which quarantines the route, exactly as the
+  // producer cuts it `dynamic_route_prefix:` rather than composing a guess.
+  const prefixOf = (span: string): string | null => {
+    const literal = /(?:^|[(,\s])prefix\s*=\s*(['"])([^'"\n]*)\1/.exec(span);
+    if (literal !== null) return literal[2]!;
+    return /(?:^|[(,\s])prefix\s*=/.test(span) ? null : "";
+  };
 
   let mount = "";
   let construction = "";
-  for (const [path, raw] of texts) {
+  for (const [, raw] of texts) {
     for (const span of raw.map(pythonWithoutComments)) {
-      for (const [call, into] of [
-        ["include_router", "mount"],
-        ["APIRouter", "construction"],
-      ] as const) {
-        const at = new RegExp(`\\b${call}\\s*\\(`).exec(span);
-        if (!at) continue;
-        // Only a span cited for THIS route may contribute; the handler's own span
-        // is where the decorator was read and carries no prefix.
-        if (path === ref.path && span.includes(`def ${name}`)) continue;
-        const prefix = /(?:^|[(,\s])prefix\s*=\s*(['"])([^'"\n]*)\1/.exec(span);
-        const literal = prefix === null ? "" : prefix[2]!;
-        if (prefix === null && /(?:^|[(,\s])prefix\s*=/.test(span)) return null;
-        if (into === "mount") mount = literal;
-        else construction = literal;
+      // The construction assigns `APIRouter(...)` to the router's own name; the
+      // mount passes that same name - bare `router` or `<module>.router` - to
+      // `include_router`. A span naming a different router contributes nothing,
+      // which is how the gate re-derives the identity the producer resolved.
+      if (new RegExp(`\\b${escaped(router)}\\s*=\\s*APIRouter\\s*\\(`).test(span)) {
+        const literal = prefixOf(span);
+        if (literal === null) return null;
+        construction = literal;
+      }
+      const mounted = /\binclude_router\s*\(\s*([\w.]+)/.exec(span);
+      if (mounted !== null && mounted[1]!.split(".").pop() === router) {
+        const literal = prefixOf(span);
+        if (literal === null) return null;
+        mount = literal;
       }
     }
   }

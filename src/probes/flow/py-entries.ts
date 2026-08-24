@@ -133,6 +133,15 @@ const routeHostsIn = (root: SyntaxNode, path: string): Map<string, RouteHost> =>
 interface RouterMount {
   /** The path whose router this mount names, when the reader could pin one. */
   routerPath: string;
+  /**
+   * The router's OWN name in the module that declares it - the attribute of
+   * `mod.router_v2` or the imported binding's original name for `router_a`.
+   *
+   * Carried so a module declaring two routers, one mounted and one not, cannot
+   * lend the mounted one's prefix to the other's routes: the consumer matches on
+   * `(routerPath, routerName)`, not on the file alone.
+   */
+  routerName: string;
   prefix: string | null;
   dynamicPrefix: boolean;
   span: CitedSpan;
@@ -159,24 +168,33 @@ const routerMountsIn = (index: PythonIndex): RouterMount[] => {
       if (callee.childForFieldName("attribute")?.text !== "include_router") continue;
       const first = positionalArguments(call)[0];
       if (first === undefined) continue;
-      const routerPath =
+      // Both shapes name the router by its OWN identity in the declaring module:
+      // `mod.router_v2` by the attribute, and `router_a` by the imported binding's
+      // original name. Anything else - a router in a list, one a factory returns -
+      // pins no identity and is left unresolved, so the routes it would mount stay
+      // an `unmounted_router:` cut rather than borrowing another router's prefix.
+      const resolved: { path: string; name: string } | null =
         first.type === "attribute" && first.childForFieldName("object")?.type === "identifier"
           ? (() => {
               const bound = bindings.get(first.childForFieldName("object")!.text);
-              return bound?.kind === "module" ? bound.path : null;
+              const attribute = first.childForFieldName("attribute")?.text;
+              return bound?.kind === "module" && attribute !== undefined
+                ? { path: bound.path, name: attribute }
+                : null;
             })()
           : first.type === "identifier"
             ? (() => {
                 const bound = bindings.get(first.text);
-                return bound?.kind === "symbol" ? bound.path : null;
+                return bound?.kind === "symbol" ? { path: bound.path, name: bound.name } : null;
               })()
             : null;
-      if (routerPath === null) continue;
+      if (resolved === null) continue;
       const prefixNode = keywordArgument(call, "prefix");
       const prefix = prefixNode === null ? null : stringLiteral(prefixNode);
       const statement = enclosingStatement(call);
       out.push({
-        routerPath,
+        routerPath: resolved.path,
+        routerName: resolved.name,
         prefix,
         dynamicPrefix: prefixNode !== null && prefix === null,
         span: { path, line_start: lineOf(statement), line_end: endLineOf(statement) },
@@ -251,7 +269,9 @@ export const pyHttpEntries = (index: PythonIndex): { entries: PyHttpEntry[]; cut
         let prefix = host.prefix ?? "";
         if (host.kind === "router") {
           composition.push(host.declaration);
-          const mounted = mounts.filter((mount) => mount.routerPath === path);
+          const mounted = mounts.filter(
+            (mount) => mount.routerPath === path && mount.routerName === host.name,
+          );
           if (mounted.length === 0) {
             cuts.push({
               reason: `unmounted_router: ${path} declares ${host.name} = APIRouter(...) and nothing in this subject calls include_router on it, so no line in the tree says the application serves this route`,
@@ -745,7 +765,11 @@ export const pyFrameworkCallbacks = (index: PythonIndex): PyFrameworkCallback[] 
         // name states nothing at all. Only an import from outside the subject
         // makes the base somebody else's contract.
         if (bound?.kind !== "foreign") continue;
-        if (STRUCTURAL_BASES.has(base)) break;
+        // A structural base states a SHAPE and owns no lifecycle, so it is not the
+        // framework this family names - but it may sit before the real base in
+        // `class X(Generic[T], Strategy)`, so skip past it rather than abandoning
+        // the class, which would leave the real callback a #6 silence.
+        if (STRUCTURAL_BASES.has(base)) continue;
         for (const method of type.methods) {
           if (!/^on_[a-z]/.test(method.name)) continue;
           out.push({ type, method, base });

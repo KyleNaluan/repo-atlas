@@ -27,6 +27,14 @@ Concretely, and these recur in every stage:
 - **Mechanics propose, judgement deletes** (#2, #5). Probes and the write stage emit candidates; the gate verifies; the rank stage owns acceptance and deletion. No other stage may become a second authority over what survives - which is why budgets live in `rank` and not in `render` (#7), and why the audit may reject an artifact but never edit one outside its own slot (#8).
 - **No sentence in the artifact may state an audit conclusion except inside the audit slot** (#8). The render prototype violated this; it is the defect the audit contract was written around.
 
+## v1 acceptance (#1) is now demonstrated on both halves
+
+#1's bar is two credentialed `repo-atlas run`s, not one: parity with the hand-made swe-prep overview, and honest degradation on a decision-poor subject. The second half went undemonstrated for a while - fixtures existed, but never a fresh end-to-end run judged against the bar - until both ran together: `test/fixtures/swe-prep.pipeline.*.json` (27 nodes, up from 18 once #50/#51's probes were scored and ranked in) and `test/fixtures/java-websocket.*.json` (15 nodes; flows, decisions and mechanisms correctly absent; 8 tracker/tree divergences found). Both audits came back `passed_with_warnings`.
+
+Two things worth knowing before touching either subject again:
+- **`claude-fable-5` was unusable in the environment both runs executed in** - three spaced `claude --print` smoke tests each timed out with zero output, while the identical call against `claude-sonnet-5` returned in seconds. Both runs used sonnet-5 for write and score, recorded in each fixture's own `model` field. Re-running on fable-5 once it is reachable again is a standing follow-up, not a silent acceptance of the substitution.
+- **The hostile subject exposed a real, narrow gate gap**: `decided-but-unbuilt` candidates the gate overturns (a regex pattern found somewhere in a file, contradicting an open "not built" ticket) cite that file with no line range, because `treeHas` (`src/gate/gate.ts`) records which files a pattern matched, never where. The audit's own M1/M2 pass correctly flags the resulting divergence claims as under-evidenced (see `test/run/degradation.test.ts`'s docstring). Advisory only, not a hard-gate failure, and not fixed here - `treeHas` would need to capture match position for every pattern-claim probe, a shared-surface change that deserves its own PR.
+
 ## Layout
 
 - `src/schema/types.ts` - the `atlas.json` contract as TypeScript. **The single source of truth.**

@@ -18,7 +18,9 @@ That run has now happened: the committed artifact reports section 04 present, wi
 The shortfall then moved once more, to the probe library: no boundary candidate survived the floor on this subject, because the only boundary producer compared directory siblings field by field and found three constructor asymmetries in test classes, while the reference's four boundaries are architectural seams.
 Three producers now read those seams - two sealed hierarchies a carrier holds one of each of, an implementation set split on whether it holds anything from a package, an enum that is a strict superset of another - beside a fourth that reports the tests which abort themselves rather than fail, so a green suite cannot imply they ran.
 How far extraction reaches is now measured node by node rather than summarised as a count: `test/fixtures/swe-prep.probe-coverage.json` accounts for all 33 reference nodes, 22 with a named producer and 11 with the standing decision that forecloses each, and `test/run/parity.test.ts` fails if a single one goes unaccounted for or unexplained.
-What that leaves open, pinned rather than implied: the committed artifact still reports 18 nodes and carries no boundary, because the eight newly gate-confirmed candidates cannot reach a document until a credentialed `repo-atlas score` run refreshes the pinned scores - rank refuses an unscored node, on the ground that an unscored node is not a zero but a node nobody judged.
+That run has also now happened: the committed artifact reports 27 nodes, five of them boundaries, all of them new since the pre-#50 artifact carried none.
+The eight newly gate-confirmed candidates the previous paragraph named are the ones now scored and ranked in.
+The one deviation this run took is pinned rather than implied: `claude-fable-5` was unusable in the environment the run executed in, so `claude-sonnet-5` scored and wrote it instead, recorded in `test/fixtures/swe-prep.probe-coverage.json`'s `committed_artifact` note rather than left for a reader to discover from a model field that moved without explanation.
 
 ```
 npx repo-atlas run --clone ../subject -o overview.html

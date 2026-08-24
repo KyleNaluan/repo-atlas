@@ -123,7 +123,7 @@ interface UnmintedRow {
  * How far extraction reaches on this subject, measured node by node against the
  * reference (#22). Like the Flow producer's yield, it needs a swe-prep clone and
  * so is pinned rather than computed here; unlike a count, it is a LIST, because
- * "18 against 33" says nothing about which fifteen or why.
+ * "27 against 33" says nothing about which six or why.
  */
 const coverage = read<{
   subject_sha: string;
@@ -141,8 +141,8 @@ const coverage = read<{
   beyond_the_reference: { candidates: { id: string; title: string }[] };
   committed_artifact: {
     nodes_now: number;
-    new_gate_confirmed_candidates_awaiting_a_score_run: number;
-    why_not_regenerated: string;
+    new_gate_confirmed_candidates_scored_and_ranked_in: number;
+    model_deviation: string;
     recommended_follow_up: string;
   };
 }>("swe-prep.probe-coverage.json");
@@ -436,44 +436,45 @@ describe("where the engine falls short, and by how much", () => {
     expect(cli.cut_by_reason).toEqual({ no_terminal_reached: 1 });
   });
 
-  it("renders no boundaries, because the artifact predates the probes that find them", () => {
-    // THE SHORTFALL THIS RECORDED, closed at the producer and not yet in the
-    // document. It used to read "the only probe that finds them finds test-file
-    // noise": three boundary candidates were produced, all three cut at the floor,
-    // and all three constructor-parameter asymmetries in test classes, while the
-    // reference's four are architectural seams. That WAS a probe-coverage gap
-    // rather than a scoring one, and the coverage block above is where it is now
-    // measured: three of the reference's four boundaries have producers that read
-    // shapes no earlier probe could carry, and the fourth is already in this
-    // artifact as a mechanism.
+  it("renders the boundaries the new probes find, now that a credentialed run has scored them", () => {
+    // THE SHORTFALL THIS USED TO RECORD is closed. It used to read "the only
+    // probe that finds them finds test-file noise": three boundary candidates
+    // were produced, all three cut at the floor, and all three constructor-
+    // parameter asymmetries in test classes, while the reference's four are
+    // architectural seams. That WAS a probe-coverage gap rather than a scoring
+    // one, and the coverage block above is where it was measured: three of the
+    // reference's four boundaries have producers that read shapes no earlier
+    // probe could carry, and the fourth is already in this artifact as a
+    // mechanism.
     //
-    // What is pinned here is the honest remainder. The committed artifact still
-    // carries no boundary, because reaching one means ranking eight newly
-    // gate-confirmed candidates and rank refuses to run on a node nobody scored.
-    // The number moves when a credentialed `repo-atlas score` run refreshes the
-    // pinned scores, not before - and saying so is the point of pinning it.
-    expect(countByType(produced)["boundary"]).toBeUndefined();
+    // A fresh credentialed `repo-atlas run` (per #50, #51) scored and ranked
+    // those candidates in: five boundaries now render - the reference's three
+    // plus two "beyond the reference" partitions the probes found independently
+    // (see `beyond_the_reference` above) - all of them new, since the pre-#50
+    // artifact carried none.
+    expect(countByType(produced)["boundary"]).toBe(5);
     expect(countByType(reference)["boundary"]).toBe(4);
-    expect(coverage.committed_artifact.recommended_follow_up).toContain("repo-atlas score");
+    expect(coverage.committed_artifact.recommended_follow_up).toContain("repo-atlas run");
   });
 
-  it("produces roughly half the reference's nodes, and the number is the finding", () => {
-    // Recorded so it moves visibly. 18 against 33, now that flows are two of the
-    // eighteen: the decisions, deep dives, orientation figures, edges and flows
-    // are there; the boundaries above are still not.
+  it("closes most of the gap to the reference's node count, and the remainder is the finding", () => {
+    // Recorded so it moves visibly. 27 against 33, now that the boundaries above
+    // are in: the decisions, deep dives, orientation figures, edges, flows and
+    // boundaries are all there. What remains unminted is the residual this
+    // fixture's "unminted" list accounts for by name, not a mystery shortfall.
     //
-    // The count is a property of the SHIPPED ARTIFACT and it has not moved,
-    // because the artifact is the output of a credentialed run this branch did not
-    // repeat. What did move is the thing the count was standing in for - what the
-    // engine can establish - and that is measured directly above rather than
-    // inferred from this number. Twenty-two of the reference's thirty-three nodes
-    // now have a named producer and the other eleven have a stated reason; eight
-    // gate-confirmed candidates are waiting on a score run to reach a document.
-    expect(produced.nodes).toHaveLength(18);
+    // The count is a property of the SHIPPED ARTIFACT, and it moved because this
+    // branch repeated the credentialed run: the eight boundary/coverage-gap
+    // candidates these probes confirmed are scored and ranked into the document,
+    // not merely confirmed at the gate. Twenty-two of the reference's
+    // thirty-three nodes have a named producer and the other eleven have a
+    // stated reason - that split is unchanged by this run, because it is a
+    // property of the probes and the gate, not of what got ranked in.
+    expect(produced.nodes).toHaveLength(27);
     expect(reference.nodes).toHaveLength(33);
     expect(coverage.reference.covered).toBe(22);
     expect(coverage.reference.unminted).toBe(11);
-    expect(coverage.committed_artifact.new_gate_confirmed_candidates_awaiting_a_score_run).toBe(8);
+    expect(coverage.committed_artifact.new_gate_confirmed_candidates_scored_and_ranked_in).toBe(8);
   });
 });
 
@@ -588,18 +589,20 @@ describe("how far extraction reaches, measured node by node against the referenc
     );
   });
 
-  it("says why the committed artifact does not yet carry any of it", () => {
+  it("says how the committed artifact came to carry it, and what deviated getting there", () => {
     // The honest half of this task's result. Eight new gate-confirmed candidates
-    // exist and none of them is in the shipped document, because rank refuses to
-    // run on a node nobody scored and refreshing the scores is a credentialed
-    // model call. Recorded here rather than left for a reader to discover from a
-    // node count that did not move.
+    // existed and none of them was in the shipped document, because rank refuses
+    // to run on a node nobody scored - until this run refreshed the scores.
+    // Recorded here rather than left for a reader to discover from a node count
+    // that moved without explanation, including the one deviation this run took:
+    // claude-fable-5 was unusable, so claude-sonnet-5 scored and wrote it instead.
     expect(coverage.committed_artifact.nodes_now).toBe(produced.nodes.length);
-    expect(coverage.committed_artifact.new_gate_confirmed_candidates_awaiting_a_score_run).toBe(
+    expect(coverage.committed_artifact.new_gate_confirmed_candidates_scored_and_ranked_in).toBe(
       coverage.gate.confirmed_after - coverage.gate.confirmed_before_these_probes,
     );
-    expect(coverage.committed_artifact.why_not_regenerated).toContain("MissingScoreError");
-    expect(coverage.committed_artifact.recommended_follow_up).toContain("repo-atlas score");
+    expect(coverage.committed_artifact.model_deviation).toContain("claude-fable-5");
+    expect(coverage.committed_artifact.model_deviation).toContain("claude-sonnet-5");
+    expect(coverage.committed_artifact.recommended_follow_up).toContain("repo-atlas run");
   });
 });
 

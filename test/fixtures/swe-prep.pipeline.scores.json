@@ -2,483 +2,523 @@
   "profile": "interview",
   "rubric_version": "v1",
   "rubric_sha256": "a352eab93bef2ac0",
-  "generated_at": "2026-08-23T19:18:20.873Z",
-  "model": "claude-fable-5",
+  "generated_at": "2026-08-24T05:54:19.252Z",
+  "model": "claude-sonnet-5",
   "scores": [
     {
       "id": "d-issue-2-c5181222288",
       "score": 4,
-      "because": "decision with recorded rejected alternatives, though stack shape is partly assumable"
+      "because": "decision with several rejected alternatives on a seam that matters (platform/stack choice)"
     },
     {
       "id": "d-issue-3-c5180801286",
       "score": 4,
-      "because": "decision with a recorded rejected alternative on the core product seam"
+      "because": "decision with rejected alternative on a seam that matters (habit-retention design)"
     },
     {
-      "id": "d-issue-4-c5182805341",
+      "id": "d-issue-4-c5182805341-divergence",
       "score": 5,
-      "because": "decision with rich rejected alternatives on a licensing seam that matters"
+      "because": "honest edge: record/build divergence on a load-bearing architectural claim"
     },
     {
       "id": "d-issue-5-c5180987178",
       "score": 5,
-      "because": "decision with many recorded rejected alternatives and honest accepted costs"
+      "because": "decision with multiple rejected alternatives on the core product seam (judging honesty)"
     },
     {
       "id": "d-issue-6-c5181413478",
       "score": 5,
-      "because": "decision with rejected alternatives on the central architectural seam"
+      "because": "decision with rejected alternatives defining the core abstraction boundary"
     },
     {
       "id": "d-issue-7-c5182411379",
-      "score": 4,
-      "because": "decision with rejected alternatives plus an honest edge about failure"
+      "score": 5,
+      "because": "decision with rejected alternatives on an honest, hard seam (motivation design)"
     },
     {
       "id": "d-issue-8-c5182242970",
       "score": 5,
-      "because": "decision with rejected alternatives on a seam an interviewer will probe"
+      "because": "decision with rich rejected alternatives on a scarcity-driven scheduling seam"
     },
     {
       "id": "d-issue-9-c5181855182",
-      "score": 4,
-      "because": "decision with recorded rejected alternatives, narrower seam than its peers"
+      "score": 3,
+      "because": "decision but content-authoring domain leaning, thinner rejected alternative"
     },
     {
-      "id": "d-issue-10-c5182571856-divergence",
+      "id": "d-issue-10-c5182571856",
       "score": 5,
-      "because": "record-vs-build divergence, the honest edge to go first on"
+      "because": "decision with strong rejected alternatives on a real engineering tradeoff (dialect parity, isolation)"
     },
     {
       "id": "e-divergence-docker",
-      "score": 3,
-      "because": "honest divergence, but a minor README-vs-manifest drift"
+      "score": 4,
+      "because": "honest edge: record/build stack divergence"
     },
     {
       "id": "m-ci-guard-ci-yml-test-assert-no-private-content-is-committed",
-      "score": 4,
-      "because": "CI enforcement of the licensing rule, mechanism an interviewer will probe"
+      "score": 3,
+      "because": "enforcement mechanism, but CI/test-level rather than structural"
     },
     {
       "id": "m-sealed-backend-src-main-java-com-sweprep-backend-authoring-referenceexecutor-referenceexecutor-runresult",
       "score": 3,
-      "because": "type-level enforcement, one of several near-identical sealed sets"
+      "because": "type-level enforcement mechanism, moderate seam"
     },
     {
       "id": "m-sealed-backend-src-main-java-com-sweprep-backend-complexity-measurementoutcome-measurementoutcome",
       "score": 3,
-      "because": "type-level closed enumeration backing the honest inconclusive verdict"
+      "because": "type-level enforcement mechanism, moderate seam"
     },
     {
       "id": "m-sealed-backend-src-main-java-com-sweprep-backend-complexity-scalingmeasurer-scalingmeasurer-sizesample",
-      "score": 2,
-      "because": "type-level but an internal detail among many sealed sets"
+      "score": 3,
+      "because": "type-level enforcement mechanism, moderate seam"
     },
     {
       "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-comparison-comparison",
       "score": 3,
-      "because": "type-level enumeration on the grading contract seam"
+      "because": "type-level enforcement mechanism tied to grading/comparison design"
     },
     {
       "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-content-content",
       "score": 2,
-      "because": "type-level but a reader would infer the two kinds from the tree"
+      "because": "type-level mechanism but a reader would infer this split"
     },
     {
       "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-grading-grading",
       "score": 4,
-      "because": "type-level enforcement of the grader polymorphism decision"
+      "because": "type-level enforcement directly enacting the Grader/Runner split decision"
     },
     {
       "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-inputgenerator-inputgenerator-argument",
       "score": 2,
-      "because": "type-level but peripheral among many sealed sets"
+      "because": "type-level mechanism but a narrow, inferable case"
     },
     {
       "id": "m-sealed-backend-src-main-java-com-sweprep-backend-exercise-response-response",
-      "score": 3,
-      "because": "type-level enforcement of the response taxonomy the record decided"
+      "score": 4,
+      "because": "type-level enforcement underlying the orthogonal boundary with Grading"
     },
     {
       "id": "m-refuses-backend-src-main-java-com-sweprep-backend-grader-selfcheckgrader-selfcheckgrader-grade-exercise-string",
       "score": 3,
-      "because": "interesting deliberate asymmetry, enforced only by convention"
+      "because": "convention-level asymmetry an interviewer would probe (fail loud vs return)"
     },
     {
       "id": "b-asymmetry-backend-src-test-java-com-sweprep-backend-attempt-sqldomainpersistencetest-sqldomainpersistencetest-attemptrepository",
       "score": 2,
-      "because": "boundary held by field absence, inferable and convention-only"
+      "because": "boundary a reader would likely infer from the test's purpose"
     },
     {
       "id": "b-asymmetry-backend-src-test-java-com-sweprep-backend-attempt-sqldomainpersistencetest-sqldomainpersistencetest-currentuser",
       "score": 2,
-      "because": "boundary held by field absence, duplicate of its sibling finding"
+      "because": "boundary a reader would likely infer from the test's purpose"
     },
     {
       "id": "b-asymmetry-backend-src-test-java-com-sweprep-backend-content-answertellcheckertest-answertellcheckertest-string",
-      "score": 1,
-      "because": "a missing String field is noise, not a boundary"
+      "score": 2,
+      "because": "boundary a reader would likely infer from the test's purpose"
+    },
+    {
+      "id": "b-orthogonal-backend-src-main-java-com-sweprep-backend-exercise-exercise-grading-response",
+      "score": 4,
+      "because": "type-level boundary preventing combinatorial explosion, enforced not just convention"
+    },
+    {
+      "id": "b-partition-backend-src-main-java-com-sweprep-backend-grader-grader-grader-com-sweprep-backend-language",
+      "score": 3,
+      "because": "boundary enforcing the Grader split decision, moderately probeable"
+    },
+    {
+      "id": "b-partition-backend-src-main-java-com-sweprep-backend-grader-grader-grader-com-sweprep-backend-runner",
+      "score": 3,
+      "because": "boundary enforcing the Grader split decision, moderately probeable"
+    },
+    {
+      "id": "b-partition-backend-src-main-java-com-sweprep-backend-grader-grader-grader-com-sweprep-backend-sql",
+      "score": 3,
+      "because": "boundary enforcing the Grader split decision, moderately probeable"
+    },
+    {
+      "id": "b-superset-backend-src-main-java-com-sweprep-backend-attempt-submissionoutcome-submissionoutcome-verdict-outcome",
+      "score": 3,
+      "because": "enforced invariant an interviewer could probe, moderate seam"
+    },
+    {
+      "id": "e-self-disabling-backend-src-test-java-com-sweprep-backend-content-realcontentsmoketest",
+      "score": 4,
+      "because": "honest edge: a green suite masking untested guarded fixtures"
     },
     {
       "id": "m-sql-predicate-id-id-6702de03",
-      "score": 1,
-      "because": "id = :id is what a reader assumes from the stack"
+      "score": 2,
+      "because": "query-level invariant, real but low-visibility repeated predicate"
     },
     {
       "id": "m-sql-predicate-user-id-userid-532cb858",
       "score": 3,
-      "because": "query-level ownership invariant tied to the user-modeling decision"
+      "because": "query-level invariant enforcing user scoping across many queries, probeable"
     },
     {
       "id": "m-sql-predicate-outcome-read-6f889c17",
       "score": 2,
-      "because": "query-level invariant, real but narrow"
+      "because": "query-level invariant, narrow repeated predicate"
     },
     {
       "id": "m-sql-predicate-a-user-id-userid-da57b633",
-      "score": 1,
-      "because": "duplicate of the user_id ownership predicate finding"
+      "score": 2,
+      "because": "query-level invariant, narrow repeated predicate"
     },
     {
       "id": "e-unresolved-1",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-12",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-13",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-14",
-      "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "score": 2,
+      "because": "unresolved reference cited very widely (24 places), notable coverage gap"
     },
     {
       "id": "e-unresolved-15",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-16",
-      "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "score": 2,
+      "because": "unresolved reference cited very widely (46 places), notable coverage gap"
     },
     {
       "id": "e-unresolved-17",
-      "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "score": 2,
+      "because": "unresolved reference cited very widely (46 places), notable coverage gap"
     },
     {
       "id": "e-unresolved-18",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-19",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-20",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-21",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-22",
-      "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "score": 2,
+      "because": "unresolved reference cited widely (24 places), notable coverage gap"
     },
     {
       "id": "e-unresolved-24",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-25",
-      "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "score": 2,
+      "because": "unresolved reference cited widely (26 places), notable coverage gap"
     },
     {
       "id": "e-unresolved-26",
-      "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "score": 2,
+      "because": "unresolved reference cited widely (25 places), notable coverage gap"
     },
     {
       "id": "e-unresolved-31",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-34",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-37",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-38",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-39",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-40",
-      "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "score": 2,
+      "because": "unresolved reference cited widely (21 places), notable coverage gap"
     },
     {
       "id": "e-unresolved-41",
-      "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "score": 2,
+      "because": "unresolved reference cited very widely (38 places), notable coverage gap"
     },
     {
       "id": "e-unresolved-42",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-45",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-46",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-51",
-      "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "score": 2,
+      "because": "unresolved reference cited widely (34 places), notable coverage gap"
     },
     {
       "id": "e-unresolved-56",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote, and the cited issue does not even exist"
     },
     {
       "id": "e-unresolved-59",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-60",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-65",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-67",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "e-unresolved-69",
       "score": 1,
-      "because": "coverage gap footnote beside a rich decision record"
+      "because": "unresolved reference footnote beside a rich decision record"
     },
     {
       "id": "f-scale-lines",
-      "score": 2,
-      "because": "orientation figure, load-bearing for reading the rest"
+      "score": 3,
+      "because": "orientation figure that recalibrates how every other finding is read"
     },
     {
       "id": "f-scale-files",
-      "score": 1,
-      "because": "file count adds nothing beyond the line count, inventory"
+      "score": 2,
+      "because": "orientation figure that leans toward a bare count"
     },
     {
       "id": "f-scale-history",
       "score": 3,
-      "because": "orientation figure that changes how every finding is read"
+      "because": "orientation figure, the rubric's own example of a load-bearing figure"
     },
     {
       "id": "f-scale-tests",
+      "score": 3,
+      "because": "orientation figure setting how tested-ness of the codebase is read"
+    },
+    {
+      "id": "f-scale-test-lines",
+      "score": 3,
+      "because": "orientation figure setting the test-to-production ratio context"
+    },
+    {
+      "id": "f-scale-migrations",
       "score": 2,
-      "because": "orientation figure on test weight, read before the rest"
+      "because": "orientation figure that leans toward a bare count"
     },
     {
       "id": "fl-http-attemptcontroller-history-d7eff2e5",
       "score": 1,
-      "because": "controller-to-repository wrapper, route inventory"
+      "because": "controller-to-repo wrapper, route inventory"
     },
     {
       "id": "fl-http-attemptcontroller-start-2510fd01",
       "score": 2,
-      "because": "crosses dispatch and write but same layers as the submit story"
+      "because": "mostly CRUD wrapper with a modest dispatch/write boundary"
     },
     {
       "id": "fl-http-attemptcontroller-submit-7633fd7a",
       "score": 5,
-      "because": "complete request narrative exposing dispatch, runner, write and side-effect seams"
+      "because": "complete request/response Flow crossing dispatch, transaction, process, and side-effect boundaries"
     },
     {
       "id": "fl-http-attemptcontroller-takehint-2209c8d5",
-      "score": 1,
-      "because": "another route through the same layers as submit"
+      "score": 2,
+      "because": "mostly CRUD wrapper with modest read/write boundary"
     },
     {
       "id": "fl-http-attemptcontroller-explanation-57909c0c",
-      "score": 1,
-      "because": "another route through the same layers as submit"
+      "score": 2,
+      "because": "mostly CRUD wrapper with modest read/write boundary"
     },
     {
       "id": "fl-http-attemptcontroller-claimcomplexity-ba438616",
       "score": 4,
-      "because": "request narrative exposing the scaling-measurement seam beyond a wrapper"
+      "because": "Flow exposing real measurement/process seams beyond a controller wrapper"
     },
     {
       "id": "fl-http-attemptcontroller-abandon-ee6b6117",
       "score": 1,
-      "because": "controller-to-service wrapper, route inventory"
+      "because": "controller-to-repo wrapper, route inventory"
     },
     {
       "id": "fl-http-attemptcontroller-reveal-2d393391",
-      "score": 3,
-      "because": "deep dispatch chain, but a near-duplicate of the submit story"
+      "score": 4,
+      "because": "Flow exposing grader dispatch and process execution seams"
     },
     {
       "id": "fl-http-attemptcontroller-revealselfcheck-74885dc6",
-      "score": 1,
-      "because": "another route through the same layers"
+      "score": 2,
+      "because": "mostly CRUD wrapper with modest dispatch boundary"
     },
     {
       "id": "fl-http-attemptcontroller-rateselfcheck-4d8c2168",
       "score": 1,
-      "because": "controller-to-service wrapper, route inventory"
+      "because": "controller-to-repo wrapper, route inventory"
     },
     {
       "id": "fl-http-challengecontroller-next-a33098d4",
       "score": 0,
-      "because": "absent flow, nothing to say out loud"
+      "because": "absent Flow, no content to report"
     },
     {
       "id": "fl-http-exercisecontroller-list-517c5e13",
       "score": 1,
-      "because": "catalog read wrapper, route inventory"
+      "because": "listing endpoint, route inventory"
     },
     {
       "id": "fl-http-exercisecontroller-get-28ff3bdc",
       "score": 1,
-      "because": "catalog read wrapper, route inventory"
+      "because": "controller-to-catalog wrapper, route inventory"
     },
     {
       "id": "fl-http-languagecontroller-list-d2c95073",
       "score": 0,
-      "because": "controller wrapper only, route inventory"
+      "because": "trivial wrapper, no seam exposed"
     },
     {
       "id": "fl-http-lessoncontroller-list-1c0fddb2",
       "score": 0,
-      "because": "absent flow, nothing to say out loud"
+      "because": "absent Flow, no content to report"
     },
     {
       "id": "fl-http-lessoncontroller-get-8aff5f5c",
       "score": 1,
-      "because": "catalog read wrapper, route inventory"
+      "because": "controller-to-catalog wrapper, route inventory"
     },
     {
       "id": "fl-http-lessoncontroller-read-0ca0335e",
       "score": 1,
-      "because": "thin write route through the same layers"
+      "because": "controller-to-repo wrapper, route inventory"
     },
     {
       "id": "fl-http-readinesscontroller-summary-9e451392",
-      "score": 2,
-      "because": "real fan-out but the lineage flow tells this story better"
+      "score": 3,
+      "because": "Flow with real domain computation beyond a plain wrapper, but no deep boundary crossing"
     },
     {
       "id": "fl-http-repcontroller-warmup-3e24c198",
       "score": 0,
-      "because": "absent flow, nothing to say out loud"
+      "because": "absent Flow, no content to report"
     },
     {
       "id": "fl-http-rolecontroller-status-099ef81a",
       "score": 0,
-      "because": "controller wrapper only, route inventory"
+      "because": "trivial wrapper, no seam exposed"
     },
     {
       "id": "fl-http-rolecontroller-select-6bec2b0a",
       "score": 0,
-      "because": "controller wrapper only, route inventory"
+      "because": "trivial wrapper, no seam exposed"
     },
     {
       "id": "fl-http-sessioncontroller-status-b7d33ae7",
       "score": 0,
-      "because": "controller wrapper only, route inventory"
+      "because": "trivial wrapper, no seam exposed"
     },
     {
       "id": "fl-http-sessioncontroller-completewarmup-25355801",
       "score": 0,
-      "because": "controller wrapper only, route inventory"
+      "because": "trivial wrapper, no seam exposed"
     },
     {
       "id": "fl-cli-backendapplication-main-200f92d6",
       "score": 0,
-      "because": "absent flow, nothing to say out loud"
+      "because": "absent Flow, no content to report"
     },
     {
       "id": "fl-cli-authorcontentcli-main-9ff16c77",
       "score": 3,
-      "because": "crosses real boundaries into the authoring pipeline, unknown archetype"
+      "because": "process Flow showing a real content-authoring pipeline with verification, moderate boundary crossing"
     },
     {
       "id": "fl-record-attemptrepository-repdueservice-682d01a3",
       "score": 0,
-      "because": "absent flow, nothing to say out loud"
+      "because": "absent Flow, no content to report"
     },
     {
       "id": "fl-record-attemptrepository-warmupservice-2ed0740d",
       "score": 0,
-      "because": "absent flow, nothing to say out loud"
+      "because": "absent Flow, no content to report"
     },
     {
       "id": "fl-record-attemptrepository-attemptedexerciseids-a78e82a7",
-      "score": 4,
-      "because": "shared-state lineage with distinct predicates, lacks the independence claim"
+      "score": 5,
+      "because": "shared-state lineage Flow with distinct, independently meaningful derivations over one durable record"
     },
     {
       "id": "fl-record-submissionrepository-countsforattempts-c6f6f0b5",
       "score": 5,
-      "because": "shared-state lineage with distinct predicates and a verified independence claim"
+      "because": "shared-state lineage Flow with a proven closed-negative independence claim across derivations"
     },
     {
       "id": "fl-record-rolerepository-activefamilies-2053119f",
       "score": 0,
-      "because": "absent flow, nothing to say out loud"
+      "because": "absent Flow, no content to report"
     },
     {
       "id": "fl-record-daycompletionrepository-find-63474db1",
       "score": 0,
-      "because": "absent flow, nothing to say out loud"
+      "because": "absent Flow, no content to report"
     },
     {
       "id": "fl-unit-swe-prep-daily-cue-service-c6f5c6f3",
       "score": 0,
-      "because": "absent flow, nothing to say out loud"
+      "because": "absent Flow, no content to report"
     }
   ]
 }

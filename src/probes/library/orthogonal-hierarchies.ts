@@ -39,6 +39,18 @@ import type { Candidate, Probe } from "../types.js";
 import { declaredTypes, type DeclaredType } from "../declared.js";
 import { pathSlug, slug } from "../id.js";
 
+/**
+ * A permitted member's simple name.
+ *
+ * A `permits` clause may name its members qualified (`Response.Code`,
+ * `com.x.Code`) or bare, and the containment guard below is what stops one
+ * hierarchy that is a CASE of another from being called orthogonal to it.
+ * Comparing the clause text verbatim would let `permits com.x.Inner` slip past a
+ * check looking for `Inner`, so both guards compare simple names - the same
+ * reduction `declared.ts` makes for a held type.
+ */
+const simpleName = (permitted: string): string => permitted.split(".").pop() ?? permitted;
+
 export const orthogonalHierarchies: Probe = {
   id: "orthogonal-hierarchies",
   /** The parse tree is the reading: two `permits` lists and a carrier's own components (#28). */
@@ -55,8 +67,10 @@ export const orthogonalHierarchies: Probe = {
         const a = sealed[i] as DeclaredType;
         const b = sealed[j] as DeclaredType;
         // One hierarchy that is a case of the other is one axis, not two.
-        if (a.permits.includes(b.name) || b.permits.includes(a.name)) continue;
-        if (a.permits.some((p) => b.permits.includes(p))) continue;
+        const permittedA = a.permits.map(simpleName);
+        const permittedB = b.permits.map(simpleName);
+        if (permittedA.includes(b.name) || permittedB.includes(a.name)) continue;
+        if (permittedA.some((p) => permittedB.includes(p))) continue;
 
         const carriers = types.filter((c) => c.holds.has(a.name) && c.holds.has(b.name));
         const carrier = carriers[0];

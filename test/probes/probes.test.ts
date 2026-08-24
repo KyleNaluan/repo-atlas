@@ -1805,6 +1805,22 @@ describe("orthogonal-hierarchies", () => {
     expect(found).toEqual([]);
   }, 60_000);
 
+  it("sees through a qualified permits clause when checking containment", async () => {
+    // A `permits` clause may name its members qualified. Comparing the clause
+    // text verbatim would let `permits e.Inner` slip past a check looking for
+    // `Inner`, and one hierarchy that is a CASE of the other would then be drawn
+    // as orthogonal to it - exactly backwards.
+    const found = await candidatesFrom(
+      "orthogonal-hierarchies",
+      contextFor({
+        "e/Outer.java": "package e;\nsealed interface Outer permits e.Inner, e.Other {}\n",
+        "e/Inner.java": "package e;\nsealed interface Inner extends Outer permits e.A, e.B {}\n",
+        "e/Holder.java": "package e;\nrecord Holder(Outer outer, Inner inner) {}\n",
+      }),
+    );
+    expect(found).toEqual([]);
+  }, 60_000);
+
   it("does not count a collection of one side as holding one", async () => {
     // A type holding `List<Response>` is not answered by one response, so the
     // "every pairing is expressible" sentence would not follow from it. `holds`

@@ -112,18 +112,12 @@ class Reader {
             out += "\t";
             this.i += 1;
             break;
-          case "u": {
-            const hex = this.text.slice(this.i + 1, this.i + 5);
-            out += String.fromCodePoint(parseInt(hex, 16));
-            this.i += 5;
+          case "u":
+            out += this.readUnicodeEscape(4);
             break;
-          }
-          case "U": {
-            const hex = this.text.slice(this.i + 1, this.i + 9);
-            out += String.fromCodePoint(parseInt(hex, 16));
-            this.i += 9;
+          case "U":
+            out += this.readUnicodeEscape(8);
             break;
-          }
           default:
             throw new ParseError(`bad escape at offset ${this.i}`);
         }
@@ -132,6 +126,25 @@ class Reader {
       out += c;
       this.i += 1;
     }
+  }
+
+  /**
+   * `this.i` is at the `u`/`U` escape letter; read `width` hex digits after it.
+   * A missing digit, a non-hex digit, or a scalar value outside Unicode's range
+   * is unreadable TOML and throws `ParseError`, the same "unrecognized, not
+   * empty" outcome every other malformed construct here yields.
+   */
+  private readUnicodeEscape(width: number): string {
+    const hex = this.text.slice(this.i + 1, this.i + 1 + width);
+    if (hex.length !== width || !/^[0-9A-Fa-f]+$/.test(hex)) {
+      throw new ParseError(`bad unicode escape at offset ${this.i}`);
+    }
+    const cp = parseInt(hex, 16);
+    if (cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) {
+      throw new ParseError(`unicode escape out of range at offset ${this.i}`);
+    }
+    this.i += 1 + width;
+    return String.fromCodePoint(cp);
   }
 
   private parseLiteralString(): string {

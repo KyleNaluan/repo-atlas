@@ -1277,6 +1277,49 @@ app.include_router(outer, prefix="/api")
   }, 60_000);
 });
 
+describe("an app constructed and mounted inside a factory is still a host", () => {
+  it("composes and gate-confirms a route whose app lives in a `create_app()` def", async () => {
+    // dsa declares `app = FastAPI(...)` inside `create_app()` with its
+    // `include_router` calls in the same body (app.py:61,86-88) - standard
+    // FastAPI. A module-level-only host reader saw no app, so every route was cut
+    // `nested_mount:`; the host reader now recognises a factory-scoped app, and the
+    // gate re-derives it from the same cited span, so producer and gate agree.
+    const subject = {
+      "app/__init__.py": INIT,
+      "app/routes.py": `from fastapi import APIRouter
+
+from app import records
+
+router = APIRouter(prefix="/records")
+
+
+@router.get("/{record_id}")
+def show(record_id: str) -> str:
+    return records.render(record_id)
+`,
+      "app/main.py": `from fastapi import FastAPI
+
+from app import routes
+
+
+def create_app() -> FastAPI:
+    app = FastAPI()
+    app.include_router(routes.router, prefix="/api")
+    return app
+`,
+      "app/records.py": RECORDS,
+      "app/store.py": STORE,
+    };
+    const ctx = contextFor(subject);
+    const candidates = await runAdapter("flow-python-fastapi-http", ctx);
+    // Not cut: the factory-scoped app is recognised as a host.
+    expect(cutReasons(candidates)).toEqual([]);
+    const served = only(verifiedOnly(candidates));
+    expect(flowOf(served).steps[0]!.node).toBe("GET /api/records/{}");
+    expect(gateCandidate(ctx, served).verdict).toBe("confirmed");
+  }, 60_000);
+});
+
 describe("the gate resolves an aliased mount to the router the producer named", () => {
   it("confirms `from routes import router as r; app.include_router(r, ...)`", async () => {
     const subject = {

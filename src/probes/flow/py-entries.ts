@@ -93,29 +93,36 @@ interface RouteHost {
 const CONSTRUCTORS: Record<string, RouteHost["kind"]> = { FastAPI: "app", APIRouter: "router" };
 
 /**
- * The FastAPI apps and routers one module declares at module level.
+ * The FastAPI apps and routers one module declares, at any nesting depth.
  *
- * Module level only, and deliberately: a router built inside a function is one
- * whose identity the gate cannot re-derive from a declaration in the file, and
- * "the producer resolves no further than the gate can re-resolve" is the rule
- * that decides every stop in this adapter.
+ * A host is an identifier assigned a `FastAPI(...)` or `APIRouter(...)`
+ * construction, whether that assignment sits at module level or inside a function
+ * body - the app-factory pattern (`app = FastAPI(...)` inside `create_app()`, dsa
+ * `app.py:61`) is standard FastAPI, and the gate re-derives each host by the same
+ * textual `= FastAPI(`/`= APIRouter(` shape from the cited span regardless of
+ * where it is nested, so "the producer resolves no further than the gate can
+ * re-resolve" holds either way.
+ *
+ * An identifier the file assigns a host construction more than once cannot be
+ * pinned to one host, so it is dropped (fail closed) rather than resolved to
+ * whichever assignment was read last - the same "identity pinned exactly or not
+ * at all" rule the router-mount reader keeps.
  */
 const routeHostsIn = (root: SyntaxNode, path: string): Map<string, RouteHost> => {
   const out = new Map<string, RouteHost>();
-  for (const statement of namedChildren(root)) {
-    const assignment =
-      statement.type === "assignment"
-        ? statement
-        : statement.type === "expression_statement"
-          ? namedChildren(statement).find((child) => child.type === "assignment") ?? null
-          : null;
-    if (!assignment) continue;
+  const ambiguous = new Set<string>();
+  for (const assignment of findAll(root, "assignment")) {
     const left = assignment.childForFieldName("left");
     const right = assignment.childForFieldName("right");
     if (left?.type !== "identifier" || right?.type !== "call") continue;
     const callee = right.childForFieldName("function");
     const constructor = callee?.type === "identifier" ? CONSTRUCTORS[callee.text] : undefined;
     if (constructor === undefined) continue;
+    if (out.has(left.text) || ambiguous.has(left.text)) {
+      ambiguous.add(left.text);
+      out.delete(left.text);
+      continue;
+    }
     const prefixNode = keywordArgument(right, "prefix");
     const prefix = prefixNode === null ? null : stringLiteral(prefixNode);
     out.set(left.text, {

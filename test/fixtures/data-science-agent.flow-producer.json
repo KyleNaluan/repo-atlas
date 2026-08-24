@@ -15,7 +15,7 @@
   },
   "survival": {
     "candidates": 11,
-    "verified_by_the_gate": 7,
+    "verified_by_the_gate": 8,
     "overturned_by_the_gate": 0
   },
   "adapters": [
@@ -61,6 +61,18 @@
           ]
         },
         {
+          "title": "GET /runs/{}/events, entry to terminal",
+          "steps": 3,
+          "links": 2,
+          "narrative_depth": 3,
+          "archetype": "request_response",
+          "components": [
+            "GET /runs/{}/events",
+            "Store",
+            "store"
+          ]
+        },
+        {
           "title": "GET /runs/{}/report, entry to terminal",
           "steps": 3,
           "links": 2,
@@ -97,7 +109,7 @@
         }
       ],
       "cut_by_reason": {
-        "chained_call": 2,
+        "chained_call": 1,
         "unresolved_receiver_type": 1
       },
       "overturned_by_the_gate": []

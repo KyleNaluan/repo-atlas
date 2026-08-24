@@ -732,15 +732,18 @@ describe("the Python adapter, measured on the two subjects #52 pins", () => {
 
   it("records the survival rate rather than predicting it (risk R1)", () => {
     // PR 4's first Java measurement was 3 of 23 routes. The report deliberately
-    // declined to guess Python's, so this is the first measurement of it: 14 of
-    // the 23 routes across both subjects verify, plus two program entries and the
-    // one declared topology.
+    // declined to guess Python's, so this is the measured value: 15 of the 23
+    // routes across both subjects verify, plus three program entries and the one
+    // declared topology. dsa's `app` is declared in a `create_app()` factory, so
+    // its routes verify only once the host reader recognises a factory-scoped app
+    // (both producer and gate do); ftb's `prop_eval_backtest.main` joins on the
+    // direct-import process-launch fix.
     const routes = (fixture: PythonFixture) =>
       adapterIn(fixture, "flow-python-fastapi-http").verified_by_the_gate!.length;
-    expect(routes(dsa)).toBe(6);
+    expect(routes(dsa)).toBe(7);
     expect(routes(ftb)).toBe(8);
-    expect(dsa.survival.verified_by_the_gate).toBe(7);
-    expect(ftb.survival.verified_by_the_gate).toBe(10);
+    expect(dsa.survival.verified_by_the_gate).toBe(8);
+    expect(ftb.survival.verified_by_the_gate).toBe(11);
   });
 
   it("verifies the flagship route the design record hand-walked", () => {
@@ -804,7 +807,6 @@ describe("the Python adapter, measured on the two subjects #52 pins", () => {
       "no_terminal_reached",
       "unresolved_dispatch",
       "unresolved_receiver_type",
-      "unresolved_target",
     ]);
     // D1's refusal is emitted, once per declared callback, rather than left as an
     // absence: six on ftb, which is the count the report measured.

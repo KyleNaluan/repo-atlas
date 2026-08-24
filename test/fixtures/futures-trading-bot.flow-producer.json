@@ -15,7 +15,7 @@
   },
   "survival": {
     "candidates": 37,
-    "verified_by_the_gate": 10,
+    "verified_by_the_gate": 11,
     "overturned_by_the_gate": 0
   },
   "adapters": [
@@ -167,6 +167,29 @@
             "OrderEventRecord",
             "OperatorEventRecord"
           ]
+        },
+        {
+          "title": "prop_eval_backtest.main run as a program, entry to terminal",
+          "steps": 14,
+          "links": 22,
+          "narrative_depth": 5,
+          "archetype": "unknown",
+          "components": [
+            "prop_eval_backtest.main",
+            "sessions",
+            "setup_v1_backtest",
+            "catalog",
+            "instruments",
+            "orb",
+            "TopstepConfig",
+            "PropEvalConfig",
+            "guards",
+            "orb_engine",
+            "FeatureContext",
+            "news",
+            "calendar_build",
+            "prop_eval"
+          ]
         }
       ],
       "cut_by_reason": {
@@ -174,9 +197,8 @@
         "framework_callback_unestablished": 6,
         "no_arrow_drawn": 1,
         "no_terminal_reached": 1,
-        "unresolved_dispatch": 5,
-        "unresolved_receiver_type": 6,
-        "unresolved_target": 1
+        "unresolved_dispatch": 6,
+        "unresolved_receiver_type": 5
       },
       "overturned_by_the_gate": []
     },

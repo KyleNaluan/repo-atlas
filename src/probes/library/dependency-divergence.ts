@@ -32,7 +32,7 @@ const CLAIMED: { tech: string; aliases: string[] }[] = [
   { tech: "redis", aliases: ["redis"] },
   { tech: "kafka", aliases: ["kafka"] },
   { tech: "rabbitmq", aliases: ["rabbitmq"] },
-  { tech: "mongodb", aliases: ["mongodb", "pymongo", "motor"] },
+  { tech: "mongodb", aliases: ["mongodb", "pymongo"] },
   { tech: "elasticsearch", aliases: ["elasticsearch"] },
   { tech: "docker", aliases: ["docker"] },
   { tech: "testcontainers", aliases: ["testcontainers"] },

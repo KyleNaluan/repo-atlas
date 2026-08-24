@@ -38,6 +38,7 @@
  */
 import { walk, type SyntaxNode } from "../java.js";
 import {
+  annotationElement,
   annotationName,
   endLineOf,
   findAll,
@@ -204,6 +205,18 @@ interface ValueDecl {
   /** The initialising expression, when the declaration is an assignment. */
   init: SyntaxNode | null;
   /**
+   * True when the name holds ONE ELEMENT of `init` rather than `init` itself - a
+   * `for` target or a comprehension variable.
+   *
+   * It changes what "unresolvable" means at a call site. A collection the subject
+   * declares an element type for is a set this phase does NOT close (#52, D3
+   * rejects both type closure and value closure), so a call on one of its
+   * elements is a named `unresolved_dispatch:` stop rather than a silence -
+   * whereas iterating somebody else's list is foreign, and gapping on that would
+   * report a hole in a story that has none.
+   */
+  element?: boolean;
+  /**
    * True when the declaration is a PARAMETER rather than a local.
    *
    * `candidate.ts` reads this through `TraceEdge.heldReceiver`: a collaborator the
@@ -302,11 +315,15 @@ const valueScope = (definition: SyntaxNode, body: SyntaxNode): ValueScope => {
       const left = node.childForFieldName("left");
       const right = node.childForFieldName("right");
       if (left?.type !== "identifier" || right === null) return;
-      // The ITERATED expression is what types the loop variable, and the shared
-      // annotation reader already reduces a container to its element - so a
-      // same-file `-> list[IntradayCommand]` types `command` in
-      // `for command in self._driver.on_nq_bar(bar)`.
-      remember(left.text, { annotation: null, init: right, parameter: false }, node);
+      remember(left.text, { annotation: null, init: right, parameter: false, element: true }, node);
+      return;
+    }
+    if (node.type === "for_in_clause") {
+      const left = node.childForFieldName("left");
+      const right = node.childForFieldName("right");
+      if (left?.type === "identifier" && right !== null) {
+        remember(left.text, { annotation: null, init: right, parameter: false, element: true }, node);
+      }
       return;
     }
     if (node.type === "as_pattern") {
@@ -478,6 +495,24 @@ const expressionType = (
     const value = values.get(expr.text);
     if (value !== undefined) {
       if (value.annotation !== null) return namedType(frame, annotationName(value.annotation));
+      // One element of a collection whose element type the subject NAMES. v1
+      // closes no set through such a collection (#52, D3), so this is a named
+      // stop; a collection the subject names no element for stays whatever its
+      // own expression resolves to, which is foreign for somebody else's list.
+      // The element is read off the iterated NAME's annotation, exactly as Java's
+      // `streamElementType` reads it off a field's declaration and stops when the
+      // collection is rooted in a call instead.
+      if (value.element === true && value.init?.type === "identifier") {
+        const iterated = values.get(value.init.text);
+        const element = annotationElement(iterated?.annotation ?? null);
+        if (element !== null && namedType(frame, element).kind === "subject") {
+          return {
+            kind: "unestablished",
+            kindToken: "unresolved_dispatch",
+            why: `\`${expr.text}\` is one element of \`${value.init.text}\`, declared over ${element}, and no declaration closes that set`,
+          };
+        }
+      }
       if (value.init === null) {
         return {
           kind: "unestablished",

@@ -350,6 +350,40 @@ export const annotationName = (node: SyntaxNode | null): string | null => {
 const TRANSPARENT = new Set(["Optional", "type", "Type", "Final", "Annotated", "ClassVar"]);
 
 /**
+ * The ELEMENT type a container annotation names, or null when it names none.
+ *
+ * The mirror image of `annotationName`, and the two are deliberately separate.
+ * `list[Tool]` denotes a list and a receiver typed from it is a list, which is why
+ * `annotationName` refuses to unwrap it; but "one element of this collection" is a
+ * real question a `for` target asks, and this is the only place it is answered.
+ * The last argument is taken for the same reason Java's `injectedElementType`
+ * takes the last of a `Map<String, T>`: that is where the element sits.
+ */
+export const annotationElement = (node: SyntaxNode | null): string | null => {
+  if (node === null) return null;
+  if (node.type === "type") return annotationElement(namedChildren(node)[0] ?? null);
+  if (node.type === "generic_type" || node.type === "subscript") {
+    const container = annotationName(node.childForFieldName("value") ?? namedChildren(node)[0] ?? null);
+    const parameter = namedChildren(node).find((child) => child.type === "type_parameter");
+    const elements = (parameter ? namedChildren(parameter) : namedChildren(node).slice(1)).filter(
+      (child) => child.type !== "comment" && child.type !== "slice",
+    );
+    const last = elements[elements.length - 1];
+    if (container === null || last === undefined) return null;
+    // A transparent wrapper is the same object, so its argument is not an element:
+    // iterating an `Optional[Store]` iterates a `Store`, not a collection of them.
+    return TRANSPARENT.has(container) ? null : annotationName(last);
+  }
+  if (node.type === "binary_operator") {
+    const left = node.childForFieldName("left");
+    const right = node.childForFieldName("right");
+    if (node.childForFieldName("operator")?.text !== "|") return null;
+    return right?.type === "none" ? annotationElement(left) : left?.type === "none" ? annotationElement(right) : null;
+  }
+  return null;
+};
+
+/**
  * Every union member an annotation names, when it names more than one.
  *
  * `annotationName` refuses a genuine union because no single name is what it

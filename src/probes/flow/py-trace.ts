@@ -42,6 +42,7 @@ import {
   annotationName,
   endLineOf,
   findAll,
+  keywordArgument,
   lineOf,
   nameOf,
   namedChildren,
@@ -199,13 +200,16 @@ const outsideEffectOf = (
       }
     }
     if (name === "open") {
-      // Only a POSITIONAL string-literal second argument is the mode. A keyword
-      // like `encoding="ascii"` or `newline=""` is not one, and reading its text as
-      // a mode flipped the box to a filesystem WRITE on a stray `a`/`w`/`x` in the
-      // keyword name, changing the box's effect, its edge relation and whether it is
-      // a terminal.
+      // The mode is the POSITIONAL string-literal second argument OR a `mode=`
+      // keyword string literal. Any other keyword (`encoding="ascii"`,
+      // `newline=""`) is not one, and reading its text as a mode flipped the box to
+      // a filesystem WRITE on a stray `a`/`w`/`x` in the keyword name, changing the
+      // box's effect, its edge relation and whether it is a terminal. Reading ONLY
+      // the positional second arg missed the equally common `open(path, mode="w")`,
+      // which is a genuine write, so both string-literal shapes settle the mode.
       const positional = positionalArguments(node);
-      const mode = positional[1] !== undefined ? stringLiteral(positional[1]) : null;
+      const modeArg = positional[1] ?? keywordArgument(node, "mode");
+      const mode = modeArg !== undefined && modeArg !== null ? stringLiteral(modeArg) : null;
       if (mode !== null && WRITE_MODE.test(mode)) external = external ?? "filesystem";
       else durable = durable ?? "read";
       return;
@@ -549,13 +553,35 @@ const iteratedElementType = (
   }
   if (init.type === "call") {
     const callee = init.childForFieldName("function");
-    const bound = callee?.type === "identifier" ? frame.bindings.get(callee.text) : undefined;
-    if (bound?.kind === "symbol") {
-      const owning = frame.index.modules.get(bound.path);
-      const method = owning === undefined ? null : methodNamed(owning, bound.name);
-      const definition = method?.body?.parent;
-      if (definition?.type === "function_definition") {
-        return annotationElement(definition.childForFieldName("return_type"));
+    if (callee?.type === "identifier") {
+      const bound = frame.bindings.get(callee.text);
+      if (bound?.kind === "symbol") {
+        const owning = frame.index.modules.get(bound.path);
+        const method = owning === undefined ? null : methodNamed(owning, bound.name);
+        const definition = method?.body?.parent;
+        if (definition?.type === "function_definition") {
+          return annotationElement(definition.childForFieldName("return_type"));
+        }
+      }
+    }
+    // `for x in self.get_items():` / `for x in obj.method():` - the receiver is
+    // typed by the SAME rules the tracer already applies to a call receiver, and the
+    // method's declaration is re-read for its return ELEMENT. When that element is a
+    // subject type, the caller's D3 check turns the subsequent `x.m()` into a named
+    // `unresolved_dispatch:` stop rather than letting the collection reduce to `list`
+    // and drop the dispatch as foreign in silence.
+    if (callee?.type === "attribute") {
+      const name = callee.childForFieldName("attribute")?.text;
+      const owner = expressionType(frame, values, callee.childForFieldName("object"));
+      if (name !== undefined && owner.kind === "subject") {
+        const found =
+          owner.type === frame.index.modules.get(owner.type.path)
+            ? methodNamed(owner.type, name)
+            : (methodOnClass(frame.index, owner.type, name)?.method ?? null);
+        const definition = found?.body?.parent;
+        if (definition?.type === "function_definition") {
+          return annotationElement(definition.childForFieldName("return_type"));
+        }
       }
     }
   }

@@ -978,6 +978,67 @@ class Service:
     // refusal to close a set through a collection quarantines the Flow.
     expect(trace.gaps.some((g) => g.kind === "unresolved_dispatch")).toBe(true);
   }, 60_000);
+
+  it("reaches the stop for `for r in self.get_records()`, a method-returning collection", async () => {
+    const trace = await traceEntry(
+      {
+        "app/__init__.py": INIT,
+        "app/rec.py": `class Rec:
+    def process(self) -> None:
+        pass
+`,
+        "app/svc.py": `from app.rec import Rec
+
+
+class Service:
+    def get_records(self) -> list[Rec]:
+        return []
+
+    def run(self) -> None:
+        for r in self.get_records():
+            r.process()
+`,
+      },
+      "app/svc.py",
+      "Service",
+      "run",
+    );
+    // The iterable is a method call, not a field; its return element is re-read off
+    // the method's declaration so the subject element is named rather than reduced
+    // to `list` and dropped as foreign in silence.
+    expect(trace.gaps.some((g) => g.kind === "unresolved_dispatch")).toBe(true);
+  }, 60_000);
+
+  it("reaches the stop for `for x in helper.items()`, a parameter receiver's method", async () => {
+    const trace = await traceEntry(
+      {
+        "app/__init__.py": INIT,
+        "app/rec.py": `class Rec:
+    def process(self) -> None:
+        pass
+`,
+        "app/svc.py": `from app.rec import Rec
+
+
+class Helper:
+    def items(self) -> list[Rec]:
+        return []
+
+
+class Service:
+    def run(self, helper: Helper) -> None:
+        for x in helper.items():
+            x.process()
+`,
+      },
+      "app/svc.py",
+      "Service",
+      "run",
+    );
+    // The same rule applies to a local/parameter receiver typed to a subject class;
+    // `helper.items()` returns `list[Rec]`, so `x.process()` is the D3 stop.
+    expect(trace.gaps.some((g) => g.kind === "unresolved_dispatch")).toBe(true);
+  }, 60_000);
 });
 
 describe("a module-level foreign attribute is not a hole across modules", () => {
@@ -1023,6 +1084,57 @@ describe("an open() keyword argument is not read as a write mode", () => {
     const entry = trace.landmarks.get(trace.entry)!;
     // The `a` in `ascii` and the `w` in `newline` are not a mode; only a positional
     // string literal is, so the box stays a read rather than flipping to a write.
+    expect(entry.externalEffect).toBeUndefined();
+    expect(entry.dataAccess?.relation).toBe("read");
+  }, 60_000);
+
+  it("classifies `open(path, mode=\"w\")` as a filesystem write, not a durable read", async () => {
+    const trace = await traceEntry(
+      {
+        "app/__init__.py": INIT,
+        "app/io.py": `def save(data: str) -> None:
+    open("out", mode="w").write(data)
+`,
+      },
+      "app/io.py",
+      null,
+      "save",
+    );
+    const entry = trace.landmarks.get(trace.entry)!;
+    // The write mode arrives as a `mode=` keyword; reading only the positional second
+    // argument missed it and flipped a genuine write to a durable read.
+    expect(entry.externalEffect).toBe("filesystem");
+    expect(entry.dataAccess).toBeUndefined();
+  }, 60_000);
+
+  it("classifies `open(path, \"w\")` as a filesystem write", async () => {
+    const trace = await traceEntry(
+      {
+        "app/__init__.py": INIT,
+        "app/io.py": `def save(data: str) -> None:
+    open("out", "w").write(data)
+`,
+      },
+      "app/io.py",
+      null,
+      "save",
+    );
+    expect(trace.landmarks.get(trace.entry)!.externalEffect).toBe("filesystem");
+  }, 60_000);
+
+  it("classifies `open(path, newline=\"\")` as a durable read, not a write", async () => {
+    const trace = await traceEntry(
+      {
+        "app/__init__.py": INIT,
+        "app/io.py": `def load() -> str:
+    return open("cfg", newline="").read()
+`,
+      },
+      "app/io.py",
+      null,
+      "load",
+    );
+    const entry = trace.landmarks.get(trace.entry)!;
     expect(entry.externalEffect).toBeUndefined();
     expect(entry.dataAccess?.relation).toBe("read");
   }, 60_000);

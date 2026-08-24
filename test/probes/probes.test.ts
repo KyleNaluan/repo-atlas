@@ -12,6 +12,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { declaredIn } from "../../src/probes/manifests.js";
 import {
   dedupeCandidateFindings,
   dedupeCandidateIds,
@@ -1167,6 +1168,138 @@ describe("dependency-divergence", () => {
     expect(result.verdict).toBe("unresolved");
     expect(result.node.confidence).toBe("attested");
   }, 60_000);
+
+  it("enumerates a Python subject's dependencies out of pyproject.toml instead of reporting unrecognized", async () => {
+    // The whole point of #35-style manifest coverage: a Python subject used to
+    // report `recognized: false` on every manifest and the probe found nothing
+    // to say. A real declaration now produces a real divergence.
+    const ctx = contextFor({
+      "README.md": "Runs on Postgres and Redis.\n",
+      "pyproject.toml": '[project]\ndependencies = ["redis>=5.0"]\n',
+    });
+    const found = await candidatesFrom("dependency-divergence", ctx);
+    expect(found.map((c) => c.node.id)).toEqual(["e-divergence-postgres"]);
+  }, 60_000);
+
+  it("does not diverge when pyproject.toml declares the technology under another alias", async () => {
+    const ctx = contextFor({
+      "README.md": "Runs on Postgres.\n",
+      "pyproject.toml": '[project]\ndependencies = ["postgresql>=3.2"]\n',
+    });
+    expect(await candidatesFrom("dependency-divergence", ctx)).toEqual([]);
+  }, 60_000);
+});
+
+describe("declaredIn: pyproject.toml", () => {
+  // #35's manifest coverage was Java and JS build files only, which left every
+  // Python subject reporting `recognized: false` and the dependency-divergence
+  // probe contributing nothing (this task's brief). The reading follows the
+  // same rule as pom.xml and Gradle above: structural declaration parsing, one
+  // rule shared by the probe and the gate that re-checks it (manifests.ts).
+
+  it("reads PEP 621 [project] dependencies", () => {
+    const { names, recognized } = declaredIn(
+      "pyproject.toml",
+      '[project]\nname = "x"\ndependencies = [\n  "requests>=2.31.0",\n  "pyyaml>=6.0.2",\n]\n',
+    );
+    expect(names).toEqual(new Set(["requests", "pyyaml"]));
+    expect(recognized).toBe(true);
+  });
+
+  it("reads every extra under PEP 621 [project.optional-dependencies]", () => {
+    const { names } = declaredIn(
+      "pyproject.toml",
+      '[project]\nname = "x"\n\n[project.optional-dependencies]\n' +
+        'dev = ["pytest>=8.0", "ruff==0.15.0"]\n' +
+        'webui = ["fastapi>=0.115.0", "uvicorn[standard]>=0.34.0"]\n',
+    );
+    expect(names).toEqual(new Set(["pytest", "ruff", "fastapi", "uvicorn"]));
+  });
+
+  it("reads every group under PEP 735 [dependency-groups], skipping an include-group reference", () => {
+    // {include-group = "dev"} names another group, not a package - it is an
+    // inline table, not a requirement string, and must not read as one.
+    const { names } = declaredIn(
+      "pyproject.toml",
+      "[dependency-groups]\n" +
+        'dev = ["pytest>=8.4.0", "mypy>=1.19.0"]\n' +
+        'test = ["pytest-asyncio>=0.24.0", {include-group = "dev"}]\n',
+    );
+    expect(names).toEqual(new Set(["pytest", "mypy", "pytest-asyncio"]));
+  });
+
+  it("reads uv's own [tool.uv] dev-dependencies extension", () => {
+    const { names } = declaredIn(
+      "pyproject.toml",
+      "[tool.uv]\n" + 'dev-dependencies = ["ruff>=0.7.0", "pytest>=8.3.0"]\n',
+    );
+    expect(names).toEqual(new Set(["ruff", "pytest"]));
+  });
+
+  it("does not mistake [tool.uv.sources] for a dependency list", () => {
+    // `sources` is a table (name -> source spec), not an array of requirement
+    // strings, and lives under the same [tool.uv] parent as dev-dependencies.
+    const { names, recognized } = declaredIn(
+      "pyproject.toml",
+      "[tool.uv]\n" +
+        'dev-dependencies = ["ruff>=0.7.0"]\n\n' +
+        "[tool.uv.sources]\n" +
+        'pydantic = { git = "https://example.com/pydantic" }\n',
+    );
+    expect(names).toEqual(new Set(["ruff"]));
+    expect(recognized).toBe(true);
+  });
+
+  it("normalizes a requirement string to PEP 503's canonical package name", () => {
+    // Extras, a version specifier, and an underscore/dot spelling all fold to
+    // the same name a Gradle or Maven coordinate would - the shared rule the
+    // gate re-derives on its own side must agree with.
+    const { names } = declaredIn(
+      "pyproject.toml",
+      '[project]\ndependencies = ["Types_Py.YAML[extra]>=6.0.12"]\n',
+    );
+    expect(names).toEqual(new Set(["types-py-yaml"]));
+  });
+
+  it("enumerates declarations split across all four locations, mirroring a real uv-managed subject", () => {
+    // Real shape (a live subject splits its own dependencies exactly this
+    // way): base deps under [project], several extras under
+    // [project.optional-dependencies], a dev group under [dependency-groups],
+    // and a uv-only dev-dependencies list under [tool.uv].
+    const pyproject =
+      "[project]\n" +
+      'name = "example-service"\n' +
+      'dependencies = [\n  "nautilus_trader==1.230.0",\n  "python-dotenv>=1.1.0",\n]\n\n' +
+      "[project.optional-dependencies]\n" +
+      'webui = ["fastapi>=0.115.0", "uvicorn[standard]>=0.34.0"]\n\n' +
+      "[dependency-groups]\n" +
+      'dev = ["pytest>=8.4.0", "ruff==0.15.21"]\n\n' +
+      "[tool.uv]\n" +
+      'dev-dependencies = ["mypy>=1.19.0"]\n';
+    const { names, recognized } = declaredIn("pyproject.toml", pyproject);
+    expect(names).toEqual(
+      new Set(["nautilus-trader", "python-dotenv", "fastapi", "uvicorn", "pytest", "ruff", "mypy"]),
+    );
+    expect(recognized).toBe(true);
+  });
+
+  it("does not read a project's dynamic dependencies as declaring none", () => {
+    // `dynamic = ["dependencies"]` means the base dependency list lives
+    // OUTSIDE this file (a requirements.txt the build backend reads) - "I
+    // found no dependencies key" here must not collapse into "none declared".
+    const { names, recognized } = declaredIn(
+      "pyproject.toml",
+      '[project]\nname = "x"\ndynamic = ["dependencies"]\n',
+    );
+    expect(names).toEqual(new Set());
+    expect(recognized).toBe(false);
+  });
+
+  it("demotes rather than confirms when the TOML syntax is unreadable", () => {
+    const { names, recognized } = declaredIn("pyproject.toml", '[project\nname = "x"\n');
+    expect(names).toEqual(new Set());
+    expect(recognized).toBe(false);
+  });
 });
 
 describe("decided-but-unbuilt", () => {
@@ -1297,6 +1430,33 @@ describe("the existence gate overturns the record in BOTH directions", () => {
         type: "edge",
         kind: "divergence",
         id: "e-divergence-testcontainers",
+        title: "t",
+        statement: "s",
+        why_it_matters: "w",
+        how_to_say_it: "h",
+        evidence: [],
+        confidence: "verified",
+        interview_value: 0,
+      },
+    };
+    expect(gateCandidate(ctx, candidate).verdict).toBe("overturned");
+  }, 60_000);
+
+  it("re-derives a pyproject.toml declaration the same way for a Python subject", async () => {
+    // The gate re-parses pyproject.toml through the same declaredIn rule the
+    // probe used (manifests.ts), so a real declaration overturns a divergence
+    // the probe never even had cause to emit.
+    const ctx = contextFor({
+      "README.md": "Runs on Redis.\n",
+      "pyproject.toml": '[project]\ndependencies = ["redis>=5.0"]\n',
+    });
+    const candidate: Candidate = {
+      probe_id: "dependency-divergence",
+      claims: [{ description: "redis is named but declared nowhere", expect: "absent", declares: ["redis"] }],
+      node: {
+        type: "edge",
+        kind: "divergence",
+        id: "e-divergence-redis",
         title: "t",
         statement: "s",
         why_it_matters: "w",

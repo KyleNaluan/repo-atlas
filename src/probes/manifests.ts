@@ -11,8 +11,9 @@
  * asserting a contradiction it did not establish. So the parse lives here and
  * both sides call it: the finding and its verification share one rule.
  */
+import { isTomlTable, parseToml, type TomlValue } from "./toml.js";
 
-export const MANIFESTS = ["pom.xml", "build.gradle", "build.gradle.kts", "package.json"];
+export const MANIFESTS = ["pom.xml", "build.gradle", "build.gradle.kts", "package.json", "pyproject.toml"];
 
 /**
  * What one manifest declares, and whether the rule understood how to read it.
@@ -30,6 +31,32 @@ export interface DeclaredDeps {
   names: Set<string>;
   recognized: boolean;
 }
+
+/**
+ * PEP 503's own normalization: lowercase, runs of `-`, `_` and `.` collapsed
+ * to one `-`. `psycopg-binary` and `psycopg_binary` name the same package to
+ * pip and uv, so a name read here must fold the same way a name read on the
+ * gate's side does, or a re-derivation could disagree over spelling alone.
+ */
+const pep503Normalize = (name: string): string => name.toLowerCase().replace(/[-_.]+/g, "-");
+
+/**
+ * The package name out of a PEP 508 requirement string - `"psycopg[binary]>=3.2"`,
+ * `"httpx>=0.28.0"`, `"pkg @ git+https://..."` - stripping extras, version
+ * specifiers, and any environment marker after `;`. `null` when the string does
+ * not open with a name this rule recognises (a bare URL, for instance), which
+ * is a cut, not a guess.
+ */
+const REQUIREMENT_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*/;
+const requirementName = (spec: string): string | null => {
+  const beforeMarker = spec.split(";")[0]?.trim() ?? "";
+  const m = REQUIREMENT_NAME.exec(beforeMarker);
+  return m ? pep503Normalize(m[0]) : null;
+};
+
+/** The string elements of a TOML array value; anything else in it is skipped. */
+const stringsIn = (value: TomlValue | undefined): string[] =>
+  Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 
 /** The standard Gradle configurations, groovy and kotlin-DSL alike. */
 const GRADLE_CONFIGS = [
@@ -59,6 +86,74 @@ export const declaredIn = (manifest: string, text: string): DeclaredDeps => {
       // A manifest that does not parse is not evidence a dependency is absent.
       return { names, recognized: false };
     }
+  }
+  if (manifest === "pyproject.toml") {
+    const root = parseToml(text);
+    if (root === null) return { names, recognized: false };
+    const project = root["project"];
+    const projectTable = isTomlTable(project) ? project : undefined;
+
+    // The four declaration sites this rule knows. A pyproject.toml using NONE
+    // of them declares its dependencies under a convention this rule cannot
+    // read (legacy Poetry `[tool.poetry.dependencies]`, say) - not zero
+    // dependencies. Confirming an empty set there would be the same false
+    // absence as an unreadable Gradle block: this manifest is unrecognized,
+    // demoted rather than confirmed. Presence, not non-emptiness, is the test.
+    let sawKnownSite = false;
+
+    // PEP 621: [project] dependencies = [...]
+    if (projectTable?.["dependencies"] !== undefined) sawKnownSite = true;
+    for (const spec of stringsIn(projectTable?.["dependencies"])) {
+      const name = requirementName(spec);
+      if (name) names.add(name);
+    }
+    // A `dynamic = ["dependencies"]` project declares its base dependencies
+    // OUTSIDE this table entirely - commonly a requirements.txt the build
+    // backend reads - leaving no `dependencies` key here for this rule to
+    // find. Reading that as "zero dependencies declared" would be a false
+    // absence exactly like an unreadable Gradle block below, so this manifest
+    // is unrecognized rather than confirmed empty - demoted, not confirmed.
+    const dynamic = stringsIn(projectTable?.["dynamic"]);
+    const dependenciesAreDynamic =
+      dynamic.includes("dependencies") && projectTable?.["dependencies"] === undefined;
+
+    // PEP 621: [project.optional-dependencies] <extra> = [...]
+    const optional = projectTable?.["optional-dependencies"];
+    if (optional !== undefined) sawKnownSite = true;
+    if (isTomlTable(optional)) {
+      for (const extra of Object.values(optional)) {
+        for (const spec of stringsIn(extra)) {
+          const name = requirementName(spec);
+          if (name) names.add(name);
+        }
+      }
+    }
+
+    // PEP 735: [dependency-groups] <group> = [...]. An entry may itself be an
+    // inline table such as `{include-group = "dev"}` naming another group
+    // rather than a requirement string; `stringsIn` already drops it.
+    const groups = root["dependency-groups"];
+    if (groups !== undefined) sawKnownSite = true;
+    if (isTomlTable(groups)) {
+      for (const list of Object.values(groups)) {
+        for (const spec of stringsIn(list)) {
+          const name = requirementName(spec);
+          if (name) names.add(name);
+        }
+      }
+    }
+
+    // uv's own pre-PEP-735 extension: [tool.uv] dev-dependencies = [...].
+    const tool = root["tool"];
+    const uv = isTomlTable(tool) ? tool["uv"] : undefined;
+    const devDependencies = isTomlTable(uv) ? uv["dev-dependencies"] : undefined;
+    if (devDependencies !== undefined) sawKnownSite = true;
+    for (const spec of stringsIn(devDependencies)) {
+      const name = requirementName(spec);
+      if (name) names.add(name);
+    }
+
+    return { names, recognized: sawKnownSite && !dependenciesAreDynamic };
   }
   if (manifest === "pom.xml") {
     // Scanning every artifactId in the raw file counts a mention in an XML

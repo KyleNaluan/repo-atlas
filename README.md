@@ -240,7 +240,7 @@ Validation fails closed. A document that does not validate is never rendered, ne
 
 ### Package surface
 
-The package publishes two subpaths beyond its own CLI:
+The package publishes three entry points beyond its own CLI:
 
 - **`repo-atlas`** (`import { loadAtlas, validateAtlas } from "repo-atlas"`) - the loader and validator for `atlas.json`, plus the schema types.
 - **`repo-atlas/schema`** - the generated `schema/atlas.schema.json` document.

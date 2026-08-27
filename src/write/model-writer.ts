@@ -40,6 +40,61 @@ const DECISION_SHAPE = `{
   }
 }`;
 
+/**
+ * The record itself, delimited.
+ *
+ * The source-specific framing lives HERE and not in `prompts/write-v1.md`,
+ * deliberately (#55). The prompt asset states the judgement rules - what makes a
+ * record admissible, what a claim must name, why an invented alternative is the
+ * worst possible output - and every one of those rules is about a decision
+ * record rather than about where it was found, so they read identically for both
+ * sources. The envelope is what presents one particular record, which is what it
+ * has always done for the issue path.
+ *
+ * The practical consequence is the reason to state this: the asset is digested
+ * into every pinned written set (`assertWriteFresh`), so rewording it to say
+ * "or a file" would invalidate three committed fixtures that no credential-free
+ * run can regenerate, in exchange for no change in what the model is asked to
+ * judge.
+ */
+const recordBody = (record: RecordToRead): string =>
+  record.kind === "file"
+    ? `--- WHERE THIS RECORD LIVES ---
+${record.record.path} lines ${record.record.line_start}-${record.record.line_end}, at the pinned commit
+admitted because ${FAMILY_REASON[record.record.family]}
+--- END LOCATION ---
+
+--- THE DECISION RECORD (this is the record) ---
+${record.record.body}
+--- END RECORD ---`
+    : `--- THE ISSUE ---
+#${record.issue.number}: ${record.issue.title}
+state: ${record.issue.state}
+
+${record.issue.body}
+--- END ISSUE ---
+
+--- THE RESOLUTION COMMENT (this is the record) ---
+${record.comment.body}
+--- END COMMENT ---`;
+
+/**
+ * What the subject did to declare this span a decision record.
+ *
+ * Told to the writer because it bears directly on admissibility: a heading that
+ * merely contains the word "decision" is a weaker declaration than a file filed
+ * under `docs/adr/`, and the writer is the stage that decides whether the span
+ * settles anything. Stating the declaration is not the same as vouching for it.
+ */
+const FAMILY_REASON: Record<string, string> = {
+  adr_directory: "it is a file in the subject's decision-record directory",
+  named_file: "the file's own name declares it a decision record",
+  memory_section:
+    "it is a section of a project-memory file under a heading naming a decision - a weaker declaration than a filed ADR, so judge admissibility on what the section actually settles",
+  document_section:
+    "it is a section of a committed document under a heading naming a decision - a weaker declaration than a filed ADR, so judge admissibility on what the section actually settles",
+};
+
 const decisionPrompt = (record: RecordToRead, prompt: string): string => `${prompt}
 
 --- RETURN ONLY THIS JSON, no prose and no code fence ---
@@ -52,16 +107,7 @@ against the tree afterwards, by machinery that does not consult you.
 Omit "implementation_claim" entirely when the record supports neither presence
 nor absence. Omit any field you cannot ground in the record below.
 
---- THE ISSUE ---
-#${record.issue.number}: ${record.issue.title}
-state: ${record.issue.state}
-
-${record.issue.body}
---- END ISSUE ---
-
---- THE RESOLUTION COMMENT (this is the record) ---
-${record.comment.body}
---- END COMMENT ---`;
+${recordBody(record)}`;
 
 const README_LIMIT = 20_000;
 export const PROSE_PATH_LIMIT = 600;

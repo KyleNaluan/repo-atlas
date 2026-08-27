@@ -35,9 +35,19 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { DecisionStatus, RejectedAlternative, Shape, Synopsis } from "../schema/types.js";
+import type {
+  DecisionStatus,
+  Evidence,
+  RejectedAlternative,
+  Shape,
+  Synopsis,
+} from "../schema/types.js";
 import type { Candidate, ExistenceClaim } from "../probes/types.js";
-import type { HarvestedComment, HarvestedIssue } from "../harvest/types.js";
+import type {
+  HarvestedComment,
+  HarvestedDecisionRecord,
+  HarvestedIssue,
+} from "../harvest/types.js";
 
 export const WRITE_PROMPT_VERSION = "v1";
 
@@ -49,11 +59,38 @@ export const writePromptText = (): string =>
 export const promptDigest = (prompt: string): string =>
   createHash("sha256").update(prompt, "utf8").digest("hex").slice(0, 16);
 
-/** One decision record, handed to the writer alone. */
-export interface RecordToRead {
+/**
+ * One decision record, handed to the writer alone.
+ *
+ * Two sources, one shape from here on (#55). A resolution comment on an issue
+ * and a decision record committed to the tree are the same class of artifact -
+ * a person's own account of a question that was argued and closed - and the
+ * whole stage treats them identically: same prompt asset, same admissibility
+ * verdict, same `attested` ceiling, same gate afterwards. What differs is only
+ * the citation the code stamps, which is why the discriminant lives here and
+ * nowhere downstream.
+ *
+ * The file variant carries the run's SHA because its citation names a span at a
+ * commit. Stamping it from the record rather than accepting it as an argument
+ * keeps `toCandidate` unable to mint an unstamped file citation at all.
+ */
+export interface IssueRecordToRead {
+  /** Optional so a caller written before the second source still type-checks. */
+  kind?: "issue";
   issue: HarvestedIssue;
   comment: HarvestedComment;
 }
+
+export interface FileRecordToRead {
+  kind: "file";
+  record: HarvestedDecisionRecord;
+  /** The run's pinned SHA, so the span this cites names a commit. */
+  sha: string;
+}
+
+export type RecordToRead = IssueRecordToRead | FileRecordToRead;
+
+const isFileRecord = (r: RecordToRead): r is FileRecordToRead => r.kind === "file";
 
 /**
  * What the writer returns for one record.
@@ -108,6 +145,39 @@ export interface Writer {
   prose: (request: ProseRequest, prompt: string) => Promise<WrittenProse>;
 }
 
+/** A record read from an issue comment. `source` is optional so a set pinned before #55 still loads. */
+export interface WrittenIssueEntry {
+  source?: "issue";
+  issue: number;
+  comment_id: number;
+  written: WrittenDecision;
+}
+
+/**
+ * A record read from the tree, or suppressed because another entry already
+ * carries the decision it names (#55's D4).
+ *
+ * `record_id` is the whole reference: ids are derived from the span rather than
+ * the prose, so the harvest resolves one without this file restating a path and
+ * a line range that could drift from it.
+ *
+ * A deduped entry carries no `written`, because no model call was spent on it.
+ * It is recorded rather than dropped for the same reason an inadmissible record
+ * is: a suppressed record is a fact about the subject, and #6 forbids
+ * communicating absence by silence.
+ */
+export interface WrittenRecordEntry {
+  source: "record";
+  record_id: string;
+  /** The node id this record's decision was merged into, when it was. */
+  deduped_into?: string;
+  written?: WrittenDecision;
+}
+
+export type WrittenEntry = WrittenIssueEntry | WrittenRecordEntry;
+
+export const isRecordEntry = (e: WrittenEntry): e is WrittenRecordEntry => e.source === "record";
+
 /**
  * A written set supplied from a file rather than produced here.
  *
@@ -133,7 +203,7 @@ export interface WrittenFile {
    * README lives elsewhere.
    */
   readme_path?: string;
-  decisions: { issue: number; comment_id: number; written: WrittenDecision }[];
+  decisions: WrittenEntry[];
   prose: WrittenProse;
 }
 
@@ -198,6 +268,43 @@ export const assertWriteFresh = (file: WrittenFile, prompt: string, subjectSha: 
 export const decisionId = (issue: number, commentId: number): string => `d-issue-${issue}-c${commentId}`;
 
 /**
+ * The node id for either source, from the record rather than its prose.
+ *
+ * A file-sourced record already carries its id (`records.ts` derives it from the
+ * span), so this is a lookup and not a second derivation - two definitions of
+ * "which node is this" would let a dedup merge target a node that never existed.
+ */
+export const candidateId = (record: RecordToRead): string =>
+  isFileRecord(record) ? record.record.id : decisionId(record.issue.number, record.comment.id);
+
+/** The title a record falls back to when the writer named none. */
+const fallbackTitle = (record: RecordToRead): string =>
+  isFileRecord(record) ? (record.record.heading ?? record.record.path) : record.issue.title;
+
+/**
+ * The citation, stamped from the record and never taken from the model.
+ *
+ * A file record cites its own span at the pinned SHA, which audit L1 and L2
+ * resolve against the tree and which the model pass reads directly. An issue
+ * record cites the issue and comment id, which pass C resolves against the
+ * harvest cache. That is an evidential difference between the two sources and
+ * not a confidence one (#55, D3): both are testimony, and neither establishes
+ * anything about the code.
+ */
+const evidenceFor = (record: RecordToRead): Evidence[] =>
+  isFileRecord(record)
+    ? [
+        {
+          kind: "file",
+          path: record.record.path,
+          line_start: record.record.line_start,
+          line_end: record.record.line_end,
+          sha: record.sha,
+        },
+      ]
+    : [{ kind: "issue", number: record.issue.number, comment_id: record.comment.id }];
+
+/**
  * The only status the writer may mint: `decided`, or `superseded` when the record
  * says a later decision replaced this one.
  *
@@ -247,10 +354,8 @@ const claimOf = (w: WrittenDecision): ExistenceClaim[] => {
  * prevent.
  */
 export const toCandidate = (record: RecordToRead, w: WrittenDecision): Candidate => {
-  const evidence = [
-    { kind: "issue" as const, number: record.issue.number, comment_id: record.comment.id },
-  ];
-  const id = decisionId(record.issue.number, record.comment.id);
+  const evidence = evidenceFor(record);
+  const id = candidateId(record);
 
   if (!w.admissible) {
     // Cut, not hedged (#3). It is emitted rather than dropped so the record can
@@ -262,7 +367,7 @@ export const toCandidate = (record: RecordToRead, w: WrittenDecision): Candidate
       node: {
         type: "decision",
         id,
-        title: w.title ?? record.issue.title,
+        title: w.title ?? fallbackTitle(record),
         question: "",
         decision: "",
         why: "",
@@ -283,7 +388,7 @@ export const toCandidate = (record: RecordToRead, w: WrittenDecision): Candidate
     node: {
       type: "decision",
       id,
-      title: w.title ?? record.issue.title,
+      title: w.title ?? fallbackTitle(record),
       question: w.question ?? "",
       decision: w.decision ?? "",
       why: w.why ?? "",
@@ -341,22 +446,89 @@ export const proseFrom = (
   };
 };
 
-/** The candidates a pinned written set yields, in issue order so a run is reproducible. */
+/**
+ * Which source a pinned written set is reassembled against.
+ *
+ * Both halves come from the harvest, so a set can only ever be rebuilt against
+ * the artifact it was written from. `records` is optional because a harvest
+ * pinned before #55 carries none, and absent there means "this harvest predates
+ * the source" rather than "the tree declared none".
+ */
+export interface WriteSources {
+  issues: HarvestedIssue[];
+  records?: HarvestedDecisionRecord[];
+}
+
+/**
+ * The candidates a pinned written set yields, in a stable order so a run is
+ * reproducible: issue-sourced records by issue and comment, then file-sourced
+ * records by path and line.
+ *
+ * DEDUP IS A MERGE, NEVER A SECOND NODE (#55's D4). An in-repo record that names
+ * the issue whose resolution comment already produced a decision does not mint a
+ * decision of its own - it becomes an additional file citation on that node. One
+ * decision, two citations, and the file citation is the machine-checkable one.
+ * Emitting both and letting rank cut one was rejected: rank deletes on score, so
+ * which of two identical nodes survived would be arbitrary, and the artifact
+ * would meanwhile assert one decision twice.
+ *
+ * A merge target that is not in this set is dropped rather than guessed at. The
+ * write command only ever deduplicates against an admissible issue-sourced
+ * entry, so a missing target means the file and the harvest disagree, and
+ * appending a citation to nothing is not an option.
+ */
 export const candidatesFrom = (
   file: WrittenFile,
-  issues: HarvestedIssue[],
+  source: WriteSources,
   prompt: string,
   subjectSha: string,
 ): Candidate[] => {
   assertWriteFresh(file, prompt, subjectSha);
-  const byNumber = new Map(issues.map((i) => [i.number, i]));
-  return [...file.decisions]
-    .sort((a, b) => a.issue - b.issue)
+  const byNumber = new Map(source.issues.map((i) => [i.number, i]));
+  const byRecordId = new Map((source.records ?? []).map((r) => [r.id, r]));
+
+  const issueEntries = file.decisions.filter((d): d is WrittenIssueEntry => !isRecordEntry(d));
+  const recordEntries = file.decisions.filter(isRecordEntry);
+
+  const out: Candidate[] = [];
+  for (const d of [...issueEntries].sort((a, b) => a.issue - b.issue || a.comment_id - b.comment_id)) {
+    const issue = byNumber.get(d.issue);
+    if (issue === undefined) continue;
+    const comment = issue.comments.find((c) => c.id === d.comment_id);
+    if (comment === undefined) continue;
+    out.push(toCandidate({ kind: "issue", issue, comment }, d.written));
+  }
+
+  const resolved = recordEntries
     .flatMap((d) => {
-      const issue = byNumber.get(d.issue);
-      if (issue === undefined) return [];
-      const comment = issue.comments.find((c) => c.id === d.comment_id);
-      if (comment === undefined) return [];
-      return [toCandidate({ issue, comment }, d.written)];
-    });
+      const record = byRecordId.get(d.record_id);
+      return record === undefined ? [] : [{ entry: d, record }];
+    })
+    .sort((a, b) => a.record.path.localeCompare(b.record.path) || a.record.line_start - b.record.line_start);
+
+  for (const { entry, record } of resolved) {
+    if (entry.deduped_into !== undefined) {
+      const target = out.find((c) => c.node.id === entry.deduped_into);
+      if (target === undefined) continue;
+      target.node = {
+        ...target.node,
+        evidence: [
+          ...target.node.evidence,
+          {
+            kind: "file",
+            path: record.path,
+            line_start: record.line_start,
+            line_end: record.line_end,
+            sha: subjectSha,
+            note: "the same decision, recorded in the tree",
+          },
+        ],
+      };
+      continue;
+    }
+    if (entry.written === undefined) continue;
+    out.push(toCandidate({ kind: "file", record, sha: subjectSha }, entry.written));
+  }
+
+  return out;
 };

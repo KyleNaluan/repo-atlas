@@ -15,6 +15,7 @@ import {
   assertWriteFresh,
   candidatesFrom,
   decisionId,
+  isRecordEntry,
   promptDigest,
   proseFrom,
   writePromptText,
@@ -30,8 +31,16 @@ const read = <T>(name: string): T =>
 const pinned = read<WrittenFile>("swe-prep.written.json");
 const reference = read<Atlas>("swe-prep.atlas.json");
 
+/**
+ * The pinned set's issue-sourced entries.
+ *
+ * This fixture predates #55's second source and carries only these, which is
+ * itself the assertion below: the set was read from nine resolution comments.
+ */
+const issueEntries = pinned.decisions.filter((d) => !isRecordEntry(d));
+
 /** The issues the pinned set was read from, reconstructed well enough to load it. */
-const issues: HarvestedIssue[] = pinned.decisions.map((d) => ({
+const issues: HarvestedIssue[] = issueEntries.map((d) => ({
   number: d.issue,
   title: `issue ${d.issue}`,
   body: "",
@@ -67,23 +76,24 @@ describe("the pinned written set", () => {
     // swe-prep has nine, which the harvest reports independently. A set that
     // silently read eight would still look complete on its own.
     expect(pinned.decisions).toHaveLength(9);
-    expect(new Set(pinned.decisions.map((d) => d.issue)).size).toBe(9);
+    expect(issueEntries).toHaveLength(9);
+    expect(new Set(issueEntries.map((d) => d.issue)).size).toBe(9);
   });
 
   it("cites a distinct comment per record, never the issue alone", () => {
     // The comment id is what distinguishes a resolution from a later note (#4).
-    for (const d of pinned.decisions) expect(d.comment_id, `issue ${d.issue}`).toBeGreaterThan(0);
-    expect(new Set(pinned.decisions.map((d) => d.comment_id)).size).toBe(9);
+    for (const d of issueEntries) expect(d.comment_id, `issue ${d.issue}`).toBeGreaterThan(0);
+    expect(new Set(issueEntries.map((d) => d.comment_id)).size).toBe(9);
   });
 });
 
 describe("what the pinned set yields", () => {
-  const candidates = candidatesFrom(pinned, issues, writePromptText(), pinned.subject_sha);
+  const candidates = candidatesFrom(pinned, { issues }, writePromptText(), pinned.subject_sha);
 
   it("mints one decision candidate per record", () => {
     expect(candidates).toHaveLength(9);
     expect(candidates.map((c) => c.node.id)).toEqual(
-      pinned.decisions.map((d) => decisionId(d.issue, d.comment_id)),
+      issueEntries.map((d) => decisionId(d.issue, d.comment_id)),
     );
   });
 
@@ -102,7 +112,7 @@ describe("what the pinned set yields", () => {
     // Recorded rather than assumed. swe-prep's resolution comments carry an
     // explicit "Rejected:" section, so all nine name what lost - which is why it
     // is the parity subject. A subject where this drops is not a regression here.
-    const named = pinned.decisions.filter((d) => (d.written.rejected ?? []).length > 0).length;
+    const named = issueEntries.filter((d) => (d.written.rejected ?? []).length > 0).length;
     expect(named).toBe(9);
     for (const c of candidates) {
       expect((c.node as DecisionNode).rejected_absent_from_record).toBeUndefined();
@@ -128,7 +138,7 @@ describe("what the pinned set yields", () => {
     // prose-matchable word. Every claim here is now a dependency coordinate, a
     // symbol, or a path.
     expect(candidates.filter((c) => c.claims !== undefined)).toHaveLength(9);
-    for (const d of pinned.decisions) {
+    for (const d of issueEntries) {
       const claim = d.written.implementation_claim!;
       expect(claim, `issue ${d.issue}`).toBeDefined();
       expect((claim.paths?.length ?? 0) > 0 || claim.pattern !== undefined).toBe(true);
@@ -141,7 +151,7 @@ describe("what the pinned set yields", () => {
     // finds the sentence promising they are gone and reports the opposite.
     // Absence claims must therefore name artifacts, not vocabulary.
     const prose = /\b(lives|hearts|leagues?|simple|value|data|user)\b/i;
-    for (const d of pinned.decisions) {
+    for (const d of issueEntries) {
       const regex = d.written.implementation_claim?.pattern?.regex;
       if (regex === undefined) continue;
       expect(prose.test(regex), `issue ${d.issue} searches for a prose word: ${regex}`).toBe(false);
@@ -153,7 +163,7 @@ describe("what the pinned set yields", () => {
     // `decided`: the resolution comments settle questions, and none of them is
     // superseded by a later one. Whether any of these was built is the gate's to
     // establish against the tree, and it does.
-    expect(new Set(pinned.decisions.map((d) => d.written.status))).toEqual(new Set(["decided"]));
+    expect(new Set(issueEntries.map((d) => d.written.status))).toEqual(new Set(["decided"]));
   });
 
   it("admits every decision as attested, never as verified", () => {

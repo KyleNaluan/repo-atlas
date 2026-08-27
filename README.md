@@ -238,6 +238,16 @@ CI runs `npm run schema:check`, so the types and the contract cannot drift.
 
 Validation fails closed. A document that does not validate is never rendered, never partially rendered, and never repaired.
 
+### Package surface
+
+The package publishes two subpaths beyond its own CLI:
+
+- **`repo-atlas`** (`import { loadAtlas, validateAtlas } from "repo-atlas"`) - the loader and validator for `atlas.json`, plus the schema types.
+- **`repo-atlas/schema`** - the generated `schema/atlas.schema.json` document.
+- **`repo-atlas/render`** (`import { renderFlow, toDot } from "repo-atlas/render"`) - renders a single `FlowNode` (from either source) to inline SVG, the same Graphviz-as-WASM path the artifact itself uses. `renderFlow(flow, cache?)` returns `{ svg, dot, key, long, depth }`; `toDot(flow)` is the pure `FlowNode -> dot` step alone, for a consumer that wants to lay it out itself. `DiagramCache` is the optional cache seam if a consumer wants to avoid re-running Graphviz on an unchanged Flow. This is the surface the interview-prep tool renders its own Flow pages with, split out so it does not need a fork or a relative import into this repo's internals.
+
+Nothing beyond these three subpaths is public; everything else under `src/` is an implementation detail.
+
 ## Dependencies
 
 The tool is distributed for `npx`, so the footprint is a design constraint rather than an afterthought.

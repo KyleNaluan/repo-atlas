@@ -23,7 +23,8 @@
   },
   "exports": {
     ".": "./dist/index.js",
-    "./schema": "./schema/atlas.schema.json"
+    "./schema": "./schema/atlas.schema.json",
+    "./render": "./dist/render/index.js"
   },
   "files": [
     "dist",

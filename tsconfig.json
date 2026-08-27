@@ -13,7 +13,15 @@
     "skipLibCheck": true,
     "noEmit": true,
     "lib": ["ES2022", "DOM"],
-    "types": ["node"]
+    "types": ["node"],
+    // Typechecks the self-referencing import in test/packaging/render-export.test.ts
+    // against source rather than `dist/`, so `npm run typecheck` does not depend on
+    // `npm run build` having already run. Node resolves the same specifier through
+    // package.json's "exports" at runtime, which does need `dist/` - the test's own
+    // beforeAll builds it on demand.
+    "paths": {
+      "repo-atlas/render": ["./src/render/index.ts"]
+    }
   },
   "include": ["src", "test", "scripts"]
 }

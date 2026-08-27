@@ -45,6 +45,8 @@ Two things worth knowing before touching either subject again:
 
 After any change to `src/schema/types.ts`, run `npm run schema:gen` and commit the result.
 
+**Package `exports`** has three subpaths: `.` (loader/validator, `src/index.ts`), `./schema` (the generated JSON Schema), and `./render` (`src/render/index.ts` -> `renderFlow`/`toDot`, the only public entry into `src/render/diagram.ts`). Adding a fourth or widening one is a contract change - keep each subpath minimal and typed, per README's "Package surface". Because `./render`'s runtime resolution is `./dist/render/index.js`, any test that imports it by package name (`test/packaging/render-export.test.ts`) needs `dist/` built first; that test's own `beforeAll` builds it on demand, and `tsconfig.json`'s `paths` entry for `repo-atlas/render` lets `npm run typecheck` resolve the same specifier against `src/` so typecheck does not itself depend on a prior build.
+
 ## Three render-stage invariants that are easy to break by accident
 
 - **`raw()` has exactly one call site**, the Graphviz SVG, and `test/render/raw-lint.test.ts` fails the build if a second appears. Raw HTML carries no provenance stamp, so a second call site is a hole check E1 cannot see. Syntax highlighting goes through Shiki's `codeToTokens` and back out through the escaping template for exactly this reason.

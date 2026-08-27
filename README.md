@@ -224,7 +224,7 @@ The banner on that copy is a second line of defence, not the mechanism: a banner
 The rendered page is one view of it, which is what keeps a downstream consumer (an interview-prep tool) a separate project rather than a fork of this one.
 
 - **Six node types**: Decision, Mechanism, Boundary, Edge, Fact, Flow. Every node carries `id`, `title`, `evidence[]`, `confidence`, `interview_value`.
-- **Three confidence levels**, and the gate is hard: `verified` (a file at the SHA, or command output), `attested` (a primary issue/comment record, or a text reading that stands behind a finding without establishing it), `absent` (cut outright - hedged prose is worse than absence). The level says what was established, never which parsing technique established it ([#28](https://github.com/KyleNaluan/repo-atlas/issues/28)).
+- **Three confidence levels**, and the gate is hard: `verified` (a file at the SHA, or command output), `attested` (a primary issue/comment record or an in-repo decision record, or a text reading that stands behind a finding without establishing it), `absent` (cut outright - hedged prose is worse than absence). The level says what was established, never which parsing technique established it ([#28](https://github.com/KyleNaluan/repo-atlas/issues/28)).
 - **`rejected[]` uses explicit-absence semantics**: a Decision carries either a populated `rejected[]` or `rejected_absent_from_record`. "Decided without recording an alternative" and "no decision record at all" are different states and stay different.
 - **Semver, additive-only within a major**; consumers pin the major, and a document from a future major is refused rather than best-effort read.
 

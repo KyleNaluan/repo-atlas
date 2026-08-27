@@ -50,6 +50,34 @@ export interface IssueCacheKey {
   latest_comment_updated_at: string | null;
 }
 
+/**
+ * A decision record committed to the tree (#55), captured at the pinned SHA.
+ *
+ * The same class of artifact as a resolution comment - a person's own account of
+ * a question that was argued and closed - and admissible on the same terms:
+ * testimony about the decision, never evidence about the code.
+ *
+ * Unlike an issue citation, this one is machine-checkable against the tree: the
+ * span is what audit L1 and L2 resolve, and what the model pass reads. That is
+ * an evidential difference, not a confidence one (#55, D3).
+ */
+export interface HarvestedDecisionRecord {
+  /** Stable across runs, derived from the span rather than the prose. */
+  id: string;
+  /** Which of the subject's declarations admitted it. Never collapsed. */
+  family: "adr_directory" | "named_file" | "memory_section" | "document_section";
+  path: string;
+  /** 1-based, inclusive - the span the citation names. */
+  line_start: number;
+  line_end: number;
+  /** The heading that declares it, where a heading did. */
+  heading: string | null;
+  body: string;
+  bytes: number;
+  /** Issue numbers the record names as its own, for #55's D4 dedup. */
+  cites_issues: number[];
+}
+
 export interface ScaleCounts {
   files: number;
   lines: number;
@@ -112,8 +140,17 @@ export interface Harvest {
   density: DensitySignals;
   sources: HarvestSource[];
   private_split: PrivateSplit;
-  /** Project-memory files: indexed, never quoted as evidence (#4). */
+  /** Project-memory files: indexed, never quoted as evidence about the code (#4, #55). */
   memory_files: { path: string; bytes: number }[];
+  /**
+   * In-repo decision records at the pinned SHA (#55).
+   *
+   * Optional so a harvest artifact pinned before this source existed still
+   * loads: absent means "this harvest predates the source", which is a
+   * different statement from an empty array's "the tree declared none", and
+   * collapsing the two would let a stale fixture read as a measurement.
+   */
+  decision_records?: HarvestedDecisionRecord[];
 }
 
 export const HARVEST_VERSION = "1.0.0";

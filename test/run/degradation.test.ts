@@ -155,7 +155,12 @@ describe("the deterministic machinery still produces this artifact", () => {
     // The end-to-end check without a credential: gate, rank and assemble are run
     // here for real over the pinned inputs, and must yield what is committed.
     const scores = read<ScoreFile>("java-websocket.scores.json");
-    const candidates = candidatesFrom(written, harvest.issues, writePromptText(), harvest.subject.sha);
+    const candidates = candidatesFrom(
+      written,
+      { issues: harvest.issues, records: harvest.decision_records },
+      writePromptText(),
+      harvest.subject.sha,
+    );
     expect(candidates).toEqual([]);
 
     const gatedFile = read<{ gated: GatedCandidate[] }>("java-websocket.gated.json");

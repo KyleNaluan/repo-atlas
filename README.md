@@ -43,7 +43,7 @@ The mechanical stages are plain deterministic code; only `write`, `score` and `a
 |---|---|---|
 | `harvest` | fetch the subject at a pinned SHA through raw API paths, count-verified | [#4](https://github.com/KyleNaluan/repo-atlas/issues/4) |
 | `probe` | run the mechanical probe library, emitting candidate nodes | [#5](https://github.com/KyleNaluan/repo-atlas/issues/5) |
-| `write` | read each resolution comment into a decision candidate, and write the prose | [#2](https://github.com/KyleNaluan/repo-atlas/issues/2) |
+| `write` | read each decision record - an issue resolution comment, or one the tree declares - into a decision candidate, and write the prose | [#2](https://github.com/KyleNaluan/repo-atlas/issues/2) |
 | `gate` | confirm each candidate against the tree, in both directions | [#5](https://github.com/KyleNaluan/repo-atlas/issues/5), [#7](https://github.com/KyleNaluan/repo-atlas/issues/7) |
 | `score` | score `interview_value` with a model under the versioned rubric, one call for the whole graph | [#2](https://github.com/KyleNaluan/repo-atlas/issues/2), [#9](https://github.com/KyleNaluan/repo-atlas/issues/9) |
 | `rank` | delete by floor and budget under the pinned scores | [#9](https://github.com/KyleNaluan/repo-atlas/issues/9) |
@@ -64,6 +64,32 @@ A byte-pinned tripwire test holds a real comment's exact length and SHA-256, so 
 The cache is keyed on `(repo, issue, issue.updated_at, comment_count, max(comment.updated_at))`, so editing a comment invalidates the entry - `issue.updated_at` does not move when a comment changes - and comments are stored individually by id, because an issue body and its resolution are different artifacts.
 
 A declared-private side is never read. That it exists is recorded, because the audit's private-source check has three applicability states and the middle one must never be silent.
+
+### The two decision sources
+
+Issue resolution comments are the first source and are not the only one ([#55](https://github.com/KyleNaluan/repo-atlas/issues/55)).
+Measured across the corpus, that source is empty on three of the four subjects this engine is meant to run on - 0 of 16 issues on one, 0 of 13 on another, 0 of 39 on a third, against ~10 of 50 and 12 of 27 on the two that use it.
+Those three subjects are not decision-poor; they record decisions in the tree, so harvest reads the tree as a second source.
+
+A span of committed markdown is a decision record only where the **subject's own declaration** says so, in one of four ways:
+
+| Family | What declares it |
+|---|---|
+| `adr_directory` | a file under `docs/adr`, `adr`, `doc/adr`, `docs/decisions` or `docs/architecture` - the same list [#6](https://github.com/KyleNaluan/repo-atlas/issues/6)'s ADR density signal reads, so the signal and the reader cannot disagree |
+| `named_file` | a file whose own basename names it a decision record (`adr`/`decision` as a whole word), wherever it sits |
+| `memory_section` | a section of a project-memory file under a heading naming a decision |
+| `document_section` | a section of any other committed document under such a heading |
+
+A whole-file record is one record and is never also scanned for sections, so an ADR's own `## Decision` heading does not mint a second.
+A project-memory file is never admitted whole - it is a mixed document, and only its decision-headed sections are records.
+
+It is a heading match and never a body match.
+A heading is the subject writing "what follows is a decision"; a paragraph containing the word is not, and [#28](https://github.com/KyleNaluan/repo-atlas/issues/28) is what matching vocabulary against raw lines already cost this engine once.
+The vocabulary deliberately **over-admits** - one subject's `### Decision Log` is a component description, not a decision - because mechanics propose and judgement deletes: the writer already owns the admissibility call, and an inadmissible record becomes an absent cut carrying its reason rather than a silent drop.
+
+**A record establishes nothing about the code.** [#4](https://github.com/KyleNaluan/repo-atlas/issues/4) resolved that project-memory files are indexed and never evidence-quoted; #55 amends that line narrowly and keeps its guarantee whole.
+A record is testimony about a *decision*, the same class of artifact as a resolution comment; whether the decision was built stays a claim about the tree that only the gate settles, and `implemented_by` is filled from paths the gate itself located.
+Harvest's source table says both, separately: memory files stay `not admissible as evidence about the code`, and the records read out of them are their own line reading `attested (the decision, never the code)`.
 
 ## Probes and the existence gate
 
@@ -105,14 +131,19 @@ Legacy `calls_next` artifacts remain readable through the schema 1.1 renderer br
 
 ## Writing the decision record
 
-A resolution comment carries the richest input the engine has - the decision, its reasons, and the alternative that lost - and no deterministic probe can read it, because probes are pure functions over the tree and [#5](https://github.com/KyleNaluan/repo-atlas/issues/5) forecloses model-assisted probes.
-So `write` is a model stage, and the second place judgement is allowed to enter (per [#2](https://github.com/KyleNaluan/repo-atlas/issues/2)): it reads each resolution comment on its own and returns a decision candidate's fields, while the code stamps the citation from the record so the model can never produce one that does not resolve.
+A decision record carries the richest input the engine has - the decision, its reasons, and the alternative that lost - and no deterministic probe can read it, because probes are pure functions over the tree and [#5](https://github.com/KyleNaluan/repo-atlas/issues/5) forecloses model-assisted probes.
+So `write` is a model stage, and the second place judgement is allowed to enter (per [#2](https://github.com/KyleNaluan/repo-atlas/issues/2)): it reads each record on its own and returns a decision candidate's fields, while the code stamps the citation from the record so the model can never produce one that does not resolve.
+Both sources feed it and nothing downstream tells them apart - same prompt asset, same admissibility verdict, same `attested` ceiling, same gate - the one difference being the citation the code stamps: an issue and comment id, or a `{path, line range, sha}` span the audit's L1 and L2 resolve directly against the tree.
 Each record is read **alone** - extraction is not comparative, and a writer shown two records at once can borrow a rationale from the wrong one - which is the exact opposite of the scorer's one call for the whole graph.
 
 The writer proposes; it never decides.
 It mints a candidate with `attested` confidence and a status of `decided` or `superseded` only, and names where it would expect the decision to live; that candidate goes through the same existence gate, which settles whether the thing was built and fills `implemented_by` with the paths the gate itself located - never anything the model proposed.
 An `implementation_claim` must be about the decision's own subject and name something machine-checkable, a path or a compilable pattern, never a prose-matchable word, or the gate demotes it as unresolvable.
-A comment that settles no decision yields an inadmissible candidate carrying `absent` confidence rather than no candidate at all, so the record can report that a decision-shaped comment existed and did not survive - a different statement from a subject with no decision trail.
+A record that settles no decision yields an inadmissible candidate carrying `absent` confidence rather than no candidate at all, so the record can report that a decision-shaped record existed and did not survive - a different statement from a subject with no decision trail.
+
+A subject that records one decision in both places gets one node with two citations, not two nodes.
+The merge is keyed on the in-repo record **naming the issue** in its heading or opening line, which is the subject's own identification rather than a similarity judgement about the prose, and it applies only where that issue's resolution comment produced an admissible decision - otherwise the in-repo record stands on its own, which is how a subject that stopped writing resolution comments still gets its decision trail.
+A merged record is recorded in `written.json` with the node id it merged into, never dropped.
 
 The same stage writes the two prose passages the artifact opens with: the product sentence and the annotated tree.
 Both read the README at the pinned SHA, the source the file listing is taken from, so the summarized bytes and the `{path, sha}` citation they carry agree by construction rather than by a clean checkout holding; a README absent at that SHA cannot support a product sentence, so the writer reports the prose inadmissible rather than guessing from the working tree.

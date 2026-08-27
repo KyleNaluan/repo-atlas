@@ -14,20 +14,22 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { modelWriter, PROSE_PATH_LIMIT } from "../write/model-writer.js";
 import {
+  decisionId,
   promptDigest,
   proseFrom,
   writePromptText,
   WRITE_PROMPT_VERSION,
-  type RecordToRead,
+  type IssueRecordToRead,
   type WrittenFile,
 } from "../write/write.js";
 import { RESOLUTION_HEADING } from "../harvest/issues.js";
 import { fileAt, findReadme, treeFiles } from "../harvest/tree.js";
-import type { Harvest } from "../harvest/types.js";
+import type { Harvest, HarvestedDecisionRecord } from "../harvest/types.js";
 
 const USAGE = `usage: repo-atlas write --harvest <harvest.json> --clone <path> [-o <written.json>]
 
-Reads each resolution-shaped comment in the harvest and turns it into a decision
+Reads each decision record in the harvest - a resolution-shaped issue comment, or
+an in-repo decision record the tree declares (#55) - and turns it into a decision
 candidate, then writes the product sentence and the annotated tree.
 
 options:
@@ -44,7 +46,11 @@ Each record is read ALONE. Extraction is not comparative - a decision means what
 its own record says - and a writer shown two records at once can borrow a
 rationale from the wrong one.
 
-A comment that settles no decision is recorded as inadmissible rather than
+An in-repo record that names an issue whose resolution comment already produced a
+decision is merged into that node as a second citation rather than read again, so
+one decision recorded in two places is one node with two citations.
+
+A record that settles no decision is recorded as inadmissible rather than
 dropped, so the artifact can report that a decision-shaped record existed and did
 not survive. That is a different statement from a subject with no decision trail,
 and #6 forbids collapsing the two into silence.`;
@@ -58,14 +64,45 @@ const flag = (argv: string[], ...names: string[]): string | undefined => {
 };
 
 /** Every resolution-shaped comment in the harvest, with the issue carrying it. */
-export const recordsIn = (harvest: Harvest): RecordToRead[] =>
+export const recordsIn = (harvest: Harvest): IssueRecordToRead[] =>
   harvest.issues
     .flatMap((issue) =>
       issue.comments
         .filter((comment) => RESOLUTION_HEADING.test(comment.body))
-        .map((comment) => ({ issue, comment })),
+        .map((comment) => ({ kind: "issue" as const, issue, comment })),
     )
     .sort((a, b) => a.issue.number - b.issue.number || a.comment.id - b.comment.id);
+
+/** Every in-repo decision record the harvest captured, in path order (#55). */
+export const treeRecordsIn = (harvest: Harvest): HarvestedDecisionRecord[] =>
+  [...(harvest.decision_records ?? [])].sort(
+    (a, b) => a.path.localeCompare(b.path) || a.line_start - b.line_start,
+  );
+
+/**
+ * The node an in-repo record's decision already lives on, or undefined (#55 D4).
+ *
+ * Resolved on the record's OWN citation - an issue number it names in its
+ * heading or opening line - and never on a similarity judgement about the prose.
+ * That is the same principle admitting the record in the first place: the
+ * subject declares the identification, this code does not infer it.
+ *
+ * `admissibleIssues` is keyed on the issue's resolution comment having produced
+ * a decision. Where the comment was cut as inadmissible there is no node to
+ * merge into, and the in-repo record stands on its own - which is the case that
+ * matters, because it is how a subject that stopped writing resolution comments
+ * still gets its decision trail.
+ */
+export const dedupTarget = (
+  record: HarvestedDecisionRecord,
+  admissibleIssues: Map<number, string>,
+): string | undefined => {
+  for (const number of record.cites_issues) {
+    const id = admissibleIssues.get(number);
+    if (id !== undefined) return id;
+  }
+  return undefined;
+};
 
 export const writeCommand = async (argv: string[]): Promise<number> => {
   if (argv.includes("-h") || argv.includes("--help")) {
@@ -96,16 +133,45 @@ export const writeCommand = async (argv: string[]): Promise<number> => {
     `writing ${harvest.subject.owner}/${harvest.subject.repo} at ${harvest.subject.sha} ` +
       `under write prompt ${WRITE_PROMPT_VERSION}`,
   );
+  const treeRecords = treeRecordsIn(harvest);
   console.log(`  ${records.length} resolution-shaped comment${records.length === 1 ? "" : "s"} to read`);
+  console.log(
+    `  ${treeRecords.length} in-repo decision record${treeRecords.length === 1 ? "" : "s"} to read`,
+  );
 
   const decisions: WrittenFile["decisions"] = [];
+  /** Issue number -> the node id its resolution comment produced, for the dedup pass. */
+  const admissibleIssues = new Map<number, string>();
+
   for (const record of records) {
     const written = await writer.decision(record, prompt);
     decisions.push({ issue: record.issue.number, comment_id: record.comment.id, written });
+    if (written.admissible) {
+      admissibleIssues.set(record.issue.number, decisionId(record.issue.number, record.comment.id));
+    }
     console.log(
       written.admissible
         ? `  read  #${record.issue.number} comment ${record.comment.id} - ${written.title ?? "(untitled)"}`
         : `  cut   #${record.issue.number} comment ${record.comment.id} - ${written.because ?? "no reason given"}`,
+    );
+  }
+
+  // Issue records first, then the tree's - the dedup pass needs to know which
+  // issue-sourced decisions survived, and a merged record costs no model call.
+  for (const record of treeRecords) {
+    const where = `${record.path}:${record.line_start}`;
+    const target = dedupTarget(record, admissibleIssues);
+    if (target !== undefined) {
+      decisions.push({ source: "record", record_id: record.id, deduped_into: target });
+      console.log(`  merge ${where} - the same decision as ${target}, cited on that node`);
+      continue;
+    }
+    const written = await writer.decision({ kind: "file", record, sha: harvest.subject.sha }, prompt);
+    decisions.push({ source: "record", record_id: record.id, written });
+    console.log(
+      written.admissible
+        ? `  read  ${where} - ${written.title ?? "(untitled)"}`
+        : `  cut   ${where} - ${written.because ?? "no reason given"}`,
     );
   }
 
@@ -129,8 +195,8 @@ export const writeCommand = async (argv: string[]): Promise<number> => {
       readme,
       paths,
       decisions: decisions
-        .filter((d) => d.written.admissible)
-        .map((d) => ({ title: d.written.title ?? "", decision: d.written.decision ?? "" })),
+        .filter((d) => d.written?.admissible === true)
+        .map((d) => ({ title: d.written?.title ?? "", decision: d.written?.decision ?? "" })),
     },
     prompt,
   );
@@ -155,8 +221,13 @@ export const writeCommand = async (argv: string[]): Promise<number> => {
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(output, `${JSON.stringify(file, null, 2)}\n`, "utf8");
 
-  const admissible = decisions.filter((d) => d.written.admissible).length;
-  console.log(`  ${admissible} of ${decisions.length} records yielded a decision -> ${output}`);
+  const admissible = decisions.filter((d) => d.written?.admissible === true).length;
+  const merged = decisions.filter((d) => "deduped_into" in d && d.deduped_into !== undefined).length;
+  console.log(
+    `  ${admissible} of ${decisions.length} records yielded a decision` +
+      (merged === 0 ? "" : ` (${merged} merged into a decision another record already carried)`) +
+      ` -> ${output}`,
+  );
   console.log(`  model ${model ?? "(the SDK reported none)"}, prompt ${promptDigest(prompt)}`);
 
   // Reported, never a failure. A subject whose tracker settles nothing is the

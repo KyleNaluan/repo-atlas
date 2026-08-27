@@ -138,7 +138,7 @@ export const gateCommand = async (argv: string[]): Promise<number> => {
       ? []
       : candidatesFrom(
           JSON.parse(readFileSync(writtenPath, "utf8")) as WrittenFile,
-          harvest.issues,
+          { issues: harvest.issues, records: harvest.decision_records },
           writePromptText(),
           harvest.subject.sha,
         );

@@ -278,19 +278,39 @@ export const measureScale = (repo: string, sha: string, scan?: SourceScan): Scal
   return { files: source.files, lines: source.lines, ...measureHistory(repo, sha) };
 };
 
-/** #4: project memory is indexed for navigation, never quoted as evidence. */
+/**
+ * #4: project memory is indexed for navigation, never quoted as evidence.
+ *
+ * #55 amends the second half of that line, narrowly. A memory file remains
+ * inadmissible as evidence ABOUT THE CODE - which is what #4's finding was for -
+ * and is admissible as testimony about a DECISION, the same class of artifact as
+ * an issue resolution comment. `records.ts` reads only its decision-headed
+ * sections; this definition of "a memory file" is shared with it so the two
+ * sides cannot drift.
+ */
 const MEMORY_FILES = /^(AGENTS|CLAUDE|CONTRIBUTING|\.cursorrules)(\.md)?$/i;
+
+export const isMemoryFile = (path: string): boolean =>
+  MEMORY_FILES.test(path.split("/").pop() ?? "");
 
 export const indexMemoryFiles = (
   repo: string,
   sha: string,
 ): { path: string; bytes: number }[] =>
   treeFiles(repo, sha)
-    .filter((p) => MEMORY_FILES.test(p.split("/").pop() ?? ""))
+    .filter(isMemoryFile)
     .map((path) => ({ path, bytes: Buffer.byteLength(blob(repo, sha, path) ?? "", "utf8") }))
     .sort((a, b) => a.path.localeCompare(b.path));
 
-const ADR_DIRECTORIES = ["docs/adr", "adr", "doc/adr", "docs/decisions", "docs/architecture"];
+/**
+ * The decision-record directories a subject may declare.
+ *
+ * One definition, read by #6's `adr_directory` density signal and by #55's
+ * record discovery, for the reason `manifests.ts` shares one definition of
+ * "declared": a signal reporting a directory the record reader does not read
+ * would be measuring one thing and mining another.
+ */
+export const ADR_DIRECTORIES = ["docs/adr", "adr", "doc/adr", "docs/decisions", "docs/architecture"];
 
 /** Does the tree carry an architecture-decision-record directory? (#6, signal 4) */
 export const findAdrDirectory = (repo: string, sha: string): string | null => {

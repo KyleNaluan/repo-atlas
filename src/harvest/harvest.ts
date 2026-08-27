@@ -12,6 +12,7 @@
  */
 import { getRepo } from "./gh.js";
 import { harvestIssues, hasResolutionComment } from "./issues.js";
+import { discoverDecisionRecords, recordsSummary } from "./records.js";
 import {
   assertNotShallow,
   currentBranch,
@@ -23,7 +24,7 @@ import {
   scanSource,
 } from "./tree.js";
 import { HARVEST_VERSION, type Harvest, type HarvestSource } from "./types.js";
-import type { HarvestedIssue } from "./types.js";
+import type { HarvestedDecisionRecord, HarvestedIssue } from "./types.js";
 
 export interface HarvestOptions {
   /** A local clone of the subject, checked out at the SHA to pin. */
@@ -64,9 +65,19 @@ const ratio = (issue: HarvestedIssue): number | null => {
   return comments / body;
 };
 
-const sources = (
+/**
+ * The provenance table the artifact renders: what existed, how it was fetched,
+ * and what it is admissible as.
+ *
+ * Exported so the admissibility line each source carries is a watched claim
+ * rather than a comment. #55's D2 turns on one of them staying true - project
+ * memory is still not admissible as evidence about the code - and a guarantee
+ * nobody tests is a guarantee nobody knows holds.
+ */
+export const harvestSources = (
   issues: HarvestedIssue[],
   memory: { path: string; bytes: number }[],
+  records: HarvestedDecisionRecord[],
 ): HarvestSource[] => {
   const withResolution = issues.filter(hasResolutionComment).length;
   const out: HarvestSource[] = [
@@ -89,13 +100,29 @@ const sources = (
       admissible_as: "verified",
     },
   ];
+  if (records.length > 0) {
+    const bytes = records.reduce((sum, r) => sum + r.bytes, 0);
+    out.push({
+      source: "In-repo decision records",
+      what_existed: `${records.length} record${records.length === 1 ? "" : "s"}, ${(bytes / 1024).toFixed(1)} KB - ${recordsSummary(records)}`,
+      fetched: "read locally with git cat-file at the pinned commit, whole file or declared section",
+      // The line #55's D2 amends. A record is testimony about a decision on the
+      // same terms as a resolution comment, and establishes nothing about the
+      // code: `implemented_by` is filled by the gate from the tree, never here.
+      admissible_as: "attested (the decision, never the code)",
+    });
+  }
   if (memory.length > 0) {
     const bytes = memory.reduce((sum, m) => sum + m.bytes, 0);
+    const sections = records.filter((r) => r.family === "memory_section").length;
     out.push({
       source: memory.map((m) => m.path).join(", "),
       what_existed: `project memory, ${(bytes / 1024).toFixed(1)} KB`,
-      fetched: "indexed for navigation only",
-      admissible_as: "not admissible - navigation, never evidence",
+      fetched:
+        sections === 0
+          ? "indexed for navigation only"
+          : `indexed for navigation; ${sections} decision-headed section${sections === 1 ? "" : "s"} read as a record above`,
+      admissible_as: "not admissible as evidence about the code - navigation only (#4)",
     });
   }
   return out;
@@ -113,6 +140,10 @@ export const harvest = async (options: HarvestOptions): Promise<Harvest> => {
   const visibility = options.visibility ?? (await determineVisibility(options.repo));
   const closed = issues.filter((i) => i.state === "closed");
   const memory = indexMemoryFiles(options.clone, sha);
+  // The tree's own decision records (#55). Read here rather than in `write`
+  // because `candidatesFrom` rebuilds a candidate's citation from the pinned
+  // written set with no clone in hand, so the span has to be in this artifact.
+  const decisionRecords = discoverDecisionRecords(options.clone, sha);
 
   const density = densitySignals(
     options.clone,
@@ -140,8 +171,9 @@ export const harvest = async (options: HarvestOptions): Promise<Harvest> => {
     issues,
     scale: measureScale(options.clone, sha, scan),
     density,
-    sources: sources(issues, memory),
+    sources: harvestSources(issues, memory, decisionRecords),
     private_split: detectPrivateSplit(options.clone, sha, options.repo),
     memory_files: memory,
+    decision_records: decisionRecords,
   };
 };

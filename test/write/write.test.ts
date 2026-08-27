@@ -56,7 +56,8 @@ const issue = (number: number, comments: ReturnType<typeof comment>[]): Harveste
   comments,
 });
 
-const RECORD: RecordToRead = {
+const ISSUE_RECORD = {
+  kind: "issue" as const,
   issue: issue(3, [comment(5180801286, "## Resolution: three tiers")]),
   comment: comment(5180801286, "## Resolution: three tiers"),
 };
@@ -83,7 +84,7 @@ describe("the writer proposes; it does not cite and it does not implement", () =
   it("stamps the citation from the record, never from the model", () => {
     // The model is not asked for a citation, so it cannot produce one that does
     // not resolve - a class of failure the audit would otherwise have to catch.
-    const candidate = toCandidate(RECORD, ADMISSIBLE);
+    const candidate = toCandidate(ISSUE_RECORD, ADMISSIBLE);
     expect(candidate.node.evidence).toEqual([
       { kind: "issue", number: 3, comment_id: 5180801286 },
     ]);
@@ -93,12 +94,12 @@ describe("the writer proposes; it does not cite and it does not implement", () =
     // Filling it from the writer's guess would be the artifact asserting an
     // implementation on the strength of a decision record, which is the single
     // failure #7 point 7 exists to prevent.
-    const node = toCandidate(RECORD, ADMISSIBLE).node as DecisionNode;
+    const node = toCandidate(ISSUE_RECORD, ADMISSIBLE).node as DecisionNode;
     expect(node.implemented_by).toEqual([]);
   });
 
   it("turns where-to-look into a claim for the gate to resolve", () => {
-    const candidate = toCandidate(RECORD, ADMISSIBLE);
+    const candidate = toCandidate(ISSUE_RECORD, ADMISSIBLE);
     expect(candidate.claims).toEqual([
       {
         description: "the session controller",
@@ -111,7 +112,7 @@ describe("the writer proposes; it does not cite and it does not implement", () =
   it("drops a claim with nothing to read rather than sending it to the gate", () => {
     // The gate demotes a candidate whose claim cannot be resolved either way.
     // Sending one anyway would be asking it to confirm something nobody can check.
-    const candidate = toCandidate(RECORD, {
+    const candidate = toCandidate(ISSUE_RECORD, {
       ...ADMISSIBLE,
       implementation_claim: { description: "somewhere", expect: "present" },
     });
@@ -123,16 +124,16 @@ describe("the writer proposes; it does not cite and it does not implement", () =
     // status anyway, but where a decision is built is a claim about the tree only
     // the gate may settle. So decided_and_built and decided_not_built are clamped
     // to decided here, leaving promotion in the one place that reads the tree.
-    expect((toCandidate(RECORD, { ...ADMISSIBLE, status: "decided_and_built" }).node as DecisionNode).status).toBe(
+    expect((toCandidate(ISSUE_RECORD, { ...ADMISSIBLE, status: "decided_and_built" }).node as DecisionNode).status).toBe(
       "decided",
     );
-    expect((toCandidate(RECORD, { ...ADMISSIBLE, status: "decided_not_built" }).node as DecisionNode).status).toBe(
+    expect((toCandidate(ISSUE_RECORD, { ...ADMISSIBLE, status: "decided_not_built" }).node as DecisionNode).status).toBe(
       "decided",
     );
   });
 
   it("keeps superseded, the one non-decided status the writer may mint", () => {
-    expect((toCandidate(RECORD, { ...ADMISSIBLE, status: "superseded" }).node as DecisionNode).status).toBe(
+    expect((toCandidate(ISSUE_RECORD, { ...ADMISSIBLE, status: "superseded" }).node as DecisionNode).status).toBe(
       "superseded",
     );
   });
@@ -140,27 +141,27 @@ describe("the writer proposes; it does not cite and it does not implement", () =
   it("admits a decision as attested, never as verified", () => {
     // A decision record is testimony: it establishes what was decided, never
     // that it was built. Only the gate can move this, and only downwards.
-    expect(toCandidate(RECORD, ADMISSIBLE).node.confidence).toBe("attested");
+    expect(toCandidate(ISSUE_RECORD, ADMISSIBLE).node.confidence).toBe("attested");
   });
 
   it("marks the rejected alternative absent from the record rather than inventing one", () => {
     // The rejected alternative is the payload a summariser destroys, so "the
     // record names none" has to stay distinguishable from "there was none".
-    const node = toCandidate(RECORD, { ...ADMISSIBLE, rejected: [] }).node as DecisionNode;
+    const node = toCandidate(ISSUE_RECORD, { ...ADMISSIBLE, rejected: [] }).node as DecisionNode;
     expect(node.rejected).toEqual([]);
     expect(node.rejected_absent_from_record).toBe(true);
   });
 
   it("does not mark absence when the record does name an alternative", () => {
-    const node = toCandidate(RECORD, ADMISSIBLE).node as DecisionNode;
+    const node = toCandidate(ISSUE_RECORD, ADMISSIBLE).node as DecisionNode;
     expect(node.rejected_absent_from_record).toBeUndefined();
   });
 
   it("gives a decision an id from the record, not from its prose", () => {
     // Prose changes when the prompt is reworded; the record it was read from does
     // not, and the id is used verbatim as a rendered element id.
-    expect(toCandidate(RECORD, ADMISSIBLE).node.id).toBe(decisionId(3, 5180801286));
-    expect(toCandidate(RECORD, { ...ADMISSIBLE, title: "Something else" }).node.id).toBe(
+    expect(toCandidate(ISSUE_RECORD, ADMISSIBLE).node.id).toBe(decisionId(3, 5180801286));
+    expect(toCandidate(ISSUE_RECORD, { ...ADMISSIBLE, title: "Something else" }).node.id).toBe(
       decisionId(3, 5180801286),
     );
   });
@@ -172,11 +173,12 @@ describe("the writer proposes; it does not cite and it does not implement", () =
     // gate - collapsing two decisions the subject records apart into one malformed
     // node. The reference subject has one resolution per issue, so nothing else
     // exercises this.
-    const first: RecordToRead = {
+    const first = {
+      kind: "issue" as const,
       issue: issue(2, [comment(5181222288, "## Resolution: one"), comment(5243059657, "### Resolution: two")]),
       comment: comment(5181222288, "## Resolution: one"),
     };
-    const second: RecordToRead = { ...first, comment: comment(5243059657, "### Resolution: two") };
+    const second = { ...first, comment: comment(5243059657, "### Resolution: two") };
     const idA = toCandidate(first, ADMISSIBLE).node.id;
     const idB = toCandidate(second, ADMISSIBLE).node.id;
     expect(idA).toBe("d-issue-2-c5181222288");
@@ -193,19 +195,19 @@ describe("a record that settles nothing is cut, not dropped", () => {
     // #3 cuts absent outright, and the record reports the count and reason. A
     // tracker full of "closing this" notes then reads as what it is, rather than
     // as a subject where no decision was ever recorded.
-    const candidate = toCandidate(RECORD, { admissible: false, because: "a status update" });
+    const candidate = toCandidate(ISSUE_RECORD, { admissible: false, because: "a status update" });
     expect(candidate.node.confidence).toBe("absent");
     expect(candidate.node.evidence).toHaveLength(1);
     expect(candidate.claims).toBeUndefined();
   });
 
   it("keeps the issue title so the cut can be reported by name", () => {
-    const candidate = toCandidate(RECORD, { admissible: false, because: "a status update" });
+    const candidate = toCandidate(ISSUE_RECORD, { admissible: false, because: "a status update" });
     expect(candidate.node.title).toBe("issue 3");
   });
 
   it("asserts nothing in the fields it could not fill", () => {
-    const node = toCandidate(RECORD, { admissible: false }).node as DecisionNode;
+    const node = toCandidate(ISSUE_RECORD, { admissible: false }).node as DecisionNode;
     expect(node.question).toBe("");
     expect(node.decision).toBe("");
     expect(node.why).toBe("");
@@ -250,7 +252,7 @@ describe("a pinned written set cannot go quietly stale", () => {
 
   it("checks freshness in the loader, so no path can route around it", () => {
     expect(() =>
-      candidatesFrom(file(), [RECORD.issue], "someone reworded the prompt", SHA),
+      candidatesFrom(file(), { issues: [ISSUE_RECORD.issue] }, "someone reworded the prompt", SHA),
     ).toThrow(StaleWriteError);
   });
 
@@ -262,7 +264,7 @@ describe("a pinned written set cannot go quietly stale", () => {
       ],
     });
     const issues = [issue(3, [comment(1, "x")]), issue(9, [comment(2, "y")])];
-    expect(candidatesFrom(two, issues, writePromptText(), SHA).map((c) => c.node.id)).toEqual([
+    expect(candidatesFrom(two, { issues }, writePromptText(), SHA).map((c) => c.node.id)).toEqual([
       decisionId(3, 1),
       decisionId(9, 2),
     ]);
@@ -272,7 +274,7 @@ describe("a pinned written set cannot go quietly stale", () => {
     // The set is keyed on issue and comment id, so an entry naming a comment the
     // harvest does not carry would otherwise mint a decision citing nothing.
     const stray = file({ decisions: [{ issue: 404, comment_id: 1, written: ADMISSIBLE }] });
-    expect(candidatesFrom(stray, [RECORD.issue], writePromptText(), SHA)).toEqual([]);
+    expect(candidatesFrom(stray, { issues: [ISSUE_RECORD.issue] }, writePromptText(), SHA)).toEqual([]);
   });
 });
 
@@ -344,8 +346,8 @@ describe("the model writer", () => {
         return JSON.stringify(ADMISSIBLE);
       },
     });
-    await writer.decision(RECORD, "PROMPT");
-    await writer.decision(RECORD, "PROMPT");
+    await writer.decision(ISSUE_RECORD, "PROMPT");
+    await writer.decision(ISSUE_RECORD, "PROMPT");
     expect(prompts).toHaveLength(2);
     expect(prompts[0]).toContain("## Resolution: three tiers");
   });
@@ -357,7 +359,7 @@ describe("the model writer", () => {
         prompt = p;
         return JSON.stringify(ADMISSIBLE);
       },
-    }).decision(RECORD, "PROMPT");
+    }).decision(ISSUE_RECORD, "PROMPT");
     expect(prompt).toContain("#3");
     expect(prompt).not.toContain("issue 9");
   });
@@ -375,7 +377,7 @@ describe("the model writer", () => {
     // settles nothing. A fixture attesting to an infrastructure failure attests
     // to nothing, and would have read as a real measurement forever.
     await expect(
-      modelWriter({ ask: async () => "You've hit your session limit" }).decision(RECORD, "PROMPT"),
+      modelWriter({ ask: async () => "You've hit your session limit" }).decision(ISSUE_RECORD, "PROMPT"),
     ).rejects.toThrow(WriterError);
   });
 
@@ -384,7 +386,7 @@ describe("the model writer", () => {
     // "this record settles nothing" would attribute the model's miss to the
     // subject.
     await expect(
-      modelWriter({ ask: async () => '{"decision":"we did a thing"}' }).decision(RECORD, "PROMPT"),
+      modelWriter({ ask: async () => '{"decision":"we did a thing"}' }).decision(ISSUE_RECORD, "PROMPT"),
     ).rejects.toThrow(WriterError);
   });
 
@@ -392,7 +394,7 @@ describe("the model writer", () => {
     // The one route to a cut: the model saying so in a well-formed verdict.
     const written = await modelWriter({
       ask: async () => '{"admissible": false, "because": "a status update, not a decision"}',
-    }).decision(RECORD, "PROMPT");
+    }).decision(ISSUE_RECORD, "PROMPT");
     expect(written.admissible).toBe(false);
     expect(written.because).toContain("status update");
   });

@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
@@ -6,5 +6,8 @@ export default defineConfig({
     // global-temp removes it after the last worker, so hundreds of flow fixtures
     // do not become hundreds of permanent /tmp directories.
     globalSetup: ["./test/global-temp.ts"],
+    // `out/` is the documented home for generated runs and may contain complete
+    // subject clones. They are inputs to repo-atlas, not part of its test suite.
+    exclude: [...configDefaults.exclude, "out/**"],
   },
 });

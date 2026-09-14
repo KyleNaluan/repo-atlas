@@ -20,7 +20,7 @@ Three producers now read those seams - two sealed hierarchies a carrier holds on
 How far extraction reaches is now measured node by node rather than summarised as a count: `test/fixtures/swe-prep.probe-coverage.json` accounts for all 33 reference nodes, 22 with a named producer and 11 with the standing decision that forecloses each, and `test/run/parity.test.ts` fails if a single one goes unaccounted for or unexplained.
 That run has also now happened: the committed artifact reports 27 nodes, five of them boundaries, all of them new since the pre-#50 artifact carried none.
 The eight newly gate-confirmed candidates the previous paragraph named are the ones now scored and ranked in.
-The one deviation this run took is pinned rather than implied: `claude-fable-5` was unusable in the environment the run executed in, so `claude-sonnet-5` scored and wrote it instead, recorded in `test/fixtures/swe-prep.probe-coverage.json`'s `committed_artifact` note rather than left for a reader to discover from a model field that moved without explanation.
+The one deviation this run took is pinned rather than implied: `claude-fable-5` was unusable in the environment the run executed in, so `claude-sonnet-5` scored and wrote it instead, recorded in `test/fixtures/swe-prep.probe-coverage.json`'s `committed_artifact` note rather than left for a reader to discover from a model field that moved without explanation. A 2026-09-14 retry reached fable for fresh flagship runs, then exhausted the session quota before the two pinned demo reruns; those committed fixtures remain on the documented fallback rather than pretending the follow-up completed.
 
 ```
 npx repo-atlas run --clone ../subject -o overview.html

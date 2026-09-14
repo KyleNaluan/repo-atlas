@@ -184,6 +184,8 @@ The one model stage besides scoring, and the only place a model reads a decision
 
 Both sources reach it through one shape (`RecordToRead`), and nothing downstream tells them apart - same prompt asset, same verdict, same `attested` ceiling, same gate. The one difference is the citation the CODE stamps: an issue and comment id, or a `{path, line range, sha}` span that audit L1/L2 resolve directly against the tree. The source-specific framing lives in `model-writer.ts`'s envelope and NOT in `prompts/write-v1.md`, deliberately: the asset states judgement rules that read identically for both sources, and its digest is pinned into three committed written sets no credential-free run can regenerate.
 
+Large prose inputs are complete, not capped: `src/write/model-writer.ts` reads every README/path chunk, validates path landmarks against the chunk that proposed them, then synthesizes the product sentence and tree from those digests. `README_CHUNK_LIMIT` and `PROSE_PATH_LIMIT` are per-call bounds, never evidence cutoffs.
+
 One decision recorded in both places is one node with two citations. The merge is keyed on the in-repo record NAMING the issue in its heading or opening line - the subject's own identification, never a prose-similarity judgement - and only where that issue's comment produced an admissible decision; otherwise the record stands alone, which is the case that matters. A merged record is recorded in `written.json` with the id it merged into, never dropped.
 
 The writer emits **candidates, not nodes**, and runs BEFORE the gate: nothing else could mint a Decision, yet whether one was built is a claim about the tree only the gate may settle. So `clampStatus` allows the model `decided` or `superseded` only, and `settleBuild` in the gate promotes a confirmed present-claim to `decided_and_built` - filling `implemented_by` with the paths the gate itself located - a confirmed absent-claim to `decided_not_built`, and never moves a `superseded` node. Two rules the prompt and `claimOf` enforce: a comment settling nothing yields an `absent` candidate (cut, not dropped, so #6's silence rule holds - and only a well-formed model verdict may produce that cut, an unreadable reply is not a record that a comment settles nothing), and an `implementation_claim` must be about the decision's OWN subject and name something machine-checkable, a path or a compilable pattern, never a prose-matchable word.
@@ -218,6 +220,8 @@ Pass B needs a Chrome-family browser (`puppeteer-core` drives one that is alread
 Anything handed to `page.evaluate` is compiled by the toolchain first, and esbuild's keep-names transform rewrites inner helpers into `__name(...)` calls that do not exist in the browser - the symptom is `__name is not defined` and an audit that crashes rather than reporting. In-page code with helper functions is therefore written as a **source string** (`src/audit/checks/visual.ts`), not as a function.
 
 Audit tests build a synthetic subject (`test/audit/subject.ts`): a real git repo holding exactly the files the reference graph cites, with the graph re-pinned to its commit. That keeps L1/L2 hermetic - no network, no 40 MB checkout - while still exercising the real `git cat-file` comparison.
+
+Vitest fixture repositories must stay under the run-owned temp root installed by `test/global-temp.ts`; `vitest.config.ts` tears that root down once after all workers. Do not bypass it with a hard-coded `/tmp` path.
 
 ## Maintaining this file
 

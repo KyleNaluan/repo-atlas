@@ -26,7 +26,13 @@ import {
   type WrittenDecision,
   type WrittenFile,
 } from "../../src/write/write.js";
-import { modelWriter, parseWritten, WriterError } from "../../src/write/model-writer.js";
+import {
+  modelWriter,
+  parseWritten,
+  README_CHUNK_LIMIT,
+  PROSE_PATH_LIMIT,
+  WriterError,
+} from "../../src/write/model-writer.js";
 import { recordsIn } from "../../src/commands/write.js";
 import { findReadme } from "../../src/harvest/tree.js";
 import type { DecisionNode } from "../../src/schema/types.js";
@@ -406,6 +412,57 @@ describe("the model writer", () => {
         "PROMPT",
       ),
     ).rejects.toThrow(WriterError);
+  });
+
+  it("reads every chunk of a large README before synthesizing prose", async () => {
+    const prompts: string[] = [];
+    const prose = await modelWriter({
+      ask: async (p) => {
+        prompts.push(p);
+        if (p.includes("README CHUNK 1 OF 2")) return '{"summary":"first-half fact"}';
+        if (p.includes("README CHUNK 2 OF 2")) return '{"summary":"second-half fact"}';
+        return '{"admissible":true,"statement":"A grounded product.","tree":"README.md — overview"}';
+      },
+    }).prose(
+      { readme: "R".repeat(README_CHUNK_LIMIT + 1), paths: ["README.md"], decisions: [] },
+      "PROMPT",
+    );
+    expect(prompts).toHaveLength(3);
+    expect(prompts[2]).toContain("first-half fact");
+    expect(prompts[2]).toContain("second-half fact");
+    expect(prompts[2]).toContain("Every README byte was read");
+    expect(prompts[2]).not.toContain("withheld");
+    expect(prose.admissible).toBe(true);
+  });
+
+  it("reads every path chunk and validates the landmarks before synthesis", async () => {
+    const paths = Array.from({ length: PROSE_PATH_LIMIT + 1 }, (_, i) => `src/File${i}.ts`);
+    let finalPrompt = "";
+    const prose = await modelWriter({
+      ask: async (p) => {
+        if (p.includes("PATH CHUNK 1 OF 2")) {
+          return JSON.stringify({ landmarks: [{ path: paths[0], note: "first area" }] });
+        }
+        if (p.includes("PATH CHUNK 2 OF 2")) {
+          return JSON.stringify({ landmarks: [{ path: paths[PROSE_PATH_LIMIT], note: "last area" }] });
+        }
+        finalPrompt = p;
+        return '{"admissible":true,"statement":"A grounded product.","tree":"src/ — source"}';
+      },
+    }).prose({ readme: "small", paths, decisions: [] }, "PROMPT");
+    expect(finalPrompt).toContain(`${paths[0]} — first area`);
+    expect(finalPrompt).toContain(`${paths[PROSE_PATH_LIMIT]} — last area`);
+    expect(finalPrompt).toContain("Every path was read");
+    expect(prose.paths_shown).toBe(2);
+  });
+
+  it("fails rather than carrying an invented path out of a tree chunk", async () => {
+    const paths = Array.from({ length: PROSE_PATH_LIMIT + 1 }, (_, i) => `src/File${i}.ts`);
+    await expect(
+      modelWriter({
+        ask: async () => '{"landmarks":[{"path":"src/Invented.ts","note":"not listed"}]}',
+      }).prose({ readme: "small", paths, decisions: [] }, "PROMPT"),
+    ).rejects.toThrow(/invented a path/);
   });
 
   it("tolerates a fence or a preamble around the JSON", () => {

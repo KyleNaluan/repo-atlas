@@ -147,6 +147,7 @@ A merged record is recorded in `written.json` with the node id it merged into, n
 
 The same stage writes the two prose passages the artifact opens with: the product sentence and the annotated tree.
 Both read the README at the pinned SHA, the source the file listing is taken from, so the summarized bytes and the `{path, sha}` citation they carry agree by construction rather than by a clean checkout holding; a README absent at that SHA cannot support a product sentence, so the writer reports the prose inadmissible rather than guessing from the working tree.
+When either source is too large for one bounded prompt, `write` reads every README byte and every path in chunks, validates that selected tree landmarks really occur in their chunk, and synthesizes from those complete-input digests. Size therefore changes the reading strategy, not admissibility; no truncated input is presented as the whole repository.
 
 Like the scorer, the model runs locally through an authenticated CLI and its output is committed, so CI assembles from the pinned file and holds no credential.
 The prompt is a versioned asset at [`prompts/write-v1.md`](prompts/write-v1.md), changed only by commit, and a pinned output whose prompt has since been reworded, whose version moved, or whose subject SHA differs is refused rather than reused.

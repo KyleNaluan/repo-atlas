@@ -204,6 +204,16 @@ B.
     expect(nested.split("\n")[only!.line_end]).toBe("## Something else");
   });
 
+  it("does not cite the synthetic empty element after an EOF newline", () => {
+    // grounded-class-tutor's amends-chained ADRs end in a newline. `split` used
+    // to count that terminator as line N+1, producing spans such as 1-79 for a
+    // 78-line blob and correctly tripping audit L2.
+    const text = "# Notes\n\n## Decision\n\nKeep the chain explicit.\n";
+    const [section] = decisionSections(text);
+    expect(section).toEqual({ line_start: 3, line_end: 5, heading: "Decision" });
+    expect(text.split("\n")[section!.line_end - 1]).toBe("Keep the chain explicit.");
+  });
+
   it("declares a section by its heading and never by its prose", () => {
     // #28's defect in one line: a probe that matched vocabulary against any raw
     // line minted a `verified` mechanism out of a YAML comment. A paragraph

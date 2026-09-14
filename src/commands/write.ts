@@ -214,7 +214,11 @@ export const writeCommand = async (argv: string[]): Promise<number> => {
     subject_sha: harvest.subject.sha,
     readme_path: readmePath,
     decisions,
-    prose: { ...prose, paths_total: paths.length, paths_shown: Math.min(paths.length, PROSE_PATH_LIMIT) },
+    prose: {
+      ...prose,
+      paths_total: paths.length,
+      paths_shown: prose.paths_shown ?? Math.min(paths.length, PROSE_PATH_LIMIT),
+    },
   };
 
   const output = resolve(flag(argv, "-o", "--out") ?? "out/written.json");

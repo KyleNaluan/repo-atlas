@@ -1834,6 +1834,27 @@ describe("an overturned present-claim cites the search that came back empty", ()
     expect(file!.kind === "file" && file!.path).toBe("src/Security.java");
     expect(result.node.evidence.some((e) => e.kind === "command")).toBe(false);
   });
+
+  it("pins a pattern match to the exact lines that overturned an ABSENT claim", async () => {
+    // The hostile-subject audit found the old gap: treeHas remembered which
+    // file matched, but discarded where, so the divergence asserted a literal
+    // implementation fact with a whole-file citation. The gate has the match
+    // offset already and must carry it through rather than asking the audit to
+    // rediscover the claim.
+    const ctx = contextFor({
+      "src/Feature.java": "class Feature {\n  void old() {}\n  void implementedNow() {}\n}\n",
+    });
+    const result = gateCandidate(ctx, candidate({
+      description: "no implemented feature",
+      expect: "absent",
+      pattern: { regex: "void\\s+implementedNow\\(\\)" },
+    }));
+    const file = result.node.evidence.find(
+      (e) => e.kind === "file" && e.path === "src/Feature.java",
+    );
+    expect(result.verdict).toBe("overturned");
+    expect(file).toMatchObject({ line_start: 3, line_end: 3, sha: ctx.sha });
+  });
 });
 
 describe("a decision the gate found is a decision the artifact may call built", () => {

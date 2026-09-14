@@ -5,7 +5,7 @@
  * by another. These pin every evidence-bearing location the schema gives a node.
  */
 import { describe, expect, it } from "vitest";
-import { nodeEvidence } from "../../src/audit/checks/evidence.js";
+import { dispatchClosedByEvidence, nodeEvidence } from "../../src/audit/checks/evidence.js";
 import type {
   DecisionNode,
   Evidence,
@@ -102,5 +102,20 @@ describe("nodeEvidence", () => {
       implemented_by: [fileEv("impl.ts")],
     };
     expect(nodeEvidence(d)).toHaveLength(2);
+  });
+});
+
+describe("closed dispatch evidence", () => {
+  it("accepts an enum-keyed Python registry only when the complete literal carries the named branch", () => {
+    const registry = `_PAYLOAD_TYPES = {
+  RecordType.SIGNAL: SignalRecord,
+  RecordType.GATE: GateRecord,
+}`;
+    expect(dispatchClosedByEvidence("from_dict(...) via RecordType.SIGNAL", registry)).toBe(true);
+    expect(dispatchClosedByEvidence("from_dict(...) via RecordType.ORDER_EVENT", registry)).toBe(false);
+  });
+
+  it("does not mistake an arbitrary target mention for closure", () => {
+    expect(dispatchClosedByEvidence("TestCaseGrader", "grader.grade(submission)")).toBe(false);
   });
 });

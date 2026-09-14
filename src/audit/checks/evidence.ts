@@ -385,10 +385,11 @@ export const dispatchClosedByEvidence = (label: string, combined: string): boole
   if (via !== undefined && /\{[\s\S]*\}/.test(combined)) {
     const labels = via.split(/\s*\|\s*/).filter(Boolean);
     if (labels.length > 0) {
-      return labels.every((key) => {
+      const exactEnumKeys = labels.every((key) => {
         const literal = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         return new RegExp(`(?:^|[,{\\n])\\s*${literal}\\s*:`, "m").test(combined);
       });
+      if (exactEnumKeys) return true;
     }
   }
 

@@ -118,4 +118,14 @@ describe("closed dispatch evidence", () => {
   it("does not mistake an arbitrary target mention for closure", () => {
     expect(dispatchClosedByEvidence("TestCaseGrader", "grader.grade(submission)")).toBe(false);
   });
+
+  it("does not let an unrelated Java method body hide a cited supports predicate", () => {
+    const evidence = `default Verdict grade(Exercise exercise, String submission) {
+  return grade(exercise, submission);
+}
+public boolean supports(Exercise exercise) {
+  return exercise.grading() instanceof Grading.AnswerKey;
+}`;
+    expect(dispatchClosedByEvidence("grade(...) via Grading.AnswerKey", evidence)).toBe(true);
+  });
 });

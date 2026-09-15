@@ -465,6 +465,53 @@ describe("the model writer", () => {
     ).rejects.toThrow(/invented a path/);
   });
 
+  it("skips a whitespace-only README tail chunk rather than failing the run", async () => {
+    const prompts: string[] = [];
+    const prose = await modelWriter({
+      ask: async (p) => {
+        prompts.push(p);
+        if (p.includes("README CHUNK 1 OF 2")) return '{"summary":"the only fact"}';
+        if (p.includes("README CHUNK 2 OF 2")) {
+          throw new Error("the whitespace tail chunk must not be sent to the model");
+        }
+        return '{"admissible":true,"statement":"A grounded product.","tree":"README.md — overview"}';
+      },
+    }).prose(
+      { readme: "R".repeat(README_CHUNK_LIMIT) + "   \n  \t", paths: ["README.md"], decisions: [] },
+      "PROMPT",
+    );
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toContain("the only fact");
+    expect(prose.admissible).toBe(true);
+  });
+
+  it("accepts a path chunk that surfaces no noteworthy landmark", async () => {
+    const paths = Array.from({ length: PROSE_PATH_LIMIT + 1 }, (_, i) => `src/File${i}.ts`);
+    let finalPrompt = "";
+    const prose = await modelWriter({
+      ask: async (p) => {
+        if (p.includes("PATH CHUNK 1 OF 2")) {
+          return JSON.stringify({ landmarks: [{ path: paths[0], note: "first area" }] });
+        }
+        if (p.includes("PATH CHUNK 2 OF 2")) return '{"landmarks":[]}';
+        finalPrompt = p;
+        return '{"admissible":true,"statement":"A grounded product.","tree":"src/ — source"}';
+      },
+    }).prose({ readme: "small", paths, decisions: [] }, "PROMPT");
+    expect(finalPrompt).toContain(`${paths[0]} — first area`);
+    expect(prose.paths_shown).toBe(1);
+  });
+
+  it("still fails a path chunk whose reply carries no landmarks array", async () => {
+    const paths = Array.from({ length: PROSE_PATH_LIMIT + 1 }, (_, i) => `src/File${i}.ts`);
+    await expect(
+      modelWriter({ ask: async () => '{"note":"forgot the array"}' }).prose(
+        { readme: "small", paths, decisions: [] },
+        "PROMPT",
+      ),
+    ).rejects.toThrow(/no landmarks array/);
+  });
+
   it("tolerates a fence or a preamble around the JSON", () => {
     expect(parseWritten<{ a: number }>('here:\n```json\n{"a":1}\n```')).toEqual({ a: 1 });
   });

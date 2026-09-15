@@ -271,6 +271,13 @@ export const modelWriter = (options: ModelWriterOptions = {}): Writer => {
         const chunks = chunksOf(readme, README_CHUNK_LIMIT);
         const summaries: string[] = [];
         for (let i = 0; i < chunks.length; i += 1) {
+          // A boundary can land so a tail chunk holds only whitespace; that is
+          // an artifact of where the 12 KB split fell, not a subject with no
+          // describable shape. Such a chunk carries no facts to extract, so it
+          // is read and skipped rather than made to manufacture a digest and
+          // hard-fail the run on absence - the size-driven failure this stage
+          // exists to remove.
+          if (chunks[i]!.trim().length === 0) continue;
           const reply = parseWritten<{ summary?: unknown }>(
             await ask(readmeChunkPrompt(chunks[i]!, i, chunks.length)),
           );
@@ -299,8 +306,13 @@ export const modelWriter = (options: ModelWriterOptions = {}): Writer => {
           const reply = parseWritten<{ landmarks?: unknown }>(
             await ask(pathChunkPrompt(chunk, i, chunks.length)),
           );
-          if (!Array.isArray(reply.landmarks) || reply.landmarks.length === 0) {
-            throw new WriterError(`the writer returned no landmarks for path chunk ${i + 1}`);
+          // A malformed reply - no landmarks array at all - is the model missing
+          // the question and fails the run. An empty array is a well-formed answer
+          // that this chunk exposes no landmark worth carrying, which a boundary
+          // slice can genuinely produce; it is read and yields nothing rather than
+          // being forced to invent a landmark to survive.
+          if (!Array.isArray(reply.landmarks)) {
+            throw new WriterError(`the writer returned no landmarks array for path chunk ${i + 1}`);
           }
           for (const item of reply.landmarks) {
             const value = item as { path?: unknown; note?: unknown };

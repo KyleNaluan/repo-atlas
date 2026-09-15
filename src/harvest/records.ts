@@ -155,7 +155,11 @@ export const decisionSections = (
   text: string,
 ): { line_start: number; line_end: number; heading: string }[] => {
   const headings = headingsIn(text);
-  const total = text.split("\n").length;
+  // A terminal newline terminates the last physical line; it does not create a
+  // new line that a file citation may name. `split` does create an empty final
+  // element, which made EOF decision sections cite line N+1 and fail audit L2.
+  const split = text.split("\n");
+  const total = Math.max(1, split[split.length - 1] === "" ? split.length - 1 : split.length);
   const out: { line_start: number; line_end: number; heading: string }[] = [];
   let coveredThrough = 0;
   for (let i = 0; i < headings.length; i += 1) {

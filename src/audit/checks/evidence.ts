@@ -370,6 +370,32 @@ const transportSupported = (texts: string[], contract: { method: string; path: s
   return method.test(combined) && paths.includes(contract.path);
 };
 
+/** Whether the cited source independently establishes the branch a dispatch label names. */
+export const dispatchClosedByEvidence = (label: string, combined: string): boolean => {
+  const quoted = /"([^"]+)"/.exec(label);
+  if (quoted) return combined.includes(quoted[1]!);
+
+  // Python's one closed-dispatch rule (#52 D3) uses a module-level dict literal
+  // whose keys may be enum members rather than strings. The rendered label
+  // carries those exact source tokens (`via RecordType.SIGNAL`), and the cited
+  // registry span carries the complete `{ key: target }` literal. Requiring both
+  // is the enum-key equivalent of comparing a quoted Java registry key above;
+  // a loose vocabulary match would accept the ambiguous-interface mutant.
+  const via = /\bvia\s+(.+)$/.exec(label)?.[1];
+  if (via !== undefined && /\{[\s\S]*\}/.test(combined)) {
+    const labels = via.split(/\s*\|\s*/).filter(Boolean);
+    if (labels.length > 0) {
+      const exactEnumKeys = labels.every((key) => {
+        const literal = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return new RegExp(`(?:^|[,{\\n])\\s*${literal}\\s*:`, "m").test(combined);
+      });
+      if (exactEnumKeys) return true;
+    }
+  }
+
+  return /\b(?:supports|switch|case|instanceof|implementations?|implements|sealed|permits)\b/i.test(combined);
+};
+
 const linkProblem = (ctx: AuditContext, flow: FlowNode, link: FlowLink): string | null => {
   const texts = link.evidence
     .map((evidence) => evidenceText(ctx, evidence))
@@ -447,11 +473,7 @@ const linkProblem = (ctx: AuditContext, flow: FlowNode, link: FlowLink): string 
   // sole-implementation dispatch in the reference subject's own flagship Flow
   // failed a gate whose evidence was sitting in the citation.
   if (link.relation === "dispatch") {
-    const key = /"([^"]+)"/.exec(link.label ?? "");
-    const closed = key
-      ? combined.includes(key[1]!)
-      : /\b(?:supports|switch|case|instanceof|implementations?|implements|sealed|permits)\b/i.test(combined);
-    if (!closed) {
+    if (!dispatchClosedByEvidence(link.label ?? "", combined)) {
       return `${flow.id} link ${link.id} asserts one dispatch target without closed-selection evidence`;
     }
   }

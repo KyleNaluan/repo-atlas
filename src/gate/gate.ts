@@ -23,7 +23,7 @@
  */
 import type { Candidate, ExistenceClaim, ProbeContext } from "../probes/types.js";
 import { declaredManifests } from "../probes/manifests.js";
-import type { AtlasNode, EdgeNode, Evidence } from "../schema/types.js";
+import type { AtlasNode, EdgeNode, Evidence, FileEvidence } from "../schema/types.js";
 import { gateFlowCandidate } from "./flow.js";
 
 export type Verdict = "confirmed" | "overturned" | "unresolved";
@@ -55,8 +55,16 @@ export interface GatedCandidate {
 const treeHas = (
   ctx: ProbeContext,
   claim: ExistenceClaim,
-): { found: boolean; where: string[]; undecidable: boolean; undecidableReason?: string } => {
+): {
+  found: boolean;
+  where: string[];
+  /** Exact spans for pattern matches; path existence has no narrower span. */
+  matched: FileEvidence[];
+  undecidable: boolean;
+  undecidableReason?: string;
+} => {
   const where: string[] = [];
+  const matched: FileEvidence[] = [];
   let undecidable = false;
 
   for (const path of claim.paths ?? []) {
@@ -77,6 +85,7 @@ const treeHas = (
       return {
         found: where.length > 0,
         where,
+        matched,
         undecidable: true,
         undecidableReason: `its search pattern did not compile (${bad}), so the tree could not be searched for it`,
       };
@@ -84,7 +93,14 @@ const treeHas = (
     for (const path of ctx.paths) {
       if (include && !include.test(path)) continue;
       const text = ctx.read(path);
-      if (text !== null && regex.test(text)) where.push(path);
+      const hit = text === null ? null : regex.exec(text);
+      if (text !== null && hit !== null) {
+        where.push(path);
+        const line_start = text.slice(0, hit.index).split("\n").length;
+        const lastMatched = hit.index + Math.max(0, hit[0].length - 1);
+        const line_end = text.slice(0, lastMatched).split("\n").length;
+        matched.push({ kind: "file", path, line_start, line_end, sha: ctx.sha });
+      }
       if (where.length >= 5) break;
     }
   }
@@ -109,7 +125,7 @@ const treeHas = (
     if (where.length === 0 && sawUnrecognized) undecidable = true;
   }
 
-  return { found: where.length > 0, where, undecidable };
+  return { found: where.length > 0, where, matched, undecidable };
 };
 
 /** Single-quote for a shell, so a pattern with spaces or metacharacters survives. */
@@ -188,13 +204,16 @@ const toDivergence = (
   candidate: Candidate,
   claim: ExistenceClaim,
   where: string[],
+  matched: FileEvidence[],
 ): EdgeNode => {
   // An overturned ABSENT claim found the thing, so the files it was found in are
   // the evidence. An overturned PRESENT claim found nothing, so what established
   // it is the search that came back empty.
   const evidence: Evidence[] =
     where.length > 0
-      ? where.slice(0, 3).map((path) => ({ kind: "file" as const, path, sha: "" }))
+      ? where.slice(0, 3).map((path) =>
+          matched.find((e) => e.path === path) ?? { kind: "file" as const, path, sha: ctx.sha },
+        )
       : negativeEvidence(ctx, claim);
   const said =
     claim.expect === "absent"
@@ -300,7 +319,7 @@ export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCan
       };
     }
 
-    const { found, where, undecidable, undecidableReason } = treeHas(ctx, claim);
+    const { found, where, matched, undecidable, undecidableReason } = treeHas(ctx, claim);
     if (undecidable) {
       // The gate looked but could not settle the claim: a build manifest present
       // in a form the shared rule cannot read, or a model-authored pattern that
@@ -325,7 +344,7 @@ export const gateCandidate = (ctx: ProbeContext, candidate: Candidate): GatedCan
       confirmedAbsent = true;
     }
     if (!agrees) {
-      const divergence = toDivergence(ctx, candidate, claim, where);
+      const divergence = toDivergence(ctx, candidate, claim, where, matched);
       const evidence = divergence.evidence.map((e) =>
         e.kind === "file" && e.sha === "" ? { ...e, sha: ctx.sha } : e,
       );

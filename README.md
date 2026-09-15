@@ -20,7 +20,7 @@ Three producers now read those seams - two sealed hierarchies a carrier holds on
 How far extraction reaches is now measured node by node rather than summarised as a count: `test/fixtures/swe-prep.probe-coverage.json` accounts for all 33 reference nodes, 22 with a named producer and 11 with the standing decision that forecloses each, and `test/run/parity.test.ts` fails if a single one goes unaccounted for or unexplained.
 That run has also now happened: the committed artifact reports 27 nodes, five of them boundaries, all of them new since the pre-#50 artifact carried none.
 The eight newly gate-confirmed candidates the previous paragraph named are the ones now scored and ranked in.
-The one deviation this run took is pinned rather than implied: `claude-fable-5` was unusable in the environment the run executed in, so `claude-sonnet-5` scored and wrote it instead, recorded in `test/fixtures/swe-prep.probe-coverage.json`'s `committed_artifact` note rather than left for a reader to discover from a model field that moved without explanation.
+The one deviation this run took is pinned rather than implied: `claude-fable-5` was unusable in the environment the run executed in, so `claude-sonnet-5` scored and wrote it instead, recorded in `test/fixtures/swe-prep.probe-coverage.json`'s `committed_artifact` note rather than left for a reader to discover from a model field that moved without explanation. A 2026-09-14 retry reached fable for fresh flagship runs, then exhausted the session quota before the two pinned demo reruns; those committed fixtures remain on the documented fallback rather than pretending the follow-up completed.
 
 ```
 npx repo-atlas run --clone ../subject -o overview.html
@@ -147,6 +147,7 @@ A merged record is recorded in `written.json` with the node id it merged into, n
 
 The same stage writes the two prose passages the artifact opens with: the product sentence and the annotated tree.
 Both read the README at the pinned SHA, the source the file listing is taken from, so the summarized bytes and the `{path, sha}` citation they carry agree by construction rather than by a clean checkout holding; a README absent at that SHA cannot support a product sentence, so the writer reports the prose inadmissible rather than guessing from the working tree.
+When either source is too large for one bounded prompt, `write` reads every README byte and every path in chunks, validates that selected tree landmarks really occur in their chunk, and synthesizes from those complete-input digests. Size therefore changes the reading strategy, not admissibility; no truncated input is presented as the whole repository.
 
 Like the scorer, the model runs locally through an authenticated CLI and its output is committed, so CI assembles from the pinned file and holds no credential.
 The prompt is a versioned asset at [`prompts/write-v1.md`](prompts/write-v1.md), changed only by commit, and a pinned output whose prompt has since been reworded, whose version moved, or whose subject SHA differs is refused rather than reused.

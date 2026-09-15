@@ -438,7 +438,9 @@ export const proseFrom = (
             total === undefined
               ? "(the listing this tree was annotated from)"
               : `(${total} path${total === 1 ? "" : "s"} at this commit${
-                  shown !== undefined && shown < total ? `; the tree was written from the first ${shown}` : ""
+                shown !== undefined && shown < total
+                  ? `; ${shown} landmarks were selected after the complete listing was read`
+                  : ""
                 })`,
         },
       ],

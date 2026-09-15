@@ -30,10 +30,11 @@
  * records only the matching file, never the matching line, so seven of the eight
  * carry a file-level citation the audit's own M1/M2 pass correctly flags as too
  * coarse to support "the tree says otherwise" on its own. Advisory, not a hard-gate
- * failure, and not a defect this run fixes - recorded here as a follow-up: `treeHas`
- * would need to capture match position, not just match presence, for every probe
- * that hands it a pattern claim, which is a shared-surface change deserving its own
- * PR rather than one folded into a fixture refresh.
+ * failure. `treeHas` has since been taught to capture match position, not just match
+ * presence, for every pattern claim (`src/gate/gate.ts`), so a regenerated run stamps
+ * each overturned-absent divergence with the matching line range; this committed
+ * fixture predates that fix and still carries the coarse file-level citations until a
+ * credentialed run refreshes it.
  *
  * Both this run and the swe-prep pipeline refresh alongside it ran against
  * claude-sonnet-5, not claude-fable-5, after three spaced retries confirmed
